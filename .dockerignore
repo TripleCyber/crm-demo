@@ -1,0 +1,15 @@
+# Lo que no tiene que entrar en el contexto de construcción.
+#
+# `.env*` el primero, y por lo que importa: el contexto se manda **entero** al
+# demonio de Docker, así que un `.env.local` con el secreto M2M dentro puede
+# acabar en una capa de la imagen aunque el Dockerfile no lo copie nunca.
+.env
+.env.local
+.env.*.local
+
+node_modules
+.next
+.git
+.gitignore
+*.tsbuildinfo
+.DS_Store

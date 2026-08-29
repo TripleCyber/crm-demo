@@ -1,11 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // `output: 'standalone'` está a propósito SIN poner. Es lo que quiere la
-  // imagen de despliegue —`tenant-admin` lo lleva por eso—, pero aquí todavía
-  // no hay Dockerfile, y con él puesto `next start` avisa de que no es la forma
-  // de arrancar y hay que llamar a `.next/standalone/server.js`. Un aviso que
-  // no aplica todavía sólo enseña a ignorar los avisos. Se pone el día que
-  // entre el Dockerfile, en el mismo cambio.
+  // Ya hay Dockerfile, así que esto entra: `standalone` produce un
+  // `.next/standalone/server.js` con **sólo** las dependencias que el servidor
+  // toca de verdad, y la imagen pasa de arrastrar `node_modules` entero a
+  // llevar unas decenas de megas. Es lo mismo que hace `tenant-admin`.
+  //
+  // Consecuencia que hay que saber: con esto puesto, `next start` avisa de que
+  // no es la forma de arrancar. En desarrollo se usa `next dev`, que no se
+  // entera; en la imagen se llama a `server.js` directamente.
+  output: 'standalone',
 
   // Sin `env:` ni `NEXT_PUBLIC_*` para nada de esto. El secreto M2M y el
   // `client_id` se leen SÓLO en código de servidor (`src/lib/organizations.ts`,
