@@ -103,7 +103,14 @@ export interface LogtoConfig {
   readonly endpoint: string;
   /** El indicador del recurso B2B. Es el `aud` que te-api exige. */
   readonly b2bResource: string;
-  /** El scope de emisión. Se pide explícito: Logto no lo da por defecto. */
+  /**
+   * Los scopes que se le piden a Logto, separados por espacios.
+   *
+   * Se piden explícitos porque **Logto no los da por defecto**, y además
+   * **recorta en silencio** lo que el rol no tenga concedido: si pides dos y el
+   * rol sólo tiene uno, el token sale con uno y no hay error. Por eso el sitio
+   * donde se comprueba que esto funciona es el `scope` del token, no la consola.
+   */
   readonly b2bScope: string;
 }
 
@@ -262,9 +269,15 @@ export function getLogtoConfig(): LogtoConfig {
   logtoCache = {
     endpoint: requireEnv('LOGTO_ENDPOINT').replace(/\/+$/, ''),
     b2bResource: requireEnv('TE_B2B_RESOURCE'),
-    // Por defecto el de emisión, que es el único que existe hoy. Es variable
-    // porque el día que haya `credentials:revoke` no se toca código.
-    b2bScope: process.env.TE_B2B_SCOPE?.trim() ?? 'credentials:issue',
+    // Los dos que existen hoy en el recurso B2B. `verifications:request` se creó
+    // el 2026-08-29 para que una integración que sólo verifica por teléfono no
+    // necesite permiso para EMITIR credenciales, que es lo que pasaba antes.
+    //
+    // Van los dos porque este CRM hace las dos cosas. Un partner que sólo
+    // verifique se da de alta con un rol propio, sin `credentials:issue`: es lo
+    // que hace que «sólo las organizaciones autorizadas emiten» se cumpla en la
+    // consola y no sólo en el comentario.
+    b2bScope: process.env.TE_B2B_SCOPE?.trim() ?? 'credentials:issue verifications:request',
   };
   return logtoCache;
 }
