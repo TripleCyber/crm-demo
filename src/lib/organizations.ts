@@ -63,6 +63,35 @@ export interface OrganizationConfig {
   /** Base de te-api para verificar (F4c). Ver arriba: te-api, no walt.id. */
   readonly verifierUrl: string;
   /**
+   * Los teléfonos desde los que esta organización llama de verdad.
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   *  NO SON UN ADORNO DE LA PANTALLA: VIAJAN DENTRO DE LA CREDENCIAL
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * El identificador de llamada se falsifica en diez segundos, así que «te
+   * llama tu banco» no prueba nada. Lo que sí prueba algo es que el número
+   * esté **dentro de un documento que el banco firmó y que el titular lleva
+   * encima**: eso no lo fabrica un estafador, y además el titular puede
+   * consultarlo sin llamada y sin conexión.
+   *
+   * Por eso se emiten como el claim `official_numbers` de la credencial
+   * (`api/credentials/issue`) y por eso la pantalla de emisión los enseña
+   * **antes** de emitir, con el rótulo «números oficiales que llevará
+   * dentro»: quien firma tiene que ver lo que firma.
+   *
+   * Su sitio definitivo es el bloque `te_partner` firmado del fork de walt.id
+   * —junto al certificado, el `response_uri` y el arte de la tarjeta—, que no
+   * existe todavía. Mientras tanto un claim ordinario los mete dentro de la
+   * misma firma, que es la propiedad que importa; lo que le falta es ir
+   * agrupado con el resto de lo que identifica al partner.
+   *
+   * Vacío = esta organización no declara ninguno, y entonces no se emite el
+   * claim y la pantalla lo dice. **No se inventa un número**: un teléfono
+   * equivocado dentro de una credencial firmada es peor que ninguno.
+   */
+  readonly officialNumbers: readonly string[];
+  /**
    * F2 · La aplicación OIDC del **portal de clientes** de esta organización.
    *
    * `undefined` = esta organización no tiene portal declarado, y entonces
@@ -170,6 +199,7 @@ function readSlug(slug: string): OrganizationConfig {
     // `…/v1/b2b` sobre una base con barra doble es un 404 que cuesta ver.
     issuerUrl: issuerUrl.replace(/\/+$/, ''),
     verifierUrl: verifierUrl.replace(/\/+$/, ''),
+    officialNumbers: readOfficialNumbers(`${prefix}_OFFICIAL_NUMBERS`),
     portal:
       portalClientId === undefined || portalClientId === '' || portalClientSecret === undefined
         ? undefined
@@ -184,6 +214,24 @@ function readSlug(slug: string): OrganizationConfig {
 function emptyToUndefined(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+}
+
+/**
+ * Los números oficiales, separados por comas.
+ *
+ * Se separa por **comas y sólo comas** aunque el resto de listas de este
+ * proyecto acepten también espacios: un teléfono se escribe con espacios
+ * (`+34 918 40 22 47`) y partirlo por ellos convertiría un número en cinco.
+ *
+ * Lo que sí se hace es normalizar los espacios interiores a uno, porque el
+ * valor acaba dentro de una credencial firmada y dos emisiones que el operador
+ * escribió igual no pueden diferir en un espacio de más.
+ */
+function readOfficialNumbers(name: string): readonly string[] {
+  return (process.env[name] ?? '')
+    .split(',')
+    .map((entry) => entry.trim().replace(/\s+/g, ' '))
+    .filter((entry) => entry !== '');
 }
 
 /**

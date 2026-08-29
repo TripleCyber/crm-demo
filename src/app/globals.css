@@ -480,3 +480,325 @@ main.narrow {
   color: var(--brand-ink);
   text-decoration: none;
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LOS DOS NIVELES · C1
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * No son pestañas de un formulario: son dos ceremonias distintas, y el agente
+ * tiene que ver que son dos cosas y cuál está eligiendo. Por eso son grandes,
+ * ocupan la mitad cada una y la seleccionada se marca con el color de la marca
+ * y no sólo con un subrayado.
+ *
+ * La segunda línea de cada botón dice para qué sirve. Un rótulo a secas
+ * —«nivel 1» / «nivel 2»— obliga a saberse la numeración, y quien está al
+ * teléfono con un cliente no se la sabe.
+ */
+.levels {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.levels .level {
+  flex: 1;
+  display: block;
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.levels .level small {
+  display: block;
+  margin-top: 3px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.levels .level.on {
+  border-color: var(--brand);
+  background: #eef4fa;
+  color: var(--brand);
+}
+
+.levels .level.on small {
+  color: var(--brand);
+  opacity: 0.82;
+}
+
+/* El panel del nivel que no se puede ejecutar todavía. */
+.level-pane {
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  font-size: 14px;
+}
+
+.level-pane h3 {
+  font-size: 14px;
+  margin: 18px 0 10px;
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LOS NÚMEROS OFICIALES Y LOS CUATRO CANALES · C0
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+.official {
+  margin: 4px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 6px;
+  background: #eef4fa;
+}
+
+.official h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.official ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.official li {
+  font-size: 15px;
+}
+
+/* Un canal de entrega. La fila entera es el área de pulsación, como las
+   casillas de «qué se le pide» y por lo mismo: se elige mirando otra pantalla. */
+.channels .channel {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.channels .channel input {
+  width: auto;
+  flex: none;
+  margin: 3px 0 0;
+}
+
+.channels .channel span {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.channels .channel small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.channels .channel:has(input:checked) {
+  border-color: var(--brand);
+  background: #eef4fa;
+}
+
+/* Lo que sale después de emitir, según el canal elegido. */
+.delivery {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+}
+
+.delivery h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.delivery p {
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+/* El borrador del correo, tal y como se va a mandar. Se enseña entero a
+   propósito: el agente tiene que poder comprobar de un vistazo que el código de
+   un solo uso NO está dentro. */
+.delivery pre {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA LÍNEA DE TIEMPO · C2
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Es lo que convierte la espera en algo que se lee de un vistazo mientras se
+ * habla por teléfono. Cada hito lleva **su hora**, y la del hito en curso es
+ * una cuenta atrás que se mueve: una pantalla con un número que cambia no se
+ * confunde con una colgada, que era el problema real del párrafo quieto.
+ *
+ * El punto del hito en curso late con la misma animación que la marca de
+ * espera de `.outcome.waiting`, y comparte su regla de `prefers-reduced-motion`.
+ */
+.timeline-block {
+  margin: 4px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.timeline-block h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  margin: 0 0 12px;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.timeline li {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 0 16px 22px;
+  font-size: 14px;
+}
+
+/* La regla vertical que une los hitos. El último no la lleva: una línea que
+   sigue después del final sugiere un paso más que no existe. */
+.timeline li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 14px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.timeline li:last-child::before {
+  display: none;
+}
+
+.timeline li::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+}
+
+.timeline li.done::after {
+  background: var(--ok);
+}
+
+.timeline li.current::after {
+  background: var(--brand);
+  animation: outcome-pulse 1.6s ease-in-out infinite;
+}
+
+.timeline li > div {
+  flex: 1;
+}
+
+.timeline li strong {
+  display: block;
+  font-weight: 600;
+}
+
+.timeline li span {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* La hora, en la misma columna en todos los hitos para poder leerlas seguidas. */
+.timeline li time {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline li.current time {
+  color: var(--brand);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline li.current::after {
+    animation: none;
+  }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL RECIBO · C3
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Se distingue del resto de tarjetas porque es lo que el banco archiva: el
+ * borde verde dice que esto es el resultado bueno y no un panel más de la
+ * ficha.
+ */
+.receipt {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ok);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.receipt h3 {
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.receipt h4 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  margin: 18px 0 10px;
+}
+
+/* La oferta que espera al titular en el portal. Es lo primero que tiene que
+   ver al entrar, así que lleva el color de la marca y no el gris de las demás. */
+.card.offer {
+  border-left: 3px solid var(--brand);
+}
+
+.card.offer p {
+  font-size: 14px;
+}

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
 /**
- * El panel de **pedir** credencial — la vuelta del ciclo.
+ * El panel de **pedir** credencial — la vuelta del ciclo, y las pantallas
+ * **C1**, **C2** y **C3** del artifact «Llamada Verificada».
  *
  * El de al lado emite; éste pide. El agente elige qué atributos necesita, el
  * titular decide si los enseña, y cuando contesta aquí aparece lo que enseñó.
@@ -22,7 +23,19 @@ import { useEffect, useMemo, useState } from 'react';
  * está hablando con su cliente, y por eso puede rotular «está al teléfono» o
  * «está delante». Eso es un dato real, no una suposición.
  *
- * ## Dos canales, porque son dos situaciones distintas
+ * ## Los dos niveles, que son dos ceremonias y no dos botones
+ *
+ * **Nivel 1 · «verificar quién habla»** — que la persona que está al teléfono
+ * sea quien dice. Es lo que hay construido y funciona de punta a punta.
+ *
+ * **Nivel 2 · «autorizar operación»** — firmar un importe y un destinatario. Es
+ * F7, y **aquí no se manda nada**: seleccionar ese nivel enseña lo que falta y
+ * por qué no se puede simular. Lo que no se hace es enviar la ceremonia de
+ * nivel 1 con el rótulo del nivel 2, que es exactamente el ataque que las dos
+ * ceremonias existen para impedir — si el gesto es el mismo, acostumbrarse a
+ * uno enseña a ejecutar el otro por reflejo.
+ *
+ * ## Dos canales dentro del nivel 1, porque son dos situaciones distintas
  *
  * - **Por teléfono.** El agente tiene al titular al aparato y necesita saber que
  *   es él. El titular **no ve esta pantalla**: está al otro lado de una llamada
@@ -39,12 +52,24 @@ import { useEffect, useMemo, useState } from 'react';
  * no baja al navegador. Y no hay ningún verificador aquí: la sesión la abre
  * te-api en el suyo.
  *
- * ## Por qué se sondea
+ * ## La línea de tiempo, y la frase del artifact
  *
- * Porque no hay webhook. te-api no acepta uno del partner a propósito: el
- * destino lo elegiría quien pide, y el verificador de TripleEnable acabaría
- * haciendo peticiones salientes a donde le dijeran. Sondear desde la pantalla
- * que ya está abierta cuesta una petición cada tres segundos y no abre nada.
+ * El artifact escribe en C2 «esta pantalla no sondea a TripleEnable: la cartera
+ * responde a nuestro propio servidor». La segunda mitad describe el **modo
+ * directo** —el banco con su propio verificador, que es el fork de walt.id que
+ * todavía no existe—; hoy el verificador es el de TripleEnable, por la regla
+ * escrita del dueño de que la verificación se hace en nuestra infraestructura.
+ *
+ * Lo que sí es verdad hoy, y es lo que la pantalla dice: **el navegador no
+ * habla con TripleEnable**. Pregunta a este mismo servidor, y es él quien
+ * consulta a te-api con el token de la organización. Esa propiedad —ningún
+ * secreto en el navegador, ninguna petición del agente a un tercero— es la que
+ * un empleado puede comprobar abriendo la pestaña de red, y es la que se
+ * escribe. La otra se escribirá cuando sea cierta.
+ *
+ * Lo que el artifact pide de verdad en C2 es que la espera **avance sola**, y
+ * eso sí se cumple: los hitos llevan la hora del servidor del banco, se pintan
+ * en cuanto ocurren, y el que está en curso cuenta hacia atrás.
  */
 
 /** Un atributo pedible, ya resuelto en el servidor. */
@@ -65,6 +90,9 @@ interface CredentialTypeOption {
 /** Cómo se avisa al titular. El mismo valor que entiende la ruta del servidor. */
 type Channel = 'qr' | 'phone';
 
+/** Los dos niveles de la ceremonia. Ver la cabecera. */
+type Level = 'identity' | 'transaction';
+
 interface PresentationStarted {
   readonly presentationId: string;
   readonly authorizationRequestUrl: string;
@@ -72,6 +100,13 @@ interface PresentationStarted {
   readonly expiresAt: string;
   readonly claims: readonly string[];
   readonly channel: Channel;
+  /** Hora del servidor del banco en la que te-api devolvió la sesión. */
+  readonly requestedAt: string;
+  /** Hora del servidor del banco en la que salió el timbre. Sólo en `phone`. */
+  readonly wakeupAt?: string;
+  /** El `iss` que te-api le exigirá a la credencial presentada. */
+  readonly issuerDid: string;
+  readonly type: string;
   /** Sólo en el canal QR. */
   readonly qrSvg?: string;
   /** Sólo en el canal teléfono. No significa que haya sonado nada: ver abajo. */
@@ -104,12 +139,20 @@ const POLL_INTERVAL_MS = 3000;
  * Cambia porque lo que hay que hacer a continuación es distinto: por teléfono
  * hay que pedirle a la persona que mire el móvil; en la sucursal, que apunte con
  * la cámara a esta pantalla. Es lo único de la espera que depende del canal —
- * el resto (que se está preguntando cada tres segundos, y cuánto queda) es
- * igual en los dos y se dice aparte.
+ * el resto (cuánto queda y qué ha pasado ya) es igual en los dos y lo cuenta la
+ * línea de tiempo.
  */
 const PENDING_TEXT: Record<Channel, string> = {
   phone: 'Le hemos avisado a su móvil. Pídale que abra la app y confirme.',
   qr: 'Enséñele el código. Tiene que escanearlo con su cartera y confirmar ahí.',
+};
+
+/** Cómo acabó, en cuatro palabras, para el último hito de la línea de tiempo. */
+const OUTCOME_MILESTONE: Record<Exclude<Status, 'pending'>, string> = {
+  verified: 'Ha confirmado desde su cartera',
+  rejected: 'Ha dicho que no ha sido él',
+  failed: 'La credencial no ha valido',
+  expired: 'Caducó sin respuesta',
 };
 
 export function RequestCredentialPanel({
@@ -132,6 +175,7 @@ export function RequestCredentialPanel({
    */
   agent: { readonly id: string; readonly displayName: string };
 }) {
+  const [level, setLevel] = useState<Level>('identity');
   const [type, setType] = useState(credentialTypes[0]?.type ?? '');
 
   const selectedType = useMemo(
@@ -151,6 +195,15 @@ export function RequestCredentialPanel({
   const [error, setError] = useState<string | undefined>();
   const [started, setStarted] = useState<PresentationStarted | undefined>();
   const [result, setResult] = useState<PresentationStatus | undefined>();
+  /**
+   * Cuándo supo ESTA pantalla que la petición había terminado.
+   *
+   * No es la hora en la que el titular firmó: entre las dos hay hasta un
+   * intervalo de sondeo. Se guarda igual porque es el único instante que este
+   * servidor puede defender —«a esta hora lo supimos»— y porque cierra la línea
+   * de tiempo con un dato en vez de con un hueco. El rótulo lo dice.
+   */
+  const [settledAt, setSettledAt] = useState<number | undefined>();
   /**
    * Si la petición ya tiene un final. **Separado de `result` a propósito.**
    *
@@ -193,7 +246,10 @@ export function RequestCredentialPanel({
         // una pantalla que ya funciona pareciera rota.
         setError(undefined);
         setResult(payload);
-        if (payload.status !== 'pending') setDone(true);
+        if (payload.status !== 'pending') {
+          setSettledAt(Date.now());
+          setDone(true);
+        }
       } catch {
         // Un fallo de red suelto no borra la pantalla: el siguiente sondeo lo
         // vuelve a intentar, y el QR sigue siendo válido mientras no caduque.
@@ -234,6 +290,7 @@ export function RequestCredentialPanel({
     setError(undefined);
     setStarted(undefined);
     setResult(undefined);
+    setSettledAt(undefined);
     setDone(false);
     try {
       const response = await fetch('/api/credentials/present', {
@@ -259,7 +316,7 @@ export function RequestCredentialPanel({
   if (credentialTypes.length === 0) {
     return (
       <div className="card">
-        <h2>Comprobar quién es</h2>
+        <h2>Antes de pedir ningún dato</h2>
         <p className="alert">
           Esta organización no declara ningún tipo de credencial. Compruébalo en{' '}
           <a href="/diagnostics">Diagnóstico</a>: los tipos salen del padrón de te-api, no de aquí.
@@ -275,90 +332,123 @@ export function RequestCredentialPanel({
 
   return (
     <div className="card">
-      <h2>Comprobar quién es</h2>
+      <h2>Antes de pedir ningún dato</h2>
       <p className="muted">
-        El titular decide qué enseña, desde su cartera. La verificación la hace{' '}
-        <strong>TripleEnable</strong>, no este CRM: aquí no hay verificador ni clave, sólo la
-        pregunta y la respuesta.
+        Se le enviará una solicitud firmada. Dile por teléfono que se la has mandado. La
+        verificación la hace <strong>TripleEnable</strong>, no este CRM: aquí no hay verificador ni
+        clave, sólo la pregunta y la respuesta.
       </p>
-
-      <div className="row">
-        <label className="field">
-          <span>Tipo de credencial</span>
-          <select value={type} onChange={(event) => chooseType(event.target.value)}>
-            {credentialTypes.map((option) => (
-              <option key={option.type} value={option.type}>
-                {/*
-                  El rótulo primero y el `type_key` detrás. El rótulo sale de
-                  configuración y puede no estar; entonces `label` ES el
-                  `type_key` y se lee dos veces, que es mejor que inventarse un
-                  nombre bonito a partir de una clave.
-                */}
-                {option.label === option.type ? option.type : `${option.label} · ${option.type}`}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <fieldset className="field claims" style={{ border: 0, padding: 0, margin: 0 }}>
-        <legend style={{ padding: 0 }}>Qué se le pide</legend>
-        {claimOptions.length === 0 ? (
-          <p className="alert warn" style={{ marginTop: 8 }}>
-            Este tipo no lleva ningún atributo que esta ficha pueda rellenar, así que no hay nada
-            que pedirle. Revisa la ficha, o el perfil del tipo en la configuración.
-          </p>
-        ) : (
-          claimOptions.map((claim) => (
-            <label key={claim.name} className="claim">
-              <input
-                type="checkbox"
-                checked={selected.includes(claim.name)}
-                onChange={() => toggle(claim.name)}
-              />
-              <span>
-                {claim.label} <span className="mono">{claim.name}</span>
-              </span>
-            </label>
-          ))
-        )}
-        <p className="muted" style={{ marginTop: 10 }}>
-          Se pide sólo lo que hace falta. Lo que no se marque no sale de la cartera del titular, y
-          lo que la cartera enseñe de más tampoco llega hasta aquí: te-api devuelve la
-          intersección.
-        </p>
-      </fieldset>
 
       {/*
-        Los dos botones, y en este orden. El de arriba es el de la llamada de
-        teléfono, que es la situación normal de un agente con auriculares
-        puestos; el QR sólo sirve si el cliente está en el mostrador mirando
-        esta misma pantalla. Rotularlos por la SITUACIÓN y no por la tecnología
-        —«está al teléfono» en vez de «push»— es lo que hace que no haya que
-        elegir bien para acertar.
+        Los dos niveles. Son dos ceremonias distintas, no dos etiquetas del
+        mismo botón: el nivel 1 se aprueba deslizando y el nivel 2 tecleando
+        cuatro cifras que hay que haber oído. Que el gesto difiera es lo que
+        impide que acostumbrarse a uno enseñe a ejecutar el otro sin leer.
       */}
-      <div className="row" style={{ alignItems: 'stretch' }}>
+      <div className="levels">
         <button
           type="button"
-          onClick={() => void startRequest('phone')}
-          disabled={busy !== undefined || type === '' || selected.length === 0}
+          className={level === 'identity' ? 'level on' : 'level'}
+          aria-pressed={level === 'identity'}
+          onClick={() => setLevel('identity')}
         >
-          {busy === 'phone' ? 'Avisando…' : 'Está al teléfono · avisar a su móvil'}
+          Verificar quién habla
+          <small>Nivel 1 · que sea él quien está al teléfono</small>
         </button>
         <button
           type="button"
-          className="secondary"
-          onClick={() => void startRequest('qr')}
-          disabled={busy !== undefined || type === '' || selected.length === 0}
+          className={level === 'transaction' ? 'level on' : 'level'}
+          aria-pressed={level === 'transaction'}
+          onClick={() => setLevel('transaction')}
         >
-          {busy === 'qr' ? 'Pidiendo…' : 'Está delante · enseñar QR'}
+          Autorizar operación
+          <small>Nivel 2 · firmar un importe · todavía no</small>
         </button>
       </div>
-      <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-        Al titular le llegará a nombre de <strong>{agent.displayName}</strong>, agente{' '}
-        <span className="mono">{agent.id}</span>. Dígaselo en voz alta: que el nombre que oye por
-        teléfono sea el que ve en la pantalla del móvil es la mitad de la comprobación.
-      </p>
+
+      {level === 'transaction' ? <TransactionLevel /> : null}
+
+      {level === 'identity' && (
+        <>
+          <div className="row">
+            <label className="field">
+              <span>Tipo de credencial</span>
+              <select value={type} onChange={(event) => chooseType(event.target.value)}>
+                {credentialTypes.map((option) => (
+                  <option key={option.type} value={option.type}>
+                    {/*
+                      El rótulo primero y el `type_key` detrás. El rótulo sale de
+                      configuración y puede no estar; entonces `label` ES el
+                      `type_key` y se lee dos veces, que es mejor que inventarse un
+                      nombre bonito a partir de una clave.
+                    */}
+                    {option.label === option.type ? option.type : `${option.label} · ${option.type}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <fieldset className="field claims" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend style={{ padding: 0 }}>Qué se le pide</legend>
+            {claimOptions.length === 0 ? (
+              <p className="alert warn" style={{ marginTop: 8 }}>
+                Este tipo no lleva ningún atributo que esta ficha pueda rellenar, así que no hay
+                nada que pedirle. Revisa la ficha, o el perfil del tipo en la configuración.
+              </p>
+            ) : (
+              claimOptions.map((claim) => (
+                <label key={claim.name} className="claim">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(claim.name)}
+                    onChange={() => toggle(claim.name)}
+                  />
+                  <span>
+                    {claim.label} <span className="mono">{claim.name}</span>
+                  </span>
+                </label>
+              ))
+            )}
+            <p className="muted" style={{ marginTop: 10 }}>
+              Se pide sólo lo que hace falta. Lo que no se marque no sale de la cartera del
+              titular, y lo que la cartera enseñe de más tampoco llega hasta aquí: te-api devuelve
+              la intersección.
+            </p>
+          </fieldset>
+
+          {/*
+            Los dos botones, y en este orden. El de arriba es el de la llamada de
+            teléfono, que es la situación normal de un agente con auriculares
+            puestos; el QR sólo sirve si el cliente está en el mostrador mirando
+            esta misma pantalla. Rotularlos por la SITUACIÓN y no por la tecnología
+            —«está al teléfono» en vez de «push»— es lo que hace que no haya que
+            elegir bien para acertar.
+          */}
+          <div className="row" style={{ alignItems: 'stretch' }}>
+            <button
+              type="button"
+              onClick={() => void startRequest('phone')}
+              disabled={busy !== undefined || type === '' || selected.length === 0}
+            >
+              {busy === 'phone' ? 'Avisando…' : 'Está al teléfono · avisar a su móvil'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void startRequest('qr')}
+              disabled={busy !== undefined || type === '' || selected.length === 0}
+            >
+              {busy === 'qr' ? 'Pidiendo…' : 'Está delante · enseñar QR'}
+            </button>
+          </div>
+          <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            Al titular le llegará a nombre de <strong>{agent.displayName}</strong>, agente{' '}
+            <span className="mono">{agent.id}</span>. Dígaselo en voz alta: que el nombre que oye
+            por teléfono sea el que ve en la pantalla del móvil es la mitad de la comprobación.
+          </p>
+        </>
+      )}
 
       {error !== undefined && (
         <p className="alert" style={{ marginTop: 16 }}>
@@ -366,7 +456,7 @@ export function RequestCredentialPanel({
         </p>
       )}
 
-      {started !== undefined && (
+      {level === 'identity' && started !== undefined && (
         <div style={{ marginTop: 20 }}>
           {/*
             Los cinco finales, cada uno con su bloque y su título. Antes eran
@@ -386,9 +476,6 @@ export function RequestCredentialPanel({
               <div>
                 <h3>Esperando al titular</h3>
                 <p>{PENDING_TEXT[started.channel]}</p>
-                <p className="muted" style={{ margin: 0 }}>
-                  Se comprueba cada {POLL_INTERVAL_MS / 1000} segundos. {remainingText(started.expiresAt, now)}
-                </p>
               </div>
             </div>
           )}
@@ -438,9 +525,7 @@ export function RequestCredentialPanel({
               <span className="outcome-mark" aria-hidden="true" />
               <div>
                 <h3>Caducó sin respuesta</h3>
-                <p>
-                  Nadie contestó dentro del plazo. Vuelva a avisarle.
-                </p>
+                <p>Nadie contestó dentro del plazo. Vuelva a avisarle.</p>
                 {/*
                   T9 (`docs/TAREAS.md` §3.2): hoy una denuncia del titular
                   —«no estoy en ninguna llamada»— llega a te-api y muere ahí sin
@@ -451,12 +536,19 @@ export function RequestCredentialPanel({
                   llegará solo y pintará rojo sin tocar este componente.
                 */}
                 <p className="muted" style={{ margin: 0 }}>
-                  Mientras el aviso de fraude del titular no llegue hasta aquí, una denuncia suya se
-                  ve exactamente igual que un plazo agotado. Si sospecha, pregúntele.
+                  Mientras el aviso de fraude del titular no llegue hasta aquí, una denuncia suya
+                  se ve exactamente igual que un plazo agotado. Si sospecha, pregúntele.
                 </p>
               </div>
             </div>
           )}
+
+          <PresentationTimeline
+            started={started}
+            status={status}
+            now={now}
+            settledAt={settledAt}
+          />
 
           {status === 'pending' && started.channel === 'qr' && (
             <>
@@ -481,17 +573,14 @@ export function RequestCredentialPanel({
             </p>
           )}
 
-          {status === 'verified' && result?.claims !== null && result?.claims !== undefined && (
-            <dl className="facts" style={{ marginTop: 16 }}>
-              {Object.entries(result.claims).map(([name, value]) => (
-                <div key={name} style={{ display: 'contents' }}>
-                  <dt>
-                    {labelFor(name)} <span className="mono">{name}</span>
-                  </dt>
-                  <dd>{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
-                </div>
-              ))}
-            </dl>
+          {status === 'verified' && (
+            <PresentationReceipt
+              started={started}
+              externalId={externalId}
+              claims={result?.claims ?? null}
+              labelFor={labelFor}
+              settledAt={settledAt}
+            />
           )}
 
           <p className="muted" style={{ marginTop: 12 }}>
@@ -507,6 +596,272 @@ export function RequestCredentialPanel({
 }
 
 /**
+ * **C2 · en curso.** La línea de tiempo, con las horas que este banco conoce.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  SÓLO SE PINTAN HITOS QUE ESTE SERVIDOR HA VISTO OCURRIR
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * El artifact dibuja tres marcas: «solicitud creada», «su cartera nos la ha
+ * pedido» y «esperando su respuesta». La segunda no está aquí, y no por
+ * pereza: es el momento en que la cartera va a buscar el objeto de solicitud, y
+ * **hoy va al verificador de TripleEnable**, no al de este banco. te-api no lo
+ * cuenta —`GET /v1/b2b/presentations/:id` devuelve `{status, claims}` y nada
+ * más—, así que el banco no puede saberlo. Inventar esa marca sería poner una
+ * hora falsa en un registro que existe para reclamar.
+ *
+ * En su sitio va la que sí ocurre y sí se mide: **cuándo salió el timbre**. Es
+ * un hito real, con la hora de este servidor, y es además el que le importa al
+ * agente —es el que le dice si ya puede pedirle al cliente que mire el móvil—.
+ *
+ * La marca de la respuesta lleva un rótulo distinto por lo mismo: es la hora en
+ * la que esta pantalla se enteró, no la hora en la que el titular firmó. Entre
+ * las dos hay hasta un intervalo de sondeo, y decirlo cuesta una palabra.
+ */
+function PresentationTimeline({
+  started,
+  status,
+  now,
+  settledAt,
+}: {
+  started: PresentationStarted;
+  status: Status;
+  now: number;
+  settledAt: number | undefined;
+}) {
+  const pending = status === 'pending';
+
+  return (
+    <div className="timeline-block">
+      <h3>Estado</h3>
+      <ol className="timeline">
+        <li className="done">
+          <div>
+            <strong>Solicitud creada</strong>
+            <span>en el verificador de TripleEnable, a nombre de esta organización</span>
+          </div>
+          <time>{clockOf(started.requestedAt)}</time>
+        </li>
+
+        {started.wakeupAt !== undefined && (
+          <li className="done">
+            <div>
+              <strong>Aviso enviado a su móvil</strong>
+              <span>
+                te-api lo acepta igual tenga cartera o no, así que esto no confirma que haya sonado
+              </span>
+            </div>
+            <time>{clockOf(started.wakeupAt)}</time>
+          </li>
+        )}
+
+        {pending ? (
+          <li className="current">
+            <div>
+              <strong>Esperando su respuesta</strong>
+              <span>{remainingText(started.expiresAt, now)}</span>
+            </div>
+            <time>{countdown(started.expiresAt, now)}</time>
+          </li>
+        ) : (
+          <li className="done">
+            <div>
+              <strong>{OUTCOME_MILESTONE[status]}</strong>
+              <span>hora en la que esta pantalla lo supo, con hasta 3 s de retraso</span>
+            </div>
+            <time>{settledAt === undefined ? '—' : clockOf(new Date(settledAt).toISOString())}</time>
+          </li>
+        )}
+      </ol>
+      <p className="muted" style={{ margin: 0 }}>
+        Esta pantalla <strong>no habla con TripleEnable</strong>: pregunta cada{' '}
+        {POLL_INTERVAL_MS / 1000} segundos al servidor de este banco, y es él quien consulta a
+        te-api con el token de la organización. Ni el token ni el secreto que lo pide bajan al
+        navegador.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * **C3 · verificada.** El recibo de lo que se comprobó.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LAS TRES FILAS DEL ARTIFACT QUE NO ESTÁN, Y POR QUÉ
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * El artifact enseña «llave `did:key:z6Mk…`», «perfil `te_4f8a…· activo`» y
+ * «firma `0x8f2c…`». Ninguna de las tres la devuelve te-api hoy: `GET
+ * /v1/b2b/presentations/:id` contesta `{presentationId, status, claims}` y no
+ * expone el KB-JWT al partner. Y la fila del perfil es literalmente la primera
+ * pieza de la hoja de ruta del artifact —«te-api · el padrón: publicar la
+ * did:key del titular y servir la consulta llave → perfil → ¿activa?»—, que
+ * está sin construir.
+ *
+ * Así que el recibo enseña **lo que sí se comprobó y quién lo comprobó**, que
+ * no es poco: el emisor exigido, el `sub` exigido, el tipo, y los atributos que
+ * el titular decidió enseñar. Un recibo con tres campos inventados sería peor
+ * que uno con cuatro campos ciertos.
+ */
+function PresentationReceipt({
+  started,
+  externalId,
+  claims,
+  labelFor,
+  settledAt,
+}: {
+  started: PresentationStarted;
+  /**
+   * El `sub` que te-api exigió. Viene de la ficha —es el mismo que se mandó al
+   * abrir la sesión— y no se lee del enlace de autorización, donde no está: el
+   * `sub` viaja dentro del objeto de solicitud firmado, no en la URI.
+   */
+  externalId: string;
+  claims: Record<string, unknown> | null;
+  labelFor: (name: string) => string;
+  settledAt: number | undefined;
+}) {
+  return (
+    <div className="receipt">
+      <h3>Recibo · lo que Banco Demo guarda</h3>
+      <dl className="facts">
+        <dt>Confirmado</dt>
+        <dd>
+          {settledAt === undefined
+            ? '—'
+            : `${clockOf(new Date(settledAt).toISOString())} · hora en la que esta consola lo supo`}
+        </dd>
+        <dt>Petición</dt>
+        <dd className="mono">{started.presentationId}</dd>
+        <dt>Tipo exigido</dt>
+        <dd className="mono">{started.type}</dd>
+        <dt>Emisor exigido</dt>
+        <dd className="mono">{started.issuerDid}</dd>
+        <dt>Titular exigido</dt>
+        <dd className="mono">{externalId}</dd>
+      </dl>
+
+      {claims !== null && Object.keys(claims).length > 0 && (
+        <>
+          <h4>Lo que enseñó</h4>
+          <dl className="facts">
+            {Object.entries(claims).map(([name, value]) => (
+              <div key={name} style={{ display: 'contents' }}>
+                <dt>
+                  {labelFor(name)} <span className="mono">{name}</span>
+                </dt>
+                <dd>{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </>
+      )}
+
+      <p className="muted" style={{ marginTop: 14, marginBottom: 0 }}>
+        Lo firmó la cartera del titular y lo verificó TripleEnable contra ese emisor y ese
+        titular. <strong>Falta la mitad del recibo</strong>: la llave (<span className="mono">
+        did:key:…</span>), el perfil (<span className="mono">te_…</span>) y la firma del KB-JWT. No
+        se pintan porque te-api no las devuelve —<span className="mono">
+        GET /v1/b2b/presentations/:id</span> da <span className="mono">status</span> y{' '}
+        <span className="mono">claims</span>—, y sin ellas el banco no puede archivar una prueba
+        que un tercero verifique por su cuenta.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * **Nivel 2 · autorizar operación.** Lo que hay, lo que falta, y por qué no se
+ * simula.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ESTE PANEL NO MANDA NADA, Y ES LA DECISIÓN, NO UNA LIMITACIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Se podría mandar hoy mismo un `kind: 'transaction'` a `POST /v1/b2b/wakeups`
+ * —la ruta lo acepta y está probada— y rotular el botón «autorizar operación».
+ * Sería mentira, y de la peligrosa:
+ *
+ *  - **El importe no viaja.** El cuerpo del timbre no tiene campo para él, y la
+ *    cartera todavía no implementa `transaction_data` de OID4VP, así que la
+ *    firma del titular no cubriría lo que leyó. Una firma que no cubre el
+ *    importe es indistinguible de una de «verifica que eres tú».
+ *  - **Las cuatro cifras no llegan a nadie.** te-api las acuña —`createWakeup`
+ *    escribe `match_digits` porque el motor las exige a toda fila del canal
+ *    push— pero **no las devuelve**: ni en la respuesta del timbre, ni en
+ *    `GET /v1/requests/pending`, que es de donde las leería la cartera. Y
+ *    `POST /v1/requests/:id/outcome` no las pide al responder, así que nadie
+ *    las comprueba. Un número de cuatro cifras que el CRM se inventara y que
+ *    nadie coteja no es una comprobación: es enseñarle al agente a dictar
+ *    números por teléfono, que es justo el reflejo que un estafador explota.
+ *
+ * Por eso el panel dice qué falta y en dónde. Cuando esté, esta pantalla es una
+ * cifra grande y una advertencia — la parte fácil.
+ */
+function TransactionLevel() {
+  return (
+    <div className="level-pane">
+      <p className="alert warn" style={{ marginBottom: 16 }}>
+        El nivel 2 todavía no se puede ejecutar, y esta pantalla no lo simula.
+      </p>
+
+      <p>
+        Autorizar una operación es <strong>otra ceremonia</strong>, no la misma con otro rótulo: el
+        titular tiene que ver el importe, firmarlo —de forma que la firma cubra lo que leyó— y
+        teclear cuatro cifras que sólo pueden haber llegado por la voz de quien le está llamando.
+        Mandar la ceremonia del nivel 1 con este nombre acostumbraría a todo el mundo a autorizar
+        transferencias deslizando, que es exactamente lo que las dos ceremonias existen para
+        impedir.
+      </p>
+
+      <h3>Qué falta, y dónde</h3>
+      <dl className="facts">
+        <dt>Cartera</dt>
+        <dd>
+          <span className="mono">transaction_data</span> de OID4VP en el KB-JWT, y negarse a firmar
+          si no coincide con lo que se pintó. Es el único trabajo de criptografía nuevo del plan.
+        </dd>
+        <dt>te-api · las cuatro cifras</dt>
+        <dd>
+          Ya las acuña <span className="mono">createWakeup</span>, pero no salen: hacen falta en la
+          respuesta de <span className="mono">POST /v1/b2b/wakeups</span> —para que este CRM las
+          enseñe— y en <span className="mono">GET /v1/requests/pending</span> —para que la cartera
+          las pida—, y <span className="mono">POST /v1/requests/:id/outcome</span> tiene que
+          comprobarlas y matar el reto al primer fallo.
+        </dd>
+        <dt>te-api · la operación</dt>
+        <dd>
+          El timbre no lleva importe ni destinatario. Sin ellos no hay nada que resumir dentro del{' '}
+          <span className="mono">transaction_data</span>.
+        </dd>
+      </dl>
+
+      <p className="muted" style={{ marginBottom: 0 }}>
+        Mientras tanto, para confirmar que quien está al teléfono es el titular, usa el nivel 1.
+        No autoriza ninguna operación y lo dice: es lo que separa esta ceremonia de un permiso.
+      </p>
+    </div>
+  );
+}
+
+/** `14:32:07` en la zona de quien mira la pantalla, que es quien la lee. */
+function clockOf(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleTimeString('es-ES', { hour12: false });
+}
+
+/** `1:41`, para el hito en curso. Vacío cuando ya no queda nada. */
+function countdown(expiresAt: string, now: number): string {
+  const remaining = new Date(expiresAt).getTime() - now;
+  if (Number.isNaN(remaining) || remaining <= 0) return '0:00';
+  const totalSeconds = Math.floor(remaining / 1000);
+  return `${String(Math.floor(totalSeconds / 60))}:${(totalSeconds % 60)
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+/**
  * Cuánto le queda a la petición, en palabras.
  *
  * La espera tiene que decir lo que está pasando: una pantalla que sólo pone
@@ -518,8 +873,5 @@ function remainingText(expiresAt: string, now: number): string {
   const remaining = new Date(expiresAt).getTime() - now;
   if (Number.isNaN(remaining)) return '';
   if (remaining <= 0) return 'El plazo se ha agotado.';
-  const totalSeconds = Math.floor(remaining / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `Caduca en ${String(minutes)}:${seconds.toString().padStart(2, '0')}.`;
+  return 'Caduca sola cuando llegue a cero; entonces hay que volver a avisar.';
 }

@@ -1,3 +1,4 @@
+import { findPendingOffer } from '@/lib/credential-offers';
 import { findCustomer } from '@/lib/customers';
 import { getActiveOrganization } from '@/lib/organizations';
 import { getRedirectUri } from '@/lib/portal-oidc';
@@ -13,6 +14,18 @@ import { getSession, type PortalSession } from '@/lib/portal-session';
  * No hay un cuarto estado «entrado pero sin vincular»: el vínculo se pide en el
  * callback, en el mismo salto en que llega el ID token
  * (`./callback/route.ts`), así que quien tiene sesión ya sabe cómo acabó.
+ *
+ * ## El cuarto canal de entrega vive aquí
+ *
+ * Cuando el agente emite eligiendo «desde nuestra app», la oferta se queda
+ * esperando y esta pantalla la enseña. Es el único de los cuatro canales en el
+ * que quien recoge la oferta **está autenticado** al recogerla: el QR lo
+ * escanea quien esté delante, el enlace lo abre quien lo tenga y el correo lo
+ * lee quien tenga el buzón. Aquí ha habido que pasar por Logto.
+ *
+ * Lo que sigue sin estar aquí es el **código de un solo uso**. No se guarda y
+ * no se enseña: si viajara por el mismo sitio que la oferta dejaría de atar
+ * nada. Se dice en voz alta por la llamada, y punto.
  */
 export const dynamic = 'force-dynamic';
 
@@ -125,6 +138,12 @@ async function SignedIn({ session }: { session: PortalSession }) {
       ? null
       : await findCustomer(organization.orgId, session.customerExternalId);
 
+  // La oferta se busca con la organización Y con el `external_id` que salió del
+  // correo verificado del ID token. Ninguna de las dos mitades la elige el
+  // navegador, que es lo que impide que alguien pida la oferta de otro.
+  const offer =
+    customer === null ? null : await findPendingOffer(organization.orgId, customer.externalId);
+
   const { outcome } = session;
 
   return (
@@ -134,6 +153,36 @@ async function SignedIn({ session }: { session: PortalSession }) {
           ? 'Tu cuenta de Banco Demo está vinculada con tu identidad de TripleEnable.'
           : (outcome.message ?? 'No hemos podido completar el vínculo.')}
       </div>
+
+      {offer !== null && (
+        <div className="card offer">
+          <h2>Tienes una credencial esperándote</h2>
+          <p>
+            Te la hemos emitido desde atención al cliente. Ábrela en el móvil donde tengas tu
+            cartera de TripleEnable y guárdala: a partir de ese momento podremos comprobar que
+            eres tú sin preguntarte datos por teléfono.
+          </p>
+          <p>
+            <a className="button-link" href={offer.offerUri}>
+              Guardar en mi cartera
+            </a>
+          </p>
+          <dl className="facts">
+            <dt>Tipo</dt>
+            <dd className="mono">{offer.typeKey}</dd>
+            <dt>Caduca</dt>
+            <dd>{new Date(offer.expiresAt).toLocaleString('es-ES')}</dd>
+          </dl>
+          <p className="muted" style={{ margin: 0 }}>
+            {/* Sin decir cuántas cifras: el largo lo elige te-api al crear la
+                oferta y esta pantalla no lo recibe. Ver la nota en
+                `api/credentials/issue`. */}
+            Te pedirá un código numérico. Te lo damos por teléfono o en la oficina, y{' '}
+            <strong>nunca aparece en esta pantalla ni en un correo</strong>: es lo que impide que
+            esta credencial acabe en el móvil de otro.
+          </p>
+        </div>
+      )}
 
       <div className="card">
         <h2>Quién eres</h2>

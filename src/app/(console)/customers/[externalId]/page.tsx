@@ -66,7 +66,22 @@ export default async function CustomerPage({
       <h1>
         {customer.givenName} {customer.familyName}
       </h1>
+      {/*
+        La línea que el artifact pone bajo el nombre en C1. Sale de la fila y no
+        se compone con nada que el CRM no sepa: no hay ninguna insignia de
+        «credencial activa» ni de «perfil verificado», porque **el CRM no
+        conoce ninguno de los dos estados**. te-api no le cuenta si el titular
+        aceptó la oferta ni con qué nivel de garantía nació su perfil, y una
+        insignia verde que no pregunta a nadie es peor que ninguna: el agente
+        la creería.
+      */}
       <p className="muted">
+        {customer.customerSince === null
+          ? null
+          : `Cliente desde ${formatCustomerSince(customer.customerSince)}`}
+        {customer.customerSince !== null && customer.accountLast4 !== null ? ' · ' : null}
+        {customer.accountLast4 === null ? null : `cuenta ···· ${customer.accountLast4}`}
+        {customer.customerSince !== null || customer.accountLast4 !== null ? <br /> : null}
         <Link href="/customers">← Clientes</Link>
       </p>
 
@@ -146,7 +161,22 @@ export default async function CustomerPage({
         <p className="alert">No se ha podido consultar te-api: {teApiWarning}</p>
       )}
 
-      <IssueCredentialPanel externalId={customer.externalId} credentialTypes={credentialTypes} />
+      {/*
+        `officialNumbers` baja al navegador y no es un descuido: son los
+        teléfonos públicos del banco, los mismos que están en su web, y el
+        agente tiene que verlos antes de firmarlos dentro de una credencial que
+        va a durar años. Lo que no baja nunca es el secreto M2M, que vive en
+        `organizations.ts` detrás de `import 'server-only'`.
+      */}
+      <IssueCredentialPanel
+        externalId={customer.externalId}
+        holder={{
+          displayName: `${customer.givenName} ${customer.familyName}`,
+          accountLast4: customer.accountLast4,
+        }}
+        officialNumbers={session.organization.officialNumbers}
+        credentialTypes={credentialTypes}
+      />
 
       {/*
         La vuelta del ciclo. Los atributos que se pueden pedir son los de cada
@@ -165,4 +195,31 @@ export default async function CustomerPage({
       />
     </>
   );
+}
+
+/**
+ * `2024-03-12` → `12 mar 2024`, **sin restar un día por el camino**.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  `new Date('2024-03-12')` NO ES EL 12 DE MARZO AQUÍ
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Una cadena `YYYY-MM-DD` a secas la interpreta JavaScript como medianoche
+ * **UTC**, y al pintarla en una zona al oeste de Greenwich sale el día
+ * anterior. Se vio en pantalla: la ficha de un cliente de alta el 12 de marzo
+ * ponía «11 mar 2024».
+ *
+ * Es exactamente el mismo fallo que `src/lib/customers.ts` evita formateando
+ * `customer_since` en Postgres —ahí está su nota larga— y que se volvió a
+ * colar por la puerta de al lado en cuanto alguien construyó un `Date` con esa
+ * cadena. La `T00:00:00` sin zona obliga a interpretarla en **hora local**,
+ * que es lo que significa una fecha de alta comercial: un día del calendario,
+ * sin hora y sin huso.
+ */
+function formatCustomerSince(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('es-ES', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }

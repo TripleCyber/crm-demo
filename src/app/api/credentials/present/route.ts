@@ -189,6 +189,25 @@ export async function POST(request: Request): Promise<NextResponse> {
       claims,
     });
 
+    // ── Los hitos de la línea de tiempo, con la hora de ESTE servidor ───────
+    //
+    // La pantalla de espera tiene que avanzar sola, y para eso necesita horas
+    // de verdad. Se sellan aquí y no en el navegador por dos razones:
+    //
+    //  1. El reloj del navegador lo pone quien tenga el puesto delante. Una
+    //     línea de tiempo que un agente puede mover cambiando la hora de su
+    //     Windows no sirve para reclamar nada.
+    //  2. Es el mismo reloj en las dos marcas, así que la diferencia entre
+    //     ellas —«el timbre salió 12 s después de crear la solicitud»— es un
+    //     dato real y no la resta de dos relojes distintos.
+    //
+    // te-api **no devuelve la hora de creación** (`POST /v1/b2b/presentations`
+    // contesta `{presentationId, requestUri, authorizationRequestUrl,
+    // expiresAt}`), así que ésta es la hora en la que su respuesta llegó aquí.
+    // Es la que el banco puede defender: la que él vio.
+    const requestedAt = new Date().toISOString();
+    let wakeupAt: string | undefined;
+
     // El QR sólo se dibuja para el canal que lo usa. Pintarlo también en una
     // llamada de teléfono sería enseñarle al agente algo que el cliente no
     // puede ver, y el agente acabaría intentando dictarlo.
@@ -214,6 +233,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           actor: session.agent,
         });
         wakeupId = wakeup.wakeupId;
+        wakeupAt = new Date().toISOString();
       } catch (error) {
         // La sesión de presentación ya está abierta y **se deja caducar sola**.
         // Se prefiere eso a devolver un 200 con un aviso pequeño: el agente está
@@ -238,6 +258,18 @@ export async function POST(request: Request): Promise<NextResponse> {
       // teléfono**: te-api contesta lo mismo tenga cartera o no (ver
       // `sendWakeup`). Se enseña para poder cruzarlo con el diario de te-api.
       wakeupId,
+      // Los dos hitos que este servidor conoce de primera mano. Ver arriba.
+      requestedAt,
+      wakeupAt,
+      // El `iss` que te-api va a exigirle a la credencial presentada. Es el DID
+      // de esta organización y sale del padrón, no del cuerpo: se devuelve para
+      // que el recibo pueda enseñar contra qué se comprobó, que es la mitad de
+      // lo que hace verificable una verificación.
+      issuerDid: organization.did,
+      // El tipo, ya resuelto. La pantalla lo tiene por otro lado, pero el
+      // recibo se guarda por su cuenta y no puede depender de que el
+      // desplegable siga en la misma posición.
+      type: declared.type,
     });
   } catch (error) {
     return errorResponse(error, 'pidiendo la presentación');
