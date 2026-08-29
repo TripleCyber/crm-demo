@@ -15,7 +15,13 @@ import { useState } from 'react';
  */
 
 interface CredentialTypeOption {
+  /** El `type_key` del padrón de te-api. Es lo que se le manda al servidor. */
   readonly type: string;
+  /**
+   * El rótulo de configuración. Cuando no hay ninguno declarado **es el propio
+   * `type_key`**, y entonces no se enseña dos veces.
+   */
+  readonly label: string;
   readonly maxValidityDays: number;
 }
 
@@ -105,11 +111,12 @@ export function IssueCredentialPanel({
 
       <div className="row">
         <label className="field">
-          <span>Tipo</span>
+          <span>Tipo de credencial</span>
           <select value={type} onChange={(event) => setType(event.target.value)}>
             {credentialTypes.map((option) => (
               <option key={option.type} value={option.type}>
-                {option.type} (máx. {option.maxValidityDays} días)
+                {option.label === option.type ? option.type : `${option.label} · ${option.type}`}{' '}
+                (máx. {option.maxValidityDays} días)
               </option>
             ))}
           </select>

@@ -128,7 +128,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (error instanceof TeApiError) {
         outcome = {
           ok: false,
-          message: describeTeApiError(error),
+          message: describeTeApiError(error, 'link'),
           ...(error.requestId === undefined ? {} : { requestId: error.requestId }),
         };
       } else {

@@ -260,36 +260,115 @@ export function validateCustomerInput(raw: {
 }
 
 /**
+ * Un atributo del padrón que puede acabar dentro de una credencial.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ESTE CATÁLOGO ES LO ÚNICO DE ESTE BANCO QUE SIGUE SIENDO CÓDIGO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Y tiene que serlo: un atributo sólo se puede poner en una credencial si hay
+ * una columna del padrón de donde sacarlo, y las columnas de `customer` son el
+ * núcleo bancario de esta maqueta. Declarar `policy_number` en un `.env` no
+ * crea la columna, así que ponerlo en configuración sería configuración que
+ * miente.
+ *
+ * Lo que **sí** es configuración es qué atributos de éstos lleva cada tipo de
+ * credencial y cómo se rotula cada tipo. Eso vive en `credential-profiles.ts`
+ * y sale del entorno, que es lo que permite que un segundo tipo en el padrón
+ * de te-api funcione sin tocar código.
+ */
+export interface CustomerAttribute {
+  /** El nombre del claim en la credencial. Es lo que viaja y lo que se pide. */
+  readonly claim: string;
+  /**
+   * El rótulo que lee el agente.
+   *
+   * El nombre técnico se enseña **al lado** y no en su lugar: el agente tiene
+   * que poder leer «Apellidos» de un vistazo, y quien depura tiene que poder
+   * cruzar `family_name` con lo que devuelve te-api.
+   */
+  readonly label: string;
+  /**
+   * Si forma parte del mínimo con el que este banco confirma «quién eres».
+   *
+   * Es lo que va marcado por defecto en la pantalla de comprobación. Se declara
+   * aquí, junto a la columna, y no en el componente: el componente no puede
+   * saber cuál de los atributos de un banco cualquiera identifica a una
+   * persona, y cuando creía saberlo era porque comparaba con `given_name` —que
+   * es exactamente lo que se rompe con el segundo partner.
+   */
+  readonly identifying: boolean;
+  /** De dónde sale en la ficha. `null` = esta ficha no lo tiene. */
+  readonly read: (customer: Customer) => string | null;
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────
+ * POR QUÉ NO ESTÁN EL CORREO NI EL TELÉFONO
+ * ─────────────────────────────────────────────────────────────────────────
+ *
+ * Porque no son divulgables: el CRM los guarda para su propio uso —avisar al
+ * cliente, buscarlo en el listado— y no los mete en algo firmado que el titular
+ * va a enseñar por ahí. Meter un dato «ya que estamos» en una credencial es
+ * meterlo en todas las presentaciones que se hagan con ella.
+ *
+ * No estar en este catálogo es la forma de que no puedan pedirse: la pantalla
+ * ofrece lo que hay aquí, y el servidor **rechaza** lo que no esté.
+ */
+export const CUSTOMER_ATTRIBUTES: readonly CustomerAttribute[] = [
+  { claim: 'given_name', label: 'Nombre', identifying: true, read: (c) => c.givenName },
+  { claim: 'family_name', label: 'Apellidos', identifying: true, read: (c) => c.familyName },
+  {
+    claim: 'account_last4',
+    label: 'Últimos cuatro de la cuenta',
+    identifying: false,
+    read: (c) => c.accountLast4,
+  },
+  {
+    claim: 'customer_since',
+    label: 'Cliente desde',
+    identifying: false,
+    read: (c) => c.customerSince,
+  },
+];
+
+/** El atributo del catálogo con ese nombre de claim, si existe. */
+export function findCustomerAttribute(claim: string): CustomerAttribute | undefined {
+  return CUSTOMER_ATTRIBUTES.find((attribute) => attribute.claim === claim);
+}
+
+/**
  * Los claims que van a la credencial, construidos **desde la ficha**.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  ESTA FUNCIÓN NO RECIBE NADA DEL NAVEGADOR, Y ESO ES EL PUNTO
+ *  ESTA FUNCIÓN NO RECIBE NINGÚN VALOR DEL NAVEGADOR, Y ESO ES EL PUNTO
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * El botón de emitir manda un `externalId` y ya está. El contenido de la
  * credencial sale de la fila de la base. Si los claims llegaran del navegador,
  * cualquiera con la consola de red abierta emitiría una credencial firmada por
- * Banco Demo diciendo lo que le apeteciera — y la firma sería buena.
+ * este banco diciendo lo que le apeteciera — y la firma sería buena.
  *
- * ─────────────────────────────────────────────────────────────────────────
- * POR QUÉ NO VAN EL CORREO NI EL TELÉFONO
- * ─────────────────────────────────────────────────────────────────────────
+ * `claimNames` dice **qué atributos lleva este tipo de credencial**, y sale del
+ * perfil del tipo (`credential-profiles.ts`), no de la petición. Los valores
+ * siguen saliendo de la fila y de ningún otro sitio.
  *
- * Porque `CONTRATOS.md` §1.2 dice cuáles son los cuatro claims divulgables de
- * esta credencial y ésos no están. El CRM los guarda para su propio uso —
- * avisar al cliente, buscarlo en el listado— y no los mete en algo firmado que
- * el titular va a enseñar por ahí. Meter un dato «ya que estamos» en una
- * credencial es meterlo en todas las presentaciones que se hagan con ella.
+ * Se recorre el catálogo y no `claimNames` por dos razones: el orden en
+ * pantalla queda siempre el mismo aunque la variable de entorno esté
+ * desordenada, y un nombre que no esté en el catálogo no puede colarse.
  *
  * Los campos vacíos se omiten en vez de ir como `null`: un claim presente y
  * vacío es un claim que el verificador tiene que interpretar.
  */
-export function buildCredentialClaims(customer: Customer): Record<string, string> {
-  const claims: Record<string, string> = {
-    given_name: customer.givenName,
-    family_name: customer.familyName,
-  };
-  if (customer.accountLast4 !== null) claims.account_last4 = customer.accountLast4;
-  if (customer.customerSince !== null) claims.customer_since = customer.customerSince;
+export function buildCredentialClaims(
+  customer: Customer,
+  claimNames: readonly string[],
+): Record<string, string> {
+  const claims: Record<string, string> = {};
+  for (const attribute of CUSTOMER_ATTRIBUTES) {
+    if (!claimNames.includes(attribute.claim)) continue;
+    const value = attribute.read(customer);
+    if (value !== null && value !== '') claims[attribute.claim] = value;
+  }
   return claims;
 }

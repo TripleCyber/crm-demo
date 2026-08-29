@@ -14,7 +14,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     bankName = getActiveOrganization().displayName;
   } catch {
     // El rótulo no puede tumbar la pantalla que explica que falta configuración.
-    bankName = 'Banco Demo';
+    // Genérico y no el nombre de un banco concreto: si la configuración está
+    // rota no se sabe de qué organización es este despliegue, y ponerle el
+    // nombre del primero que hubo sería afirmarlo sin saberlo.
+    bankName = 'Portal de clientes';
   }
 
   return (

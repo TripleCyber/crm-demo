@@ -53,8 +53,10 @@ Navegador  (listado · alta · botón de emitir)
 Next.js, en el servidor
    │  1. sesión → organización            src/lib/session.ts
    │  2. ficha del cliente                src/lib/customers.ts   (base propia)
-   │  3. claims construidos DESDE la ficha
-   │  4. token M2M de organización        src/lib/b2b-token.ts   (cacheado 1 h)
+   │  3. el tipo, resuelto contra el padrón de te-api
+   │  4. claims: los NOMBRES los dice el perfil del tipo,
+   │     los VALORES la ficha. Del navegador no viene ninguno
+   │  5. token M2M de organización        src/lib/b2b-token.ts   (cacheado 1 h)
    ▼
 te-api  POST /v1/b2b/credentials
    ▼
@@ -107,9 +109,11 @@ Navegador  (ficha · casillas de qué se pide · los dos botones)
    ▼
 Next.js, en el servidor
    │  1. sesión → organización y EMPLEADO
-   │  2. ficha del cliente → qué atributos LLEVA esta credencial
-   │  3. los pedidos se recortan a esa lista
-   │  4. token M2M de organización
+   │  2. ficha del cliente (con el org_id en el where)
+   │  3. el TIPO, resuelto contra el padrón de te-api
+   │  4. qué atributos lleva ese tipo EN ESTA FICHA
+   │  5. lo pedido que no esté en esa lista → 400, no recorte
+   │  6. token M2M de organización
    ▼
 te-api  POST /v1/b2b/presentations        (abre la sesión en SU verificador)
    ▼
@@ -162,13 +166,32 @@ presentación se deja caducar sola y se enseña el error. Dar por buena una
 llamada cuyo aviso no ha salido dejaría al agente diciéndole al cliente que mire
 un móvil que no va a sonar.
 
+### Qué decide el navegador y qué decide el servidor
+
+Es la pregunta que hay que poder contestar de cada campo que viaja, y la
+respuesta no es «el navegador no decide nada»: el operador **sí** elige cosas, y
+la disciplina está en que ninguna de sus elecciones se crea tal cual.
+
+| Campo | Quién lo elige | Contra qué se comprueba |
+|---|---|---|
+| `externalId` | El operador — de qué cliente | El padrón, **con el `org_id` de la sesión en el `where`** |
+| `type` | El operador — qué credencial | **`GET /v1/b2b/organization`**, el padrón de te-api |
+| `claims` | El operador — qué atributos | Los que ese tipo lleva **en esta ficha** |
+| `channel` | El operador — por dónde avisa | Una lista cerrada de dos valores |
+| `subjectReference` | **El servidor** | Sale de la fila del padrón. No viaja en el cuerpo |
+| `actor` (quién sale en el móvil) | **El servidor** | Sale de la sesión del empleado |
+| `kind` del timbre | **El servidor** | Constante: `identity` |
+
 ### Las tres decisiones que importan
 
-**1 · Sólo se puede pedir lo que esta credencial lleva.** Las casillas salen de
-la misma función que construye los claims al emitir, y el servidor **vuelve a
-recortar** lo que llegó del navegador contra esa lista. Que te-api rechace los
-campos reservados no quita que la comprobación tenga que estar también aquí,
-que es donde se sabe qué lleva la credencial.
+**1 · Sólo se puede pedir lo que esta credencial lleva, y se rechaza, no se
+recorta.** Las casillas salen de la misma resolución que construye los claims al
+emitir, y el servidor **vuelve a comprobar** lo que llegó del navegador contra
+esa lista. Lo que no cuadre es un **400 que nombra los atributos que sobran** —
+antes se filtraban en silencio, y eso está mal por el motivo que te-api escribe
+en `src/b2b/claims.ts`, que **lanza** en vez de filtrar: recortar por lo bajo
+deja al que llama convencido de que pidió lo que no pidió, y el día que ese campo
+importe nadie sabrá por qué no está.
 
 **2 · Se marca lo que hace falta, no todo.** Por defecto van nombre y apellido.
 Pedirlo todo «ya que estamos» es exactamente lo que la divulgación selectiva
@@ -182,6 +205,54 @@ haciendo peticiones salientes a donde le dijeran. El sondeo va a 3 s porque la
 consulta pasa por el cubo de tasa por organización de te-api, que comparte con
 la emisión.
 
+### Nada de Banco Demo está cableado en la comprobación
+
+`RequestCredentialPanel.tsx` no tiene escrito ni un `given_name` ni un
+`cliente`, y `session.ts` ya no compone «Agente de Banco Demo» a mano. Las tres
+fuentes, en orden:
+
+| Qué | De dónde sale |
+|---|---|
+| La lista de **tipos** | `GET /v1/b2b/organization` de te-api. Ya era así |
+| Los **atributos** de cada tipo, y sus rótulos | Configuración: `CRM_TYPE_<CLAVE>_CLAIMS` |
+| Qué va **marcado** al abrir | `CRM_TYPE_<CLAVE>_DEFAULT_CLAIMS`, o el mínimo de identidad del catálogo |
+| El **rótulo** de un tipo | `CRM_TYPE_<CLAVE>_LABEL`, o el `type_key` tal cual |
+| El nombre del **banco** | `CRM_ORG_<SLUG>_NAME`, vía la organización activa |
+
+Los atributos salen de configuración **y no del padrón porque te-api no los
+tiene**. Se comprobó leyendo te-api el 2026-08-29: la respuesta por tipo es
+`{ type, maxValidityDays }`, `te.partner_credential` sólo lleva `type_key`,
+`issuer_profile_id`, `vct` y `max_validity_days`, y la gramática de
+`seed:partner` no tiene hueco para claims. No es un olvido: `src/b2b/claims.ts`
+valida con una **lista de reservados** y no con una lista blanca por tipo, a
+propósito, para que el banco no tenga que pedir permiso por cada campo nuevo.
+te-api no sabe qué lleva la credencial de un banco porque nunca la ve.
+
+El día que la exponga, lo único que cambia es de dónde lee
+`src/lib/credential-profiles.ts`. Nadie más en el CRM sabe qué lleva un tipo.
+
+Lo único que sigue siendo código de este banco es el **catálogo de atributos**
+(`CUSTOMER_ATTRIBUTES`, en `src/lib/customers.ts`), y tiene que serlo: un
+atributo sólo se puede poner en una credencial si hay una columna del padrón de
+donde sacarlo. Declarar `policy_number` en un `.env` no crea la columna.
+
+**Comprobado el 2026-08-29** declarando `CRM_TYPE_CLIENTE_LABEL=Cliente del
+banco`, `CRM_TYPE_CLIENTE_CLAIMS=given_name family_name account_last4` y
+`CRM_TYPE_CLIENTE_DEFAULT_CLAIMS=account_last4`: los dos paneles pasaron a
+rotular «Cliente del banco · cliente», `customer_since` desapareció de las
+casillas, la marca por defecto se movió a `account_last4`, y pedir
+`customer_since` por la API devolvió `400 la credencial «Cliente del banco» de
+este cliente no lleva customer_since`. **Sin tocar una línea de código.**
+
+### El canal sí es un dato del CRM, y por eso se queda
+
+«Está al teléfono · avisar a su móvil» describe un canal concreto, y eso es
+correcto **aquí**: un CRM sabe por qué vía está hablando con su cliente, porque
+es él quien tiene la llamada. Lo que no puede haber cableado es el **tipo** de
+credencial ni los **atributos**, que es cosa de cada organización. (La cartera
+es el caso contrario: allí la suposición de llamada sí sobra, porque el que
+recibe el aviso no sabe por qué canal se lo mandan.)
+
 ### `rejected` y `failed` no son lo mismo, y la pantalla no los junta
 
 te-api devuelve cinco finales y se pintan los cinco por separado, con **el rojo
@@ -193,11 +264,40 @@ reservado para uno solo**:
 | `rejected` | **La persona ha dicho que no ha sido ella**, desde su cartera | **Rojo.** Cortar la llamada y cursar el aviso de fraude: si el agente habla con alguien y el titular dice que no, hay dos personas distintas |
 | `failed` | La credencial no ha valido —caducada, revocada, de otro titular— | Ámbar. Se vuelve a intentar |
 | `expired` | Nadie contestó a tiempo | Ámbar. Se vuelve a avisar |
-| `pending` | Se sigue esperando | Ámbar |
+| `pending` | Se sigue esperando | **Azul**, con el punto latiendo y la cuenta atrás |
+
+Cada uno es un bloque con su título corto —«Es quien dice ser», «El titular dice
+que no ha sido él»— y no un párrafo que hay que leer entero: el agente está al
+teléfono con alguien y tiene que saber cómo ha acabado sin ponerse a leer.
 
 Compartir el rojo entre `rejected` y `failed` volvería a juntarlos en el único
 sitio donde alguien los mira de verdad, que es esta pantalla. Por eso hay un
-tercer color en `globals.css` y no dos.
+tercer color en `globals.css` y no dos. **La espera tiene el suyo, azul**, y no
+comparte el ámbar: una comprobación en curso no es una que haya fallado, y una
+pantalla que dice «esperando» durante cinco minutos sin moverse no se distingue
+de una colgada — por eso lleva la cuenta atrás hasta la caducidad y dice cada
+cuánto está preguntando.
+
+#### T9 · lo que le falta al rojo para llegar hasta aquí
+
+**La pantalla ya está preparada y no hay nada que construir en el CRM.** El
+bloque `rejected` existe, pinta rojo y es el único que lo hace; el tipo de
+`GET /v1/b2b/presentations/:id` ya declara los cinco estados; y el sondeo sigue
+vivo hasta que llegue un final. El día que te-api mueva la sesión a `rejected`,
+esta pantalla lo pinta **sin tocar una línea**.
+
+Lo que falta está fuera: `src/routes/requests.ts` de te-api **no toca la sesión
+de presentación** al recibir el `not_me`, y `rejected` sólo nace cuando el
+verificador walt.id ha visto una respuesta de error OID4VP
+(`waltid/verifier.ts`, `failure.type === 'wallet_error_response'`). Por el canal
+telefónico esa respuesta no la manda nadie, así que la sesión se queda viva
+hasta caducar y el agente ve **el ámbar de «caducó»** donde debería ver el rojo.
+Es T9 en `docs/TAREAS.md` §3.2 y no se arregla desde este proyecto.
+
+Lo único que se ha hecho aquí es **dejar de mentir mientras tanto**: el bloque
+`expired` avisa de que una denuncia del titular se ve exactamente igual que un
+plazo agotado. Sin esa línea, el agente lee «nadie contestó» y da por hecho que
+el cliente no miró el móvil, que es justo la conclusión contraria a la verdadera.
 
 ### La trampa del `requestUri` en `http`
 
@@ -390,6 +490,9 @@ importarlos desde un componente de cliente **no compila**.
 | `CRM_ORG_<SLUG>_M2M_SECRET` | Su secreto. **Sólo en el servidor** |
 | `CRM_ORG_<SLUG>_ISSUER_URL` | Base de te-api para emitir. Opcional |
 | `CRM_ORG_<SLUG>_VERIFIER_URL` | Base de te-api para verificar. Opcional |
+| `CRM_TYPE_<CLAVE>_LABEL` | Cómo se rotula ese tipo de credencial. Sin él, el `type_key` tal cual. `<CLAVE>` es el `type_key` en mayúsculas con `[^A-Z0-9]` → `_` |
+| `CRM_TYPE_<CLAVE>_CLAIMS` | Qué atributos lleva ese tipo, separados por espacios o comas. Sin él, todos los del catálogo del padrón |
+| `CRM_TYPE_<CLAVE>_DEFAULT_CLAIMS` | Cuáles van marcados al abrir la comprobación. Sin él, el mínimo de identidad del catálogo |
 | `CRM_ACTIVE_ORG_ID` | Con qué organización trabajan la consola y el portal. Se puede omitir si sólo hay una declarada |
 | `CRM_ACTIVE_ACTOR` | Etiqueta del operador para el diario, mientras no haya login de empleado |
 | `CRM_ACTIVE_AGENT_ID` | El número de agente que ve el **titular** en su móvil cuando suena el timbre. te-api **no lo verifica**: es atribución |
@@ -407,6 +510,12 @@ configuración se descubre recorriendo el entorno. El slug va en **mayúsculas y
 sin guiones bajos** — el descubrimiento busca las claves que acaban en `_ID`, y
 con guiones bajos permitidos `CRM_ORG_X_M2M_CLIENT_ID` se leería como una
 organización llamada `X_M2M_CLIENT`.
+
+Si ese banco emite **otro tipo de credencial**, tampoco: los tipos ya salen de
+su padrón en te-api, y lo que lleva cada uno se declara con las tres variables
+`CRM_TYPE_<CLAVE>_…` de arriba. Lo único que sí es código es añadir una **columna
+nueva al padrón** del CRM y su entrada en `CUSTOMER_ATTRIBUTES` — porque un
+atributo que no tiene columna no tiene de dónde salir.
 
 ## Lo que se puede demostrar
 

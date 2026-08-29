@@ -194,15 +194,206 @@ button.secondary {
  * de fraude, hay que cortar la llamada— y `failed` es la credencial no valiendo
  * —se vuelve a intentar—. te-api se molesta en devolverlos separados; pintarlos
  * del mismo rojo los volvería a juntar en el único sitio donde alguien los mira
- * de verdad, que es esta pantalla. **Entre los cinco finales de la
- * verificación, el rojo se queda para el fraude** y el resto de lo que no va
- * bien —esperando, caducado, credencial que no vale— es ámbar. (El rojo lo
+ * de verdad, que es esta pantalla. **El rojo se queda para el fraude** y lo que
+ * ha ido mal sin serlo —caducado, credencial que no vale— es ámbar. (El rojo lo
  * sigue usando también el aviso de una llamada que ha fallado, que es otra
  * cosa y no compite: ahí no hay ningún final que interpretar.)
+ *
+ * La ESPERA ya no comparte el ámbar: tiene su propio azul en `.outcome.waiting`
+ * más abajo, porque una comprobación en curso no es una que haya fallado.
  */
 .alert.warn {
   background: var(--warn-bg);
   color: var(--warn);
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LOS CINCO FINALES DE LA COMPROBACIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Un `.alert` es una frase; esto es un resultado, y son dos cosas distintas.
+ * El agente está al teléfono con alguien y tiene que saber cómo ha acabado la
+ * comprobación **sin leer el párrafo**: por eso hay un título corto que dice el
+ * resultado, una marca de color a la izquierda y una regla vertical del mismo
+ * color. El párrafo dice qué hacer, y se lee después.
+ *
+ * Los colores, y por qué son cuatro y no dos:
+ *
+ * - **rojo** — `rejected`, y NADA más. Es la persona diciendo «no he sido yo»:
+ *   un aviso de fraude, hay que cortar la llamada.
+ * - **ámbar** — `failed` y `expired`. Ha ido mal pero no es fraude: se
+ *   reintenta.
+ * - **verde** — `verified`.
+ * - **azul, con el punto latiendo** — `pending`. No es un final: es la espera, y
+ *   distinguirla del ámbar es lo que evita que una comprobación en curso se lea
+ *   como una que ya ha fallado. El latido dice que la pantalla sigue viva, que
+ *   es justo lo que no se sabía cuando la espera era un párrafo quieto.
+ */
+.outcome {
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 8px;
+  border-left: 4px solid var(--ink-soft);
+  background: var(--canvas);
+  margin-bottom: 16px;
+}
+
+.outcome h3 {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+
+.outcome p {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.outcome p:last-child {
+  margin-bottom: 0;
+}
+
+.outcome .outcome-mark {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+}
+
+.outcome.ok {
+  border-left-color: var(--ok);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.outcome.ok .outcome-mark {
+  background: var(--ok);
+}
+
+.outcome.warn {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.outcome.warn .outcome-mark {
+  background: var(--warn);
+}
+
+/* El rojo, y sólo para el fraude. Ver la nota de arriba. */
+.outcome.alarm {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.outcome.alarm .outcome-mark {
+  background: var(--danger);
+}
+
+.outcome.waiting {
+  border-left-color: var(--brand);
+  background: #eef4fa;
+  color: var(--brand);
+}
+
+.outcome.waiting .outcome-mark {
+  background: var(--brand);
+  animation: outcome-pulse 1.6s ease-in-out infinite;
+}
+
+.outcome .muted {
+  color: inherit;
+  opacity: 0.78;
+}
+
+@keyframes outcome-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.72);
+  }
+}
+
+/* Quien haya pedido menos movimiento no quiere un punto latiendo en su pantalla. */
+@media (prefers-reduced-motion: reduce) {
+  .outcome.waiting .outcome-mark {
+    animation: none;
+  }
+}
+
+/*
+ * Las casillas de «qué se le pide». Son la decisión de divulgación selectiva y
+ * se pulsan una a una mirando otra pantalla, así que la fila entera es el área
+ * de pulsación y no sólo la casilla de 13 píxeles.
+ */
+.claims .claim {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.claims .claim input {
+  width: auto;
+  flex: none;
+  margin: 0;
+}
+
+.claims .claim span {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/*
+ * El nombre técnico del claim, debajo del rótulo.
+ *
+ * `word-break: break-all` está bien para una URI larga —que es para lo que se
+ * puso—, pero parte `customer_since` en «customer_si / nce» y deja al agente
+ * leyendo una palabra rota. Un nombre de claim cabe entero: se le quita el
+ * troceo y se le da su propia línea.
+ */
+.claims .claim .mono,
+dl.facts dt .mono,
+.type-block h3 .mono {
+  display: block;
+  word-break: normal;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.type-block h3 .mono {
+  display: inline;
+  margin-left: 8px;
+}
+
+/* Un tipo de credencial dentro de «lo que iría en la credencial». */
+.type-block {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.type-block h3 {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.type-block h3 .mono {
+  font-weight: 400;
 }
 
 dl.facts {

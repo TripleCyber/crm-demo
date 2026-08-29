@@ -166,6 +166,46 @@ export async function fetchB2bOrganization(
   });
 }
 
+/**
+ * El padrón de la organización, cacheado un minuto.
+ *
+ * ## Por qué hay caché, y por qué es corta
+ *
+ * Desde que el `type` que llega del navegador se comprueba contra el padrón,
+ * **cada comprobación de identidad haría dos llamadas a te-api en vez de una**:
+ * el padrón y la presentación. Las dos pasan por el mismo cubo de tasa por
+ * organización (`TE_B2B_RATE_PER_ORG`), que la pantalla de al lado ya se está
+ * gastando sondeando cada tres segundos. Duplicar el coste de arrancar una
+ * comprobación para releer una lista que cambia cuando alguien ejecuta
+ * `seed:partner` sería pagar por nada.
+ *
+ * Un minuto y no una hora porque es el tiempo que se tarda en volver a probar
+ * después de sembrar un tipo nuevo: más largo y quien acaba de añadirlo cree
+ * que no ha funcionado.
+ *
+ * **`/diagnostics` y `GET /api/organization` NO usan esto** y llaman a
+ * `fetchB2bOrganization` a pelo, a propósito: son las pantallas que se miran
+ * para saber si la costura funciona *ahora*, y una respuesta cacheada diría que
+ * sí cuando el secreto acaba de caducar.
+ */
+const ORGANIZATION_CACHE_MS = 60_000;
+
+const organizationCache = new Map<string, { value: B2bOrganization; expiresAt: number }>();
+
+export async function fetchB2bOrganizationCached(
+  organization: OrganizationConfig,
+): Promise<B2bOrganization> {
+  const cached = organizationCache.get(organization.orgId);
+  if (cached !== undefined && cached.expiresAt > Date.now()) return cached.value;
+
+  const value = await fetchB2bOrganization(organization);
+  organizationCache.set(organization.orgId, {
+    value,
+    expiresAt: Date.now() + ORGANIZATION_CACHE_MS,
+  });
+  return value;
+}
+
 /** Lo que devuelve `POST /v1/b2b/links`. */
 export interface CustomerLink {
   readonly linkId: string;
@@ -381,10 +421,33 @@ async function toTeApiError(response: Response, path: string): Promise<TeApiErro
 }
 
 /**
+ * Qué se estaba haciendo cuando te-api contestó mal.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL MISMO 403 SIGNIFICA DOS COSAS DISTINTAS SEGÚN LA RUTA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * te-api usa `cannot_complete` (403) en dos sitios que no se parecen en nada:
+ *
+ * - **`POST /v1/b2b/links`** — el ID token no vale, o la persona todavía no
+ *   tiene perfil de TripleEnable. Lo arregla el titular.
+ * - **`POST /v1/b2b/presentations`** — el tipo de credencial no tiene `vct` en
+ *   el padrón (`src/routes/b2b.ts`, justo después de resolver el tipo). Ese
+ *   tipo **se puede emitir pero no se puede pedir de vuelta**, y no lo arregla
+ *   ni el titular ni el agente: hay que volver a sembrarlo con su `vct`.
+ *
+ * Sin este parámetro, a un agente que intenta comprobar una identidad se le
+ * decía que el cliente no tiene cartera cuando lo que pasa es que falta una
+ * columna en el padrón. Son dos personas distintas las que tienen que
+ * enterarse, así que son dos frases distintas.
+ */
+export type TeApiOperation = 'link' | 'presentation' | 'issue';
+
+/**
  * El mensaje que ve el empleado. Traduce el 404 opaco a algo accionable sin
  * inventarse un motivo que te-api no ha dado.
  */
-export function describeTeApiError(error: TeApiError): string {
+export function describeTeApiError(error: TeApiError, operation?: TeApiOperation): string {
   const reference = error.requestId === undefined ? '' : ` (requestId ${error.requestId})`;
 
   if (error.status === 404) {
@@ -392,6 +455,15 @@ export function describeTeApiError(error: TeApiError): string {
       'te-api ha rechazado la llamada. La puerta B2B contesta lo mismo para ocho ' +
       'motivos distintos (token, recurso, organización, padrón o scope), así que ' +
       'el motivo real está en el registro de te-api' +
+      reference +
+      '.'
+    );
+  }
+  if (error.status === 403 && operation === 'presentation') {
+    return (
+      'te-api no puede pedir ese tipo de credencial de vuelta: le falta el `vct` en el padrón ' +
+      'de la organización. Se emite pero no se verifica, y se arregla volviendo a sembrar el ' +
+      'tipo en te-api, no reintentando desde aquí' +
       reference +
       '.'
     );

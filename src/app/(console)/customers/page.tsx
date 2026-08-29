@@ -16,9 +16,14 @@ export const dynamic = 'force-dynamic';
 export default async function CustomersPage() {
   let customers: Customer[] = [];
   let failure: string | undefined;
+  // El nombre sale de la organización activa. Estaba escrito en la frase de
+  // abajo, y una frase con el nombre de un banco dentro es una frase que hay que
+  // editar para el siguiente.
+  let bankName = 'esta organización';
 
   try {
     const session = await getEmployeeSession();
+    bankName = session.organization.displayName;
     customers = await listCustomers(session.organization.orgId);
   } catch (error) {
     // Aquí cae la base sin migrar y la configuración incompleta. Se enseña el
@@ -31,7 +36,7 @@ export default async function CustomersPage() {
     <>
       <h1>Clientes</h1>
       <p className="muted">
-        El padrón vive en la base del CRM. No lo lee ni te-api ni Logto: los clientes de Banco Demo
+        El padrón vive en la base del CRM. No lo lee ni te-api ni Logto: los clientes de {bankName}{' '}
         son suyos.
       </p>
 

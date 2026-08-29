@@ -71,14 +71,23 @@ export interface EmployeeSession {
  * No hay login de empleado todavía (ver arriba), así que estos dos valores salen
  * de `CRM_ACTIVE_AGENT_ID` y `CRM_ACTIVE_AGENT_NAME`, igual que la organización
  * sale de `CRM_ACTIVE_ORG_ID`. Cuando faltan **no se inventa un nombre de
- * persona**: al titular le sale «Agente de Banco Demo», que es verdad, en vez de
- * un «Pedro Ramírez» que no lo es. Un nombre falso en la pantalla de quien está
- * comprobando si le están timando es exactamente lo que no puede pasar.
+ * persona**: al titular le sale «Agente de <la organización>», que es verdad, en
+ * vez de un «Pedro Ramírez» que no lo es. Un nombre falso en la pantalla de
+ * quien está comprobando si le están timando es exactamente lo que no puede
+ * pasar.
+ *
+ * El nombre de la organización se compone, no se escribe: estaba puesto a
+ * «Banco Demo» a mano, y con el segundo partner el titular vería en su móvil el
+ * nombre del banco de otro.
  */
-const UNIDENTIFIED_AGENT: AgentIdentity = {
-  id: 'sin-identificar',
-  displayName: 'Agente de Banco Demo',
-};
+const UNIDENTIFIED_AGENT_ID = 'sin-identificar';
+
+function unidentifiedAgent(organization: OrganizationConfig): AgentIdentity {
+  return {
+    id: UNIDENTIFIED_AGENT_ID,
+    displayName: `Agente de ${organization.displayName}`,
+  };
+}
 
 export async function getEmployeeSession(): Promise<EmployeeSession> {
   // `async` desde el principio aunque hoy no espere nada: leer la sesión de
@@ -90,12 +99,15 @@ export async function getEmployeeSession(): Promise<EmployeeSession> {
   // cuando entró el portal: dos copias del mismo «cuál es mi banco» acaban
   // discrepando, y entonces la consola emite para una organización y el portal
   // vincula contra otra.
+  const organization = getActiveOrganization();
+  const fallback = unidentifiedAgent(organization);
+
   return {
-    organization: getActiveOrganization(),
+    organization,
     actor: process.env.CRM_ACTIVE_ACTOR?.trim() ?? 'crm:sin-sesion',
     agent: {
-      id: nonEmpty(process.env.CRM_ACTIVE_AGENT_ID) ?? UNIDENTIFIED_AGENT.id,
-      displayName: nonEmpty(process.env.CRM_ACTIVE_AGENT_NAME) ?? UNIDENTIFIED_AGENT.displayName,
+      id: nonEmpty(process.env.CRM_ACTIVE_AGENT_ID) ?? fallback.id,
+      displayName: nonEmpty(process.env.CRM_ACTIVE_AGENT_NAME) ?? fallback.displayName,
     },
   };
 }

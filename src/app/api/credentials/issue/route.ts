@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 
+import { findDeclaredType, resolveCredentialType } from '@/lib/credential-profiles';
 import { buildCredentialClaims, findCustomer } from '@/lib/customers';
 import { renderQrSvg } from '@/lib/qr';
 import { getEmployeeSession } from '@/lib/session';
-import { describeTeApiError, issueCredential, TeApiError } from '@/lib/te-api';
+import {
+  describeTeApiError,
+  fetchB2bOrganizationCached,
+  issueCredential,
+  TeApiError,
+} from '@/lib/te-api';
 
 /**
  * `POST /api/credentials/issue` — el botón «emitir credencial».
@@ -23,10 +29,14 @@ import { describeTeApiError, issueCredential, TeApiError } from '@/lib/te-api';
  * viniera del cliente, la firma de Banco Demo respaldaría lo que escribiese
  * quien tuviera abierta la consola del navegador.
  *
- * `type` y `validityDays` sí llegan de fuera, y no pasa nada: te-api resuelve
- * el tipo **contra el padrón de la organización del token** y recorta la
- * vigencia al tope de ese tipo. Pedir un tipo ajeno o una vigencia de diez años
- * no cuela allí, que es donde tiene que no colar.
+ * `type`, `validityDays` y `withPin` sí llegan de fuera, y son las tres
+ * elecciones legítimas del operador. te-api resuelve el tipo **contra el padrón
+ * de la organización del token** y recorta la vigencia al tope de ese tipo, así
+ * que pedir un tipo ajeno o una vigencia de diez años no cuela allí, que es
+ * donde tiene que no colar. Aun así el tipo **también se resuelve aquí**: con
+ * la lista del padrón ya en la mano hace falta para saber qué claims lleva, y
+ * de paso el error deja de ser el `{ error, requestId }` opaco de te-api y pasa
+ * a nombrar el tipo.
  */
 
 export const runtime = 'nodejs';
@@ -70,12 +80,30 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: 'ese cliente no está en el padrón' }, { status: 404 });
     }
 
+    // El tipo, resuelto contra el padrón de te-api. Además de rechazar uno
+    // ajeno con su nombre, es lo que dice **qué atributos lleva** este tipo:
+    // sin esto los claims serían la lista fija de un solo banco.
+    const organization = await fetchB2bOrganizationCached(session.organization);
+    const declared = findDeclaredType(organization.credentialTypes, type);
+    if (declared === undefined) {
+      return NextResponse.json(
+        { error: `«${type}» no es un tipo de credencial de esta organización` },
+        { status: 400 },
+      );
+    }
+    const profile = resolveCredentialType(declared, customer);
+
     const offer = await issueCredential(session.organization, {
-      type,
+      type: declared.type,
       // El `sub` de la credencial. `CONTRATOS.md` §1.2: es el id del cliente en
-      // Banco Demo, y es el campo por el que te-api vincula después.
+      // el padrón del banco, y es el campo por el que te-api vincula después.
       subjectReference: customer.externalId,
-      claims: buildCredentialClaims(customer),
+      // Los nombres los dice el perfil del tipo; los valores, la fila. Del
+      // navegador no viene ni uno.
+      claims: buildCredentialClaims(
+        customer,
+        profile.claims.map((claim) => claim.name),
+      ),
       validityDays,
       withPin,
     });
@@ -106,7 +134,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         requestId: error.requestId,
       });
       return NextResponse.json(
-        { error: describeTeApiError(error), requestId: error.requestId },
+        { error: describeTeApiError(error, 'issue'), requestId: error.requestId },
         { status: error.status === 404 ? 502 : error.status },
       );
     }

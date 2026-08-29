@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
 
-import { buildCredentialClaims, findCustomer } from '@/lib/customers';
+import { findDeclaredType, resolveCredentialType } from '@/lib/credential-profiles';
+import { findCustomer } from '@/lib/customers';
 import { renderQrSvg } from '@/lib/qr';
 import { getEmployeeSession } from '@/lib/session';
 import {
   describeTeApiError,
+  fetchB2bOrganizationCached,
   fetchPresentationStatus,
   requestPresentation,
   sendWakeup,
   TeApiError,
+  type TeApiOperation,
 } from '@/lib/te-api';
 
 /**
@@ -42,14 +45,30 @@ import {
  * verificase en su casa podría dar por buena cualquier cosa —incluida una
  * credencial que TripleEnable haya revocado— y nadie se enteraría.
  *
- * ## Del navegador sólo llegan el `externalId`, el tipo y los atributos
+ * ## Qué decide el navegador y qué decide este servidor
  *
- * Y los atributos se comprueban contra los que **este CRM emite** en la
- * credencial de este cliente. Es la misma disciplina que en la emisión: si la
- * lista viniera libre del navegador, quien tuviera abierta la consola podría
- * pedirle a la cartera de un cliente atributos que no salen de esta ficha. Que
- * te-api rechace los reservados no quita que la comprobación tenga que estar
- * también aquí, donde se sabe qué lleva la credencial.
+ * Del navegador llegan **cuatro cosas, y las cuatro son elecciones legítimas
+ * del operador**: a qué cliente (`externalId`), qué tipo de credencial
+ * (`type`), qué atributos de ese tipo (`claims`) y por qué canal se avisa
+ * (`channel`). Ninguna de las cuatro se cree tal cual:
+ *
+ * - `externalId` se busca **con la organización de la sesión** en el `where`.
+ * - `type` se resuelve **contra el padrón de te-api** (`GET /v1/b2b/organization`).
+ * - `claims` se comprueban **contra los que ese tipo lleva en esta ficha**.
+ * - `channel` se compara contra una lista cerrada.
+ *
+ * Y hay tres cosas que el navegador **no manda y no puede mandar**, porque las
+ * sabe el servidor: el `subjectReference` (sale de la ficha del padrón, no del
+ * cuerpo), el `actor` que verá el titular en su móvil (sale de la sesión) y el
+ * `kind` del timbre (es constante).
+ *
+ * ## Se rechaza, no se recorta
+ *
+ * Un atributo que este tipo no lleva es un **400**, no un silencio. Es la misma
+ * regla que te-api aplica en `src/b2b/claims.ts`, que **lanza** en vez de
+ * filtrar, y por el mismo motivo escrito allí: recortar por lo bajo deja al
+ * integrador convencido de que su código funciona, y el día que ese campo
+ * importe nadie sabrá por qué no está. Antes esto filtraba en silencio.
  */
 
 export const runtime = 'nodejs';
@@ -90,34 +109,82 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (channel === undefined) {
     return NextResponse.json({ error: 'channel tiene que ser qr o phone' }, { status: 400 });
   }
+  // Antes de tocar la base y te-api: una petición sin atributos no se puede
+  // satisfacer mire lo que mire, y te-api tampoco la aceptaría (`claims` es
+  // `.min(1)` en su esquema). No hay que gastar una llamada para saberlo.
+  if (requested.length === 0) {
+    return NextResponse.json({ error: 'hay que pedir al menos un atributo' }, { status: 400 });
+  }
 
   try {
     const session = await getEmployeeSession();
 
-    // El cliente se busca SIEMPRE con la organización de la sesión, igual que
-    // al emitir: sin eso, un `externalId` de otro banco haría sonar el timbre
+    // ── El cliente: contra el padrón, y siempre con la organización ────────
+    //
+    // El `where` lleva el `org_id` de la sesión, así que un `externalId` de
+    // otro banco no encuentra fila. Sin eso, el timbre sonaría en el teléfono
     // de un tercero.
     const customer = await findCustomer(session.organization.orgId, externalId);
     if (customer === null) {
       return NextResponse.json({ error: 'ese cliente no está en el padrón' }, { status: 404 });
     }
 
-    // Sólo se puede pedir lo que esta credencial lleva. La lista sale de la
-    // ficha, en el servidor, y lo que llegó del navegador es una selección
-    // sobre ella — no una lista libre.
-    const issuable = new Set(Object.keys(buildCredentialClaims(customer)));
-    const claims = requested.filter((name) => issuable.has(name));
-    if (claims.length === 0) {
+    // ── El tipo: contra el padrón de te-api ────────────────────────────────
+    //
+    // `GET /v1/b2b/organization` devuelve los tipos que ESTA organización puede
+    // emitir. Un `type` que no esté ahí se rechaza aquí y con su nombre; te-api
+    // también lo rechazaría, pero su cuerpo es `{ error, requestId }` y el
+    // agente vería «te-api ha rechazado los datos» para algo que este servidor
+    // sabe contestar. La respuesta va cacheada un minuto: ver `te-api.ts`.
+    const organization = await fetchB2bOrganizationCached(session.organization);
+    const declared = findDeclaredType(organization.credentialTypes, type);
+    if (declared === undefined) {
       return NextResponse.json(
-        { error: 'hay que pedir al menos un atributo de los que lleva esta credencial' },
+        { error: `«${type}» no es un tipo de credencial de esta organización` },
         { status: 400 },
       );
     }
 
+    // ── Los atributos: contra los que ese tipo lleva en ESTA ficha ─────────
+    //
+    // La lista la construye el servidor cruzando tres cosas —el tipo del
+    // padrón, el perfil declarado en configuración y lo que la fila rellena—, y
+    // lo que llegó del navegador es una **selección sobre ella**, no una lista
+    // libre. Que te-api rechace los reservados no quita que la comprobación
+    // tenga que estar también aquí: es aquí donde se sabe qué lleva la
+    // credencial de este cliente, porque los claims los puso este CRM al emitir
+    // y te-api nunca los ve.
+    const profile = resolveCredentialType(declared, customer);
+    const requestable = new Set(profile.claims.map((claim) => claim.name));
+
+    // Se RECHAZA, no se recorta. La misma decisión que `src/b2b/claims.ts` de
+    // te-api, que lanza en vez de filtrar: un recorte silencioso deja al que
+    // llama creyendo que pidió lo que no pidió, y el día que ese atributo
+    // importe nadie sabrá por qué no salió. La respuesta nombra los que sobran
+    // porque el error es de quien llama y tiene que poder arreglarlo.
+    const unavailable = requested.filter((name) => !requestable.has(name));
+    if (unavailable.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            `la credencial «${profile.label}» de este cliente no lleva ` +
+            `${unavailable.join(', ')}, así que no se puede pedir`,
+        },
+        { status: 400 },
+      );
+    }
+
+    // Duplicados aparte y en el orden del catálogo: te-api los colapsa igual,
+    // pero así lo que se devuelve al navegador es lo que se pidió de verdad.
+    const claims = profile.claims
+      .map((claim) => claim.name)
+      .filter((name) => requested.includes(name));
+
     const presentation = await requestPresentation(session.organization, {
-      type,
-      // El `sub` que te-api exigirá a la credencial presentada. `CONTRATOS.md`
-      // §1.2: es el id del cliente en Banco Demo, el mismo que al emitir.
+      type: declared.type,
+      // El `sub` que te-api exigirá a la credencial presentada. Sale de la fila
+      // del padrón —no del cuerpo de la petición—, y es el mismo que se usó al
+      // emitir. `CONTRATOS.md` §1.2.
       subjectReference: customer.externalId,
       claims,
     });
@@ -195,8 +262,18 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 }
 
-/** El mismo trato que en la emisión: el `requestId` es lo único accionable. */
-function errorResponse(error: unknown, doing: string): NextResponse {
+/**
+ * El mismo trato que en la emisión: el `requestId` es lo único accionable.
+ *
+ * `operation` va siempre a `'presentation'` en este fichero porque el 403 de
+ * te-api significa aquí «ese tipo no tiene `vct` en el padrón» y no lo que
+ * significa en el vínculo. Ver `TeApiOperation`.
+ */
+function errorResponse(
+  error: unknown,
+  doing: string,
+  operation: TeApiOperation = 'presentation',
+): NextResponse {
   if (error instanceof TeApiError) {
     console.error(`[crm] ${doing}: te-api rechazó la llamada`, {
       status: error.status,
@@ -204,7 +281,7 @@ function errorResponse(error: unknown, doing: string): NextResponse {
       requestId: error.requestId,
     });
     return NextResponse.json(
-      { error: describeTeApiError(error), requestId: error.requestId },
+      { error: describeTeApiError(error, operation), requestId: error.requestId },
       { status: error.status === 404 ? 502 : error.status },
     );
   }
