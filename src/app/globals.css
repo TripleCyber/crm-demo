@@ -1,0 +1,270 @@
+/*
+ * Hoja única, sin librería de estilos. Esto es una maqueta de consola interna:
+ * lo que tiene que hacer es leerse bien en la pantalla del agente mientras el
+ * cliente está delante. Nada más.
+ */
+
+:root {
+  color-scheme: light;
+  --ink: #14181f;
+  --ink-soft: #5b6472;
+  --line: #dfe3ea;
+  --surface: #ffffff;
+  --canvas: #f5f6f9;
+  --brand: #0d4f8b;
+  --brand-ink: #ffffff;
+  --danger: #a3211c;
+  --danger-bg: #fdeceb;
+  --ok: #1c6b4a;
+  --ok-bg: #e8f5ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+a {
+  color: var(--brand);
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding: 14px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar strong {
+  font-size: 16px;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.topbar .org {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+
+.muted {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+th {
+  background: #fafbfd;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.field span {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.row {
+  display: flex;
+  gap: 14px;
+}
+
+.row > * {
+  flex: 1;
+}
+
+button {
+  font: inherit;
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: var(--brand-ink);
+  cursor: pointer;
+}
+
+button[disabled] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+button.secondary {
+  background: var(--surface);
+  color: var(--brand);
+}
+
+.alert {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.alert.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+dl.facts {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+dl.facts dt {
+  color: var(--ink-soft);
+}
+
+dl.facts dd {
+  margin: 0;
+}
+
+code,
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+/* El QR: el SVG llega del servidor y se escala al ancho de su caja. */
+.qr {
+  width: 260px;
+  max-width: 100%;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* El PIN se enseña grande porque hay que cantarlo en voz alta. */
+.pin {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 30px;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+}
+
+/*
+ * El portal del cliente (`/portal`).
+ *
+ * Se distingue a propósito de la consola de agentes: la barra lleva el color
+ * del banco en vez del blanco de la consola, y la columna es más estrecha. No
+ * es decoración — quien mira una de las dos pantallas tiene que saber sin
+ * pensarlo en cuál está, porque una enseña el padrón entero de clientes y la
+ * otra la ficha de una sola persona.
+ */
+.topbar.portal {
+  background: var(--brand);
+  border-bottom-color: var(--brand);
+  color: var(--brand-ink);
+}
+
+.topbar.portal .org {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+main.narrow {
+  max-width: 640px;
+}
+
+/*
+ * Un enlace con aspecto de botón. `/portal/login` es una navegación de verdad
+ * —redirige a Logto— así que tiene que ser un `<a>` para que funcione con
+ * JavaScript apagado; lo que se ajusta es cómo se ve, no lo que es.
+ */
+.button-link {
+  display: inline-block;
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: var(--brand-ink);
+  text-decoration: none;
+}
