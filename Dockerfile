@@ -47,6 +47,19 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 
+# El esquema y su aplicador. **No se ejecutan al arrancar** —ver la cabecera—
+# pero tienen que VIAJAR en la imagen: sin ellos, la única forma de migrar la
+# base de un despliegue es entrar con un cliente de Postgres desde fuera, y eso
+# es justo la operación manual donde se cuela el error que nadie ve.
+#
+#   node scripts/migrate.mjs      aplica lo pendiente
+#   node scripts/seed-customers.mjs   siembra los clientes de prueba
+#
+# `pg` ya está en `node_modules` porque la aplicación lo usa, así que el
+# recorte de `standalone` lo conserva.
+COPY --from=build /app/db ./db
+COPY --from=build /app/scripts ./scripts
+
 # `public/.well-known/did.json` viaja aquí dentro: es el documento DID de
 # `did:web:bank.demo-te.com`, y sin él la cartera rechaza las credenciales que
 # emite este banco. Va con la imagen y no montado aparte para que desplegar y el
