@@ -5,9 +5,20 @@ import { useEffect, useState } from 'react';
 /**
  * El panel de **pedir** credencial — la vuelta del ciclo.
  *
- * El de al lado emite; éste pide. El agente elige qué atributos necesita, sale
- * un QR, el titular lo escanea con su cartera y decide si enseña o no. Cuando
- * contesta, aquí aparece lo que enseñó.
+ * El de al lado emite; éste pide. El agente elige qué atributos necesita, el
+ * titular decide si los enseña, y cuando contesta aquí aparece lo que enseñó.
+ *
+ * ## Dos canales, porque son dos situaciones distintas
+ *
+ * - **Por teléfono.** Pedro tiene a Juan al aparato y necesita saber que es
+ *   Juan. Juan **no ve esta pantalla**: está al otro lado de una llamada con su
+ *   móvil en la mano. Por eso se le hace sonar el teléfono —el timbre de
+ *   `POST /v1/b2b/wakeups`— y el QR no pinta nada.
+ * - **En la sucursal.** El cliente está delante y mira esta misma pantalla.
+ *   Entonces sí: sale el QR y lo escanea con su cartera.
+ *
+ * Los dos abren **la misma sesión de presentación** y se consultan igual. Lo
+ * único que cambia es cómo se entera el titular de que le están preguntando.
  *
  * Habla **sólo con `/api/credentials/present` de este mismo servidor**, igual
  * que el panel de emisión y por la misma razón: el token M2M de la organización
@@ -27,13 +38,20 @@ interface CredentialTypeOption {
   readonly maxValidityDays: number;
 }
 
+/** Cómo se avisa al titular. El mismo valor que entiende la ruta del servidor. */
+type Channel = 'qr' | 'phone';
+
 interface PresentationStarted {
   readonly presentationId: string;
   readonly authorizationRequestUrl: string;
   readonly requestUri: string;
   readonly expiresAt: string;
   readonly claims: readonly string[];
-  readonly qrSvg: string;
+  readonly channel: Channel;
+  /** Sólo en el canal QR. */
+  readonly qrSvg?: string;
+  /** Sólo en el canal teléfono. No significa que haya sonado nada: ver abajo. */
+  readonly wakeupId?: string;
 }
 
 type Status = 'pending' | 'verified' | 'rejected' | 'failed' | 'expired';
@@ -55,25 +73,35 @@ interface PresentationStatus {
  */
 const POLL_INTERVAL_MS = 3000;
 
-const STATUS_TEXT: Record<Status, string> = {
-  pending: 'Esperando a que el titular conteste en su cartera…',
-  verified: 'Credencial presentada y verificada.',
-  // Rechazado y fallido se cuentan distinto **porque son distintos**: uno se
-  // vuelve a intentar y el otro no.
-  rejected: 'El titular ha rechazado la petición desde su cartera.',
-  failed: 'La credencial presentada no ha superado la verificación.',
-  expired: 'La petición ha caducado sin respuesta.',
+/**
+ * Lo que se dice mientras se espera, **según por dónde se avisó**.
+ *
+ * Cambia porque lo que el agente tiene que hacer a continuación es distinto: por
+ * teléfono hay que pedirle a la persona que mire el móvil; en la sucursal, que
+ * apunte con la cámara a esta pantalla.
+ */
+const PENDING_TEXT: Record<Channel, string> = {
+  phone: 'Le hemos avisado a su móvil. Pídale que abra la app y confirme.',
+  qr: 'Esperando a que el titular escanee el QR y conteste en su cartera…',
 };
 
 export function RequestCredentialPanel({
   externalId,
   credentialTypes,
   issuableClaims,
+  agent,
 }: {
   externalId: string;
   credentialTypes: readonly CredentialTypeOption[];
   /** Los atributos que ESTA credencial lleva. Salen de la ficha, en el servidor. */
   issuableClaims: readonly string[];
+  /**
+   * Quién sale en el móvil del titular. Viene de la sesión del servidor y es
+   * *atribución*: te-api no lo verifica. Se pinta aquí para que el agente vea
+   * con qué nombre le está llegando la llamada al cliente y pueda decirlo en
+   * voz alta — es la mitad que hace que la comprobación sirva de algo.
+   */
+  agent: { readonly id: string; readonly displayName: string };
 }) {
   const [type, setType] = useState(credentialTypes[0]?.type ?? '');
   // Por defecto, nombre y apellido: lo mínimo para confirmar con quién se
@@ -82,7 +110,8 @@ export function RequestCredentialPanel({
   const [selected, setSelected] = useState<readonly string[]>(() =>
     issuableClaims.filter((name) => name === 'given_name' || name === 'family_name'),
   );
-  const [busy, setBusy] = useState(false);
+  /** Qué botón se está atendiendo, para deshabilitar sólo ése. */
+  const [busy, setBusy] = useState<Channel | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [started, setStarted] = useState<PresentationStarted | undefined>();
   const [result, setResult] = useState<PresentationStatus | undefined>();
@@ -144,8 +173,8 @@ export function RequestCredentialPanel({
     );
   };
 
-  const startRequest = async () => {
-    setBusy(true);
+  const startRequest = async (channel: Channel) => {
+    setBusy(channel);
     setError(undefined);
     setStarted(undefined);
     setResult(undefined);
@@ -154,7 +183,7 @@ export function RequestCredentialPanel({
       const response = await fetch('/api/credentials/present', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ externalId, type, claims: selected }),
+        body: JSON.stringify({ externalId, type, claims: selected, channel }),
       });
       const payload = (await response.json()) as Partial<PresentationStarted> & {
         error?: string;
@@ -167,7 +196,7 @@ export function RequestCredentialPanel({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'no se ha podido contactar con el servidor');
     } finally {
-      setBusy(false);
+      setBusy(undefined);
     }
   };
 
@@ -183,11 +212,13 @@ export function RequestCredentialPanel({
     );
   }
 
+  const status = result?.status ?? 'pending';
+
   return (
     <div className="card">
-      <h2>Pedir credencial</h2>
+      <h2>Comprobar quién es</h2>
       <p className="muted">
-        El titular escanea el QR con su cartera y decide qué enseña. La verificación la hace{' '}
+        El titular decide qué enseña, desde su cartera. La verificación la hace{' '}
         <strong>TripleEnable</strong>, no este CRM: aquí no hay verificador ni clave, sólo la
         pregunta y la respuesta.
       </p>
@@ -230,13 +261,36 @@ export function RequestCredentialPanel({
         </p>
       </fieldset>
 
-      <button
-        type="button"
-        onClick={startRequest}
-        disabled={busy || type === '' || selected.length === 0}
-      >
-        {busy ? 'Pidiendo…' : 'Pedir credencial'}
-      </button>
+      {/*
+        Los dos botones, y en este orden. El de arriba es el de la llamada de
+        teléfono, que es la situación normal de un agente con auriculares
+        puestos; el QR sólo sirve si el cliente está en el mostrador mirando
+        esta misma pantalla. Rotularlos por la SITUACIÓN y no por la tecnología
+        —«está al teléfono» en vez de «push»— es lo que hace que no haya que
+        elegir bien para acertar.
+      */}
+      <div className="row" style={{ alignItems: 'stretch' }}>
+        <button
+          type="button"
+          onClick={() => void startRequest('phone')}
+          disabled={busy !== undefined || type === '' || selected.length === 0}
+        >
+          {busy === 'phone' ? 'Avisando…' : 'Está al teléfono · avisar a su móvil'}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => void startRequest('qr')}
+          disabled={busy !== undefined || type === '' || selected.length === 0}
+        >
+          {busy === 'qr' ? 'Pidiendo…' : 'Está delante · enseñar QR'}
+        </button>
+      </div>
+      <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+        Al titular le llegará a nombre de <strong>{agent.displayName}</strong>, agente{' '}
+        <span className="mono">{agent.id}</span>. Dígaselo en voz alta: que el nombre que oye por
+        teléfono sea el que ve en la pantalla del móvil es la mitad de la comprobación.
+      </p>
 
       {error !== undefined && (
         <p className="alert" style={{ marginTop: 16 }}>
@@ -246,27 +300,72 @@ export function RequestCredentialPanel({
 
       {started !== undefined && (
         <div style={{ marginTop: 20 }}>
-          <p className={result?.status === 'verified' ? 'alert ok' : 'alert'}>
-            {STATUS_TEXT[result?.status ?? 'pending']}
-          </p>
+          {status === 'pending' && <p className="alert warn">{PENDING_TEXT[started.channel]}</p>}
 
-          {(result === undefined || result.status === 'pending') && (
+          {status === 'verified' && (
+            <p className="alert ok">Es quien dice ser. Credencial presentada y verificada.</p>
+          )}
+
+          {/*
+            `rejected` y `failed` NO se colapsan, y aquí es donde más se nota.
+            te-api los devuelve separados a propósito y para quien está al
+            teléfono son sucesos opuestos: uno es «esta persona dice que no es
+            ella», que es un aviso de fraude y hay que cortar; el otro es «la
+            credencial no ha valido», que se vuelve a intentar. Compartir el
+            mismo rojo y la misma frase desharía la distinción que el contrato
+            de te-api se molesta en mantener.
+          */}
+          {status === 'rejected' && (
+            <p className="alert">
+              <strong>El titular ha dicho que no ha sido él.</strong> Ha rechazado la petición desde
+              su cartera. No continúe con la operación por teléfono y curse el aviso de fraude: si
+              usted está hablando con alguien y el titular está diciendo que no, hay dos personas
+              distintas.
+            </p>
+          )}
+
+          {status === 'failed' && (
+            <p className="alert warn">
+              La credencial presentada no ha superado la verificación. No es un «no soy yo»: es la
+              credencial no valiendo —caducada, revocada o de otro titular—. Se puede volver a
+              intentar.
+            </p>
+          )}
+
+          {status === 'expired' && (
+            <p className="alert warn">
+              La petición ha caducado sin respuesta. Vuelva a avisarle.
+            </p>
+          )}
+
+          {status === 'pending' && started.channel === 'qr' && (
             <>
               {/*
                 El SVG lo genera `qrcode` en NUESTRO servidor a partir del
                 enlace que devolvió te-api; no es HTML de terceros.
               */}
-              <div className="qr" dangerouslySetInnerHTML={{ __html: started.qrSvg }} />
+              <div className="qr" dangerouslySetInnerHTML={{ __html: started.qrSvg ?? '' }} />
               <p style={{ marginTop: 16 }}>
                 <span className="mono">{started.authorizationRequestUrl}</span>
-              </p>
-              <p className="muted">
-                Caduca el {new Date(started.expiresAt).toLocaleString('es-ES')}.
               </p>
             </>
           )}
 
-          {result?.status === 'verified' && result.claims !== null && (
+          {status === 'pending' && started.channel === 'phone' && (
+            <p className="muted">
+              Aviso <span className="mono">{started.wakeupId}</span>. te-api contesta lo mismo tenga
+              cartera o no —es deliberado, si no esta pantalla serviría para averiguar quién tiene
+              la app probando identificadores—, así que esto <strong>no</strong> confirma que le
+              haya sonado el teléfono. Si no contesta, pregúntele si tiene la app instalada en vez
+              de darlo por hecho.
+            </p>
+          )}
+
+          {status === 'pending' && (
+            <p className="muted">Caduca el {new Date(started.expiresAt).toLocaleString('es-ES')}.</p>
+          )}
+
+          {status === 'verified' && result?.claims !== null && result?.claims !== undefined && (
             <dl className="facts">
               {Object.entries(result.claims).map(([name, value]) => (
                 <div key={name} style={{ display: 'contents' }}>

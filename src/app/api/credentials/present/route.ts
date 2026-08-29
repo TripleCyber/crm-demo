@@ -7,6 +7,7 @@ import {
   describeTeApiError,
   fetchPresentationStatus,
   requestPresentation,
+  sendWakeup,
   TeApiError,
 } from '@/lib/te-api';
 
@@ -17,9 +18,21 @@ import {
  * ## La otra mitad del ciclo
  *
  * Hasta ahora este CRM emitía una credencial y ahí se acababa: nadie la pedía
- * nunca de vuelta. Esto es la vuelta. El agente tiene al cliente al teléfono o
- * delante, pulsa «pedir credencial», y en pantalla sale un QR que la cartera
- * del titular escanea para **presentar** lo que se le pide.
+ * nunca de vuelta. Esto es la vuelta. El agente pulsa «pedir credencial» y la
+ * cartera del titular **presenta** lo que se le pide.
+ *
+ * ## Dos canales, porque son dos situaciones distintas
+ *
+ * - **`qr`** — el cliente está delante, en la sucursal, y mira la pantalla del
+ *   agente. Es lo único que había hasta ahora.
+ * - **`phone`** — el cliente está **al teléfono** y no ve ninguna pantalla. El
+ *   QR ahí no sirve de nada: hay que hacer sonar su móvil. Se abre la misma
+ *   sesión de presentación y con su `requestUri` se llama a
+ *   `POST /v1/b2b/wakeups`, que es el timbre.
+ *
+ * El canal cambia **cómo se avisa**, no qué se pide ni qué se comprueba: las dos
+ * ramas abren la misma sesión con los mismos atributos y se consultan con la
+ * misma ruta.
  *
  * ## El verificador es de TripleEnable, no nuestro
  *
@@ -42,10 +55,14 @@ import {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/** Cómo se le avisa al titular. Ver la cabecera. */
+type PresentChannel = 'qr' | 'phone';
+
 interface PresentBody {
   externalId?: unknown;
   type?: unknown;
   claims?: unknown;
+  channel?: unknown;
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -61,9 +78,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   const requested = Array.isArray(body.claims)
     ? body.claims.filter((name): name is string => typeof name === 'string')
     : [];
+  // El canal se compara contra la lista cerrada en vez de convertirse: un valor
+  // raro tiene que ser un 400 aquí y no un `else` que acaba tocando el timbre
+  // porque no era `'qr'`.
+  const channel: PresentChannel | undefined =
+    body.channel === 'qr' || body.channel === 'phone' ? body.channel : undefined;
 
   if (externalId === '' || type === '') {
     return NextResponse.json({ error: 'faltan externalId o type' }, { status: 400 });
+  }
+  if (channel === undefined) {
+    return NextResponse.json({ error: 'channel tiene que ser qr o phone' }, { status: 400 });
   }
 
   try {
@@ -97,20 +122,55 @@ export async function POST(request: Request): Promise<NextResponse> {
       claims,
     });
 
-    // El QR se dibuja aquí, con el enlace recién llegado, igual que en la
-    // emisión: el navegador recibe el SVG ya hecho y el enlace en texto.
-    const qrSvg = await renderQrSvg(presentation.authorizationRequestUrl);
+    // El QR sólo se dibuja para el canal que lo usa. Pintarlo también en una
+    // llamada de teléfono sería enseñarle al agente algo que el cliente no
+    // puede ver, y el agente acabaría intentando dictarlo.
+    const qrSvg =
+      channel === 'qr' ? await renderQrSvg(presentation.authorizationRequestUrl) : undefined;
+
+    let wakeupId: string | undefined;
+    if (channel === 'phone') {
+      try {
+        const wakeup = await sendWakeup(session.organization, {
+          subjectReference: customer.externalId,
+          // «Demuéstrame que eres tú», no «aprueba esta operación». La otra
+          // mitad —`transaction`, con importe y destinatario— es F4c nivel 2 y
+          // no se manda desde aquí: esta pantalla no tiene ninguna operación
+          // que aprobar.
+          kind: 'identity',
+          // Tal cual salió de te-api. Es el puntero a **su** verificador, y por
+          // eso el timbre suena apuntando a la infraestructura de TripleEnable
+          // y no a la de Banco Demo.
+          requestUri: presentation.requestUri,
+          // Atribución, no autenticación: te-api no comprueba nada de esto.
+          // Sirve para que en el móvil del titular ponga quién le está llamando.
+          actor: session.agent,
+        });
+        wakeupId = wakeup.wakeupId;
+      } catch (error) {
+        // La sesión de presentación ya está abierta y **se deja caducar sola**.
+        // Se prefiere eso a devolver un 200 con un aviso pequeño: el agente está
+        // al teléfono diciéndole al cliente que mire el móvil, y un timbre que
+        // no ha salido tiene que parar la ceremonia, no adornarla.
+        return errorResponse(error, 'tocando el timbre');
+      }
+    }
 
     return NextResponse.json({
       presentationId: presentation.presentationId,
       authorizationRequestUrl: presentation.authorizationRequestUrl,
-      // Se devuelve para poder enseñarlo: es el puntero que iría en
-      // `POST /v1/b2b/wakeups` para que además suene el teléfono del titular, y
-      // enseña de un vistazo que apunta a la infraestructura de TripleEnable.
+      // Se devuelve para poder enseñarlo: es lo que se le manda al timbre y lo
+      // que la cartera va a buscar, y enseña de un vistazo que apunta a la
+      // infraestructura de TripleEnable.
       requestUri: presentation.requestUri,
       expiresAt: presentation.expiresAt,
       claims,
+      channel,
       qrSvg,
+      // El identificador del aviso. **No significa que haya sonado ningún
+      // teléfono**: te-api contesta lo mismo tenga cartera o no (ver
+      // `sendWakeup`). Se enseña para poder cruzarlo con el diario de te-api.
+      wakeupId,
     });
   } catch (error) {
     return errorResponse(error, 'pidiendo la presentación');

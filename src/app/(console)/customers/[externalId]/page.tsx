@@ -112,11 +112,16 @@ export default async function CustomerPage({
         credencial lleva, y salen de la misma función que los construye al
         emitir: pedir uno que el banco no emite sería una petición que ninguna
         cartera puede satisfacer.
+
+        `agent` baja al navegador a propósito y no es un descuido: no es un
+        secreto, es lo que el titular va a ver en su móvil, y el agente tiene que
+        poder leerlo en pantalla para decirlo en voz alta.
       */}
       <RequestCredentialPanel
         externalId={customer.externalId}
         credentialTypes={credentialTypes}
         issuableClaims={Object.keys(claims)}
+        agent={session.agent}
       />
     </>
   );

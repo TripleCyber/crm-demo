@@ -28,6 +28,26 @@ import { getActiveOrganization, type OrganizationConfig } from './organizations'
  * una URL a la que llegue nadie de fuera.
  */
 
+/**
+ * Cómo se presenta el empleado **en el móvil del titular**.
+ *
+ * Es lo que viaja en el `actor` de `POST /v1/b2b/wakeups`, y es la diferencia
+ * entre que a Juan le salga «Banco Demo quiere verificar tu identidad» y que le
+ * salga «Pedro Ramírez, agente 4471». Cuando alguien te llama diciendo que es de
+ * tu banco, poder contrastar el nombre que oyes con el que sale en la pantalla
+ * es la mitad de la ceremonia.
+ *
+ * **te-api no lo verifica** (`src/b2b/wakeups.ts`): no elige destinatario, no
+ * entra en ningún límite y no abre ninguna puerta. Es atribución, y se manda
+ * sabiendo lo que es.
+ */
+export interface AgentIdentity {
+  /** El número de agente. Lo que el titular puede repetir al reclamar. */
+  readonly id: string;
+  /** El nombre que ve el titular en su teléfono. */
+  readonly displayName: string;
+}
+
 export interface EmployeeSession {
   /** La organización cuyos clientes se ven y en cuyo nombre se emite. */
   readonly organization: OrganizationConfig;
@@ -36,7 +56,29 @@ export interface EmployeeSession {
    * decide nada con este valor.
    */
   readonly actor: string;
+  /**
+   * El empleado, tal y como se le enseña al titular. Separado de `actor` porque
+   * no son lo mismo: `actor` es la etiqueta del puesto —«mostrador-1»— y sirve
+   * para nuestro propio registro; esto es una persona con nombre, y lo lee un
+   * cliente en su teléfono mientras habla por él.
+   */
+  readonly agent: AgentIdentity;
 }
+
+/**
+ * El empleado cuando el entorno no dice quién es.
+ *
+ * No hay login de empleado todavía (ver arriba), así que estos dos valores salen
+ * de `CRM_ACTIVE_AGENT_ID` y `CRM_ACTIVE_AGENT_NAME`, igual que la organización
+ * sale de `CRM_ACTIVE_ORG_ID`. Cuando faltan **no se inventa un nombre de
+ * persona**: al titular le sale «Agente de Banco Demo», que es verdad, en vez de
+ * un «Pedro Ramírez» que no lo es. Un nombre falso en la pantalla de quien está
+ * comprobando si le están timando es exactamente lo que no puede pasar.
+ */
+const UNIDENTIFIED_AGENT: AgentIdentity = {
+  id: 'sin-identificar',
+  displayName: 'Agente de Banco Demo',
+};
 
 export async function getEmployeeSession(): Promise<EmployeeSession> {
   // `async` desde el principio aunque hoy no espere nada: leer la sesión de
@@ -51,5 +93,15 @@ export async function getEmployeeSession(): Promise<EmployeeSession> {
   return {
     organization: getActiveOrganization(),
     actor: process.env.CRM_ACTIVE_ACTOR?.trim() ?? 'crm:sin-sesion',
+    agent: {
+      id: nonEmpty(process.env.CRM_ACTIVE_AGENT_ID) ?? UNIDENTIFIED_AGENT.id,
+      displayName: nonEmpty(process.env.CRM_ACTIVE_AGENT_NAME) ?? UNIDENTIFIED_AGENT.displayName,
+    },
   };
+}
+
+/** Una variable puesta a cadena vacía es una variable sin poner. */
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
 }

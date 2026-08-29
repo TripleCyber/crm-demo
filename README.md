@@ -24,6 +24,7 @@ emisión son los de producción.
 | ✅ | **Portal del cliente en `/portal`** (F4b): login OIDC del titular contra Logto y `POST /v1/b2b/links` desde el servidor. **Probado en el navegador el 2026-08-29**: Teófilo entró con su cuenta de TripleEnable y el vínculo quedó hecho — fila en `te.org_subject` de te-api, y volver a entrar es idempotente |
 | ⛔ | Estado de la credencial y del vínculo **en la ficha de la consola de agentes**: hoy el vínculo sólo se ve desde el portal y desde la base de te-api |
 | ✅ | Botón «pedir credencial» → `POST /v1/b2b/presentations` de te-api → QR de la petición OID4VP, y en la misma pantalla lo que el titular enseñó. **Probado de punta a punta el 2026-08-29** con un guion que hace de cartera: `pending` → la cartera presenta → `verified` con `given_name` y `family_name`, y sólo con ésos |
+| ✅ | **La vía telefónica**: «está al teléfono · avisar a su móvil» → la misma presentación **más `POST /v1/b2b/wakeups`**, el timbre. Es lo que hace que la comprobación sirva para una llamada, donde el cliente no ve la pantalla del agente. **Probado el 2026-08-29**: la llamada sale con `kind: identity` y el `actor` del empleado, te-api contesta `{ wakeupId, expiresAt }` y anota `b2b.wakeup_created`. **Ningún teléfono ha sonado todavía** — ver «Lo que falta para que suene un teléfono» |
 | ⛔ | **Revocación** (la otra mitad de F4c) |
 | ✅ | `/.well-known/did.json` de Banco Demo — está en `public/.well-known/` y este servidor lo sirve (`curl -s localhost:3000/.well-known/did.json` → 200). Lleva **dos** claves, la del emisor desplegado y la del local, porque durante una rotación las dos tienen que valer; el porqué de cada campo está en `public/.well-known/README.md` |
 | ⛔ | Que ese documento se pueda **descargar desde `bank.demo-te.com`**. El dominio no apunta a ningún sitio, así que la cartera todavía no puede validar la firma de una credencial contra el DID — sólo leer que el `iss` es el correcto |
@@ -89,12 +90,23 @@ canal que el enlace, no protege de nada.
 Es el otro medio ciclo: hasta que entró esto, este CRM emitía una credencial y
 **nadie la pedía nunca de vuelta**.
 
+Hay **dos canales, porque son dos situaciones**, y la ficha los rotula por la
+situación y no por la tecnología:
+
+| Botón | Cuándo | Cómo se entera el titular |
+|---|---|---|
+| **Está al teléfono · avisar a su móvil** | Pedro tiene a Juan al aparato. Juan **no ve esta pantalla** | Le suena el móvil: `POST /v1/b2b/wakeups` |
+| **Está delante · enseñar QR** | El cliente está en el mostrador mirando la pantalla del agente | Escanea el QR con su cartera |
+
+Los dos abren **la misma sesión de presentación** y se consultan igual. Lo único
+que cambia es cómo se entera la persona de que le están preguntando.
+
 ```
-Navegador  (ficha · casillas de qué se pide · botón de pedir)
-   │  fetch /api/credentials/present      ← externalId, tipo y qué atributos
+Navegador  (ficha · casillas de qué se pide · los dos botones)
+   │  fetch /api/credentials/present      ← externalId, tipo, atributos y canal
    ▼
 Next.js, en el servidor
-   │  1. sesión → organización
+   │  1. sesión → organización y EMPLEADO
    │  2. ficha del cliente → qué atributos LLEVA esta credencial
    │  3. los pedidos se recortan a esa lista
    │  4. token M2M de organización
@@ -102,7 +114,16 @@ Next.js, en el servidor
 te-api  POST /v1/b2b/presentations        (abre la sesión en SU verificador)
    ▼
 { presentationId, requestUri, authorizationRequestUrl, expiresAt }
-   │                                       QR + enlace en pantalla
+   │
+   ├─ canal QR ─────► QR + enlace en pantalla; el cliente lo escanea
+   │
+   └─ canal teléfono ──► te-api  POST /v1/b2b/wakeups
+                          { subjectReference, kind: identity,
+                            requestUri,               ← el de arriba, tal cual
+                            actor: { id, displayName } }
+                          ▼
+                         { wakeupId, expiresAt }      ← y el móvil suena
+   │
    │  la cartera del titular va al requestUri y presenta
    ▼
 te-api  GET /v1/b2b/presentations/:id     (se sondea cada 3 s)
@@ -115,8 +136,31 @@ proyecto: no hay ninguna configuración de verificador, ni clave, ni un `fetch` 
 un walt.id. Un banco que verificase en su casa podría dar por buena cualquier
 cosa —incluida una credencial que TripleEnable haya revocado— y nadie se
 enteraría. El `requestUri` que sale en pantalla apunta a la infraestructura de
-TripleEnable a propósito, y es también lo que iría en `POST /v1/b2b/wakeups`
-para que además suene el teléfono del titular.
+TripleEnable a propósito, y es lo que se le manda al timbre: el aviso llega al
+móvil apuntando a nuestra infraestructura y no a la de Banco Demo.
+
+### Las tres cosas del timbre que la pantalla dice y hay que respetar
+
+**1 · El 200 de `wakeups` NO dice si esa persona tiene cartera.** te-api
+contesta lo mismo, con la misma forma y la misma latencia, exista el cliente o
+no: resuelve a quién despertar *después* de contestar, y si no resuelve a nadie
+la fila nace señuelo y caduca sola. Es deliberado — si contestara distinto, este
+CRM sería un oráculo para averiguar quién tiene cartera de TripleEnable probando
+identificadores. Por eso la pantalla dice «no confirma que le haya sonado el
+teléfono» en vez de pintar «este cliente no tiene la app», que es una frase que
+la respuesta no permite escribir.
+
+**2 · El `actor` es atribución, no autenticación.** te-api no lo verifica y no
+decide nada con él. Sirve para que en el móvil de Juan ponga «Pedro Ramírez,
+agente 4471» y para el diario. La ficha lo pinta debajo de los botones a
+propósito: el agente tiene que poder decir en voz alta el mismo nombre que el
+cliente está viendo en la pantalla del móvil, que es lo que convierte la
+comprobación en algo que sirve contra quien llama diciendo que es del banco.
+
+**3 · Si el timbre no sale, no hay pantalla de espera.** La sesión de
+presentación se deja caducar sola y se enseña el error. Dar por buena una
+llamada cuyo aviso no ha salido dejaría al agente diciéndole al cliente que mire
+un móvil que no va a sonar.
 
 ### Las tres decisiones que importan
 
@@ -137,6 +181,56 @@ de TripleEnable —que vive dentro de su red y no tiene autenticación— acabar
 haciendo peticiones salientes a donde le dijeran. El sondeo va a 3 s porque la
 consulta pasa por el cubo de tasa por organización de te-api, que comparte con
 la emisión.
+
+### `rejected` y `failed` no son lo mismo, y la pantalla no los junta
+
+te-api devuelve cinco finales y se pintan los cinco por separado, con **el rojo
+reservado para uno solo**:
+
+| Estado | Qué es | Qué hace el agente |
+|---|---|---|
+| `verified` | Es quien dice ser | Verde. Salen los atributos que se pidieron |
+| `rejected` | **La persona ha dicho que no ha sido ella**, desde su cartera | **Rojo.** Cortar la llamada y cursar el aviso de fraude: si el agente habla con alguien y el titular dice que no, hay dos personas distintas |
+| `failed` | La credencial no ha valido —caducada, revocada, de otro titular— | Ámbar. Se vuelve a intentar |
+| `expired` | Nadie contestó a tiempo | Ámbar. Se vuelve a avisar |
+| `pending` | Se sigue esperando | Ámbar |
+
+Compartir el rojo entre `rejected` y `failed` volvería a juntarlos en el único
+sitio donde alguien los mira de verdad, que es esta pantalla. Por eso hay un
+tercer color en `globals.css` y no dos.
+
+### La trampa del `requestUri` en `http`
+
+**`POST /v1/b2b/wakeups` exige `https` y no hace excepción para desarrollo.** El
+`requestUri` no lo escribe este CRM: sale tal cual de `POST /v1/b2b/presentations`,
+o sea del `urlPrefix` del verificador walt.id. Contra la pila local ese prefijo
+es `http://127.0.0.1:7004/…`, así que **el timbre muere en el validador de
+te-api** con `400 invalid_request` y la pantalla lo enseña con su `requestId`:
+
+```
+te-api ha rechazado los datos de la llamada: invalid_request (requestId …)
+```
+
+No es un fallo del CRM y no se arregla aquí: o el verificador local va detrás de
+TLS (`docs/ENTORNO-DE-PRUEBAS.md` §5, la misma receta que ya se hizo para el
+emisor), o se prueba contra el despliegue, donde el verificador ya publica
+`https://verifier.idp.tripleenable.com/verification-session/…`.
+
+### Lo que falta para que suene un teléfono de verdad
+
+El CRM ya hace su parte entera. Lo que queda **no está en este proyecto**:
+
+1. **El `requestUri` en `https`** (arriba). En el despliegue ya lo está; en
+   local no.
+2. **Una cartera enrolada y vinculada.** El timbre resuelve
+   `(organización, cliente) → vínculo → titular → aparatos`. Sin vínculo no
+   resuelve a nadie; con vínculo pero sin cartera enrolada (`te.identity` vacía)
+   se para en la puerta siguiente. En los dos casos la fila nace **señuelo** y
+   te-api contesta exactamente igual, que es el comportamiento correcto y no un
+   fallo que haya que perseguir desde aquí.
+3. **`TE_PUSH_ENABLED=true` en te-api.** Con el canal apagado la ruta falla en
+   voz alta (`400 unauthorized_client`) en vez de devolver un `wakeupId` que no
+   va a sonar nunca.
 
 ## El portal del cliente (`/portal`) y el vínculo
 
@@ -298,6 +392,8 @@ importarlos desde un componente de cliente **no compila**.
 | `CRM_ORG_<SLUG>_VERIFIER_URL` | Base de te-api para verificar. Opcional |
 | `CRM_ACTIVE_ORG_ID` | Con qué organización trabajan la consola y el portal. Se puede omitir si sólo hay una declarada |
 | `CRM_ACTIVE_ACTOR` | Etiqueta del operador para el diario, mientras no haya login de empleado |
+| `CRM_ACTIVE_AGENT_ID` | El número de agente que ve el **titular** en su móvil cuando suena el timbre. te-api **no lo verifica**: es atribución |
+| `CRM_ACTIVE_AGENT_NAME` | El nombre del agente, igual. Sin estas dos al titular le sale «Agente de Banco Demo» — no se inventa un nombre de persona |
 | `CRM_ORG_<SLUG>_PORTAL_CLIENT_ID` | La aplicación **Traditional Web** del portal de esa organización. Es además el `portal_client_id` que te-api tiene en su padrón |
 | `CRM_ORG_<SLUG>_PORTAL_CLIENT_SECRET` | Su secreto. **Sólo en el servidor.** Va junta con la de arriba: una sin la otra es un error de configuración y se ve al arrancar |
 | `CRM_ORG_<SLUG>_PORTAL_LINK_TYPE` | El `type` que el portal declara al vincular (`cliente`). Opcional |

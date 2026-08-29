@@ -17,6 +17,8 @@
   --danger-bg: #fdeceb;
   --ok: #1c6b4a;
   --ok-bg: #e8f5ef;
+  --warn: #8a5300;
+  --warn-bg: #fdf2e0;
 }
 
 * {
@@ -182,6 +184,25 @@ button.secondary {
 .alert.ok {
   background: var(--ok-bg);
   color: var(--ok);
+}
+
+/*
+ * El tercer color, y no es decoración.
+ *
+ * En la comprobación de identidad hay dos finales malos que NO son el mismo:
+ * `rejected` es la persona diciendo «no he sido yo» desde su cartera —un aviso
+ * de fraude, hay que cortar la llamada— y `failed` es la credencial no valiendo
+ * —se vuelve a intentar—. te-api se molesta en devolverlos separados; pintarlos
+ * del mismo rojo los volvería a juntar en el único sitio donde alguien los mira
+ * de verdad, que es esta pantalla. **Entre los cinco finales de la
+ * verificación, el rojo se queda para el fraude** y el resto de lo que no va
+ * bien —esperando, caducado, credencial que no vale— es ámbar. (El rojo lo
+ * sigue usando también el aviso de una llamada que ha fallado, que es otra
+ * cosa y no compite: ahí no hay ningún final que interpretar.)
+ */
+.alert.warn {
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
 dl.facts {

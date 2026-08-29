@@ -86,6 +86,52 @@ export interface RequestPresentationInput {
   readonly claims: readonly string[];
 }
 
+/**
+ * Quién dice el CRM que pulsó el botón. **Atribución, no autenticación.**
+ *
+ * te-api no lo verifica y no decide nada con él: no elige destinatario, no entra
+ * en ningún límite y no abre ninguna puerta (`src/b2b/wakeups.ts`). Sirve para
+ * que en el móvil del titular ponga «Pedro Ramírez, agente 4471» en vez de un
+ * aviso anónimo, y para que el diario de te-api pueda contestar «quién pidió
+ * esto» el día que alguien pregunte. Un banco que mienta aquí se está mintiendo
+ * a sus propios clientes, igual que hoy por teléfono.
+ */
+export interface WakeupActor {
+  readonly id: string;
+  readonly displayName: string;
+}
+
+export interface WakeupInput {
+  /** El id del cliente en la organización. El mismo que en la presentación. */
+  readonly subjectReference: string;
+  /**
+   * `identity` = «demuéstrame que eres tú»; `transaction` = aprobar una
+   * operación con importe y destinatario.
+   *
+   * Los dos se declaran porque los dos son el contrato de la ruta, no porque
+   * este CRM mande los dos: hoy sólo manda `identity`. `transaction` es F4c
+   * nivel 2 y le falta la pantalla que lo use, no el camino hasta te-api.
+   */
+  readonly kind: 'identity' | 'transaction';
+  /**
+   * Dónde va la cartera a por la solicitud firmada. Es el `requestUri` que
+   * acaba de devolver `POST /v1/b2b/presentations`, tal cual.
+   *
+   * **te-api exige `https` y no hace excepción para desarrollo.** Con una base
+   * de verificador local en `http://…` la llamada sale con `400 invalid_request`
+   * antes de tocar nada, que es el comportamiento correcto: la cartera va a ir a
+   * esa URL a por una solicitud firmada.
+   */
+  readonly requestUri: string;
+  readonly actor: WakeupActor;
+}
+
+/** Lo que devuelve `POST /v1/b2b/wakeups`. */
+export interface WakeupResult {
+  readonly wakeupId: string;
+  readonly expiresAt: string;
+}
+
 export interface IssueCredentialInput {
   /** El `type_key` del padrón del partner, tal y como lo nombra él. */
   readonly type: string;
@@ -217,6 +263,44 @@ export async function requestPresentation(
 }
 
 /**
+ * `POST /v1/b2b/wakeups` — **el timbre**. Hace sonar el teléfono del titular.
+ *
+ * Es lo que convierte la verificación en algo que sirve **por teléfono**: sin
+ * esto sólo hay un QR en la pantalla del agente, y quien está al otro lado de
+ * una llamada no ve esa pantalla.
+ *
+ * ## La respuesta no dice si esa persona tiene cartera
+ *
+ * `{ wakeupId, expiresAt }` es **idéntico exista el cliente o no**, con la misma
+ * forma y la misma latencia. te-api resuelve a quién despertar *después* de
+ * contestar, y si no resuelve a nadie la fila nace señuelo y caduca sola. Es
+ * deliberado: si la respuesta cambiara, este CRM sería un oráculo para averiguar
+ * quién tiene cartera de TripleEnable probando identificadores. Por eso aquí no
+ * hay nada que interpretar, y la pantalla no puede decir «este cliente no tiene
+ * la app» — el 200 no lo dice.
+ */
+export async function sendWakeup(
+  organization: OrganizationConfig,
+  input: WakeupInput,
+): Promise<WakeupResult> {
+  // La misma base que abrió la sesión. El timbre no es emitir ni verificar —es
+  // el canal push del núcleo de te-api—, así que ninguna de las dos bases es
+  // obviamente la suya; se elige ésta porque el `requestUri` que se manda salió
+  // de ella y las dos llamadas son la misma ceremonia. El día que el emisor y el
+  // verificador se separen de verdad, el núcleo necesita su propia variable en
+  // `organizations.ts`, y entonces se cambia también aquí.
+  return callB2b<WakeupResult>(organization, organization.verifierUrl, '/v1/b2b/wakeups', {
+    method: 'POST',
+    body: {
+      subjectReference: input.subjectReference,
+      kind: input.kind,
+      requestUri: input.requestUri,
+      actor: { id: input.actor.id, displayName: input.actor.displayName },
+    },
+  });
+}
+
+/**
  * `GET /v1/b2b/presentations/:id` — «¿ya ha contestado?».
  *
  * Se sondea porque no hay webhook, y no por falta de soporte en walt.id: el
@@ -334,7 +418,11 @@ export function describeTeApiError(error: TeApiError): string {
     return `Demasiadas peticiones para esta organización; espera un momento${reference}.`;
   }
   if (error.status === 400) {
-    return `te-api ha rechazado los datos de la emisión: ${error.code}${reference}.`;
+    // El código sí distingue, y por eso se enseña: `invalid_request` es el
+    // cuerpo mal formado —un `requestUri` en `http`, por ejemplo, que el
+    // timbre rechaza sin excepción— y `unauthorized_client` es un canal
+    // apagado en te-api, que no se arregla cambiando lo que se manda.
+    return `te-api ha rechazado los datos de la llamada: ${error.code}${reference}.`;
   }
   return `te-api ha respondido ${error.status} (${error.code})${reference}.`;
 }
