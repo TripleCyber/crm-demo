@@ -68,7 +68,7 @@ formulario largo donde lo que se leía era el desplegable.
 | `/customers/<id>` | La **ficha**: datos del titular, diario de identidad y las tres acciones | C1 |
 | `/customers/<id>/credential` | **Emitir**: la oferta a la izquierda, lo que se va a firmar a la derecha | C0 |
 | `/customers/<id>/verify` | **Lanzar** la comprobación: los dos niveles, qué se pide y por dónde se avisa | C1 |
-| `/verifications/<presentationId>` | **Seguir** una comprobación: línea de tiempo, QR y recibo | C2 · C3 |
+| `/verifications/<presentationId>` | **Seguir** una comprobación: el estado en grande —con el titular, su número de cliente y el plazo corriendo—, el QR o el enlace, la línea de tiempo y el recibo | C2 · C3 |
 | `/verifications` | El registro de comprobaciones de la organización | — |
 | `/customers/new` | Alta de cliente | — |
 | `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, portal), cómo se elige la organización, y una comprobación real de la base. **Es el único sitio donde se dice el nombre de una variable de entorno** | — |
@@ -299,21 +299,25 @@ reservado para uno solo**:
 |---|---|---|
 | `verified` | Es quien dice ser | Verde. Salen los atributos que se pidieron |
 | `rejected` | **La persona ha dicho que no ha sido ella**, desde su cartera | **Rojo.** Cortar la llamada y cursar el aviso de fraude: si el agente habla con alguien y el titular dice que no, hay dos personas distintas |
-| `failed` | La credencial no ha valido —caducada, revocada, de otro titular— | Ámbar. Se vuelve a intentar |
-| `expired` | Nadie contestó a tiempo | Ámbar. Se vuelve a avisar |
-| `pending` | Se sigue esperando | **Azul**, con el punto latiendo y la cuenta atrás |
+| `failed` | La credencial no ha valido —caducada, revocada, de otro titular— | Ámbar. **Se reintenta desde la propia pantalla** |
+| `expired` | Nadie contestó a tiempo | Ámbar. **Se reintenta desde la propia pantalla** |
+| `pending` | Se sigue esperando | **Azul**, con el plazo corriendo en un anillo y el latido de cada consulta |
 
-Cada uno es un bloque con su título corto —«Es quien dice ser», «El titular dice
-que no ha sido él»— y no un párrafo que hay que leer entero: el agente está al
-teléfono con alguien y tiene que saber cómo ha acabado sin ponerse a leer.
+Los cinco viven en **un solo bloque** —`VerificationStage.tsx`—, con su título
+corto —«Es quien dice ser», «El titular dice que no ha sido él»— y no un párrafo
+que hay que leer entero: el agente está al teléfono con alguien y tiene que saber
+cómo ha acabado sin ponerse a leer. Que sea uno y no cinco es lo que hace que el
+color **se pida una sola vez** a `verification-status.ts` en vez de estar escrito
+a mano cinco veces, y que la identidad del titular esté en los cinco.
+
+El color tampoco va solo: cada desenlace lleva **su propia forma** —visto, aspa,
+admiración, reloj—, porque uno de cada doce hombres no distingue el rojo del
+verde y porque en una sala se ve el dibujo antes que el texto.
 
 Compartir el rojo entre `rejected` y `failed` volvería a juntarlos en el único
 sitio donde alguien los mira de verdad, que es esta pantalla. Por eso hay un
 tercer color en `globals.css` y no dos. **La espera tiene el suyo, azul**, y no
-comparte el ámbar: una comprobación en curso no es una que haya fallado, y una
-pantalla que dice «esperando» durante cinco minutos sin moverse no se distingue
-de una colgada — por eso lleva la cuenta atrás hasta la caducidad y dice cada
-cuánto está preguntando.
+comparte el ámbar: una comprobación en curso no es una que haya fallado.
 
 #### T9 · lo que le falta al rojo para llegar hasta aquí
 
@@ -335,6 +339,53 @@ Lo único que se ha hecho aquí es **dejar de mentir mientras tanto**: el bloque
 `expired` avisa de que una denuncia del titular se ve exactamente igual que un
 plazo agotado. Sin esa línea, el agente lee «nadie contestó» y da por hecho que
 el cliente no miró el móvil, que es justo la conclusión contraria a la verdadera.
+
+### La espera, el momento y la salida
+
+Una pantalla que dice «esperando» durante cinco minutos sin moverse no se
+distingue de una colgada. Se mueven **dos cosas, y las dos son hechos**:
+
+- **el anillo**, que es el plazo de te-api (`expiresAt − requestedAt`) vaciándose
+  con la cuenta atrás dentro. Se vacía y no se llena: lo que avanza es el tiempo
+  que se acaba, no un progreso hacia el sí;
+- **el latido**, «Comprobando si ha contestado · hace 2 s», que late **por cada
+  consulta contestada** y no con un temporizador. Si la red se cae, se para y el
+  «hace…» crece, que es justo lo que hay que ver.
+
+Nada más se mueve, y es la regla: **no se anima lo que el servidor no ha
+confirmado**. Que le haya sonado el móvil al titular no lo sabe nadie, y la línea
+de tiempo lo sigue diciendo con todas las letras.
+
+Cuando llega el desenlace **con la pantalla delante**, el bloque se asienta, un
+barrido del color del resultado lo cruza una vez y el sello se traza; a los 570 ms
+ya está quieto. Abrir mañana el recibo de hoy no anima nada: no está ocurriendo
+nada. Y quien tenga puesto `prefers-reduced-motion` ve **los mismos estados**
+—mismo color, mismo dibujo, misma frase— sin recorrido.
+
+De `failed`, de `expired` y de un plazo agotado **se sale desde aquí**: «volver a
+intentarlo» lanza otra petición con los cuatro mismos valores —cliente, tipo,
+atributos y canal— leídos del diario, y navega a su identificador nuevo; la
+anterior no se reescribe, porque que hubo un primer intento sin contestar es
+justo lo que un banco necesita poder demostrar. «Pedir otra cosa» vuelve al
+formulario para cambiar qué se pide.
+
+En `rejected` **no hay botón de reintentar**, y es la misma regla que el color: un
+botón grande de insistir en el aviso de fraude enseñaría al agente a llamar otra
+vez al móvil de alguien que acaba de denunciar que le están suplantando.
+
+### Quién es, y sus dos horas
+
+Debajo del estado, y **fija en los cinco desenlaces**, va la identidad: el nombre
+del padrón y **el número de cliente**, en monoespaciada grande y con aire entre
+caracteres porque se canta en voz alta por teléfono para que los dos sepan que
+miran la misma ficha.
+
+Cuando la comprobación sale bien salen además **dos horas, y no son la misma**:
+`proof.signedAt` es cuándo firmó el titular según su propio teléfono, y
+`settled_at` es cuándo se enteró esta consola. Entre ellas hay hasta un intervalo
+de consulta. La línea de tiempo las pinta como dos hitos seguidos —«Firmó desde
+su cartera» y «Ha confirmado desde su cartera»— y hasta que te-api devolvió la
+primera, el banco sólo podía archivar la segunda.
 
 ### La trampa del `requestUri` en `http`
 
@@ -624,6 +675,14 @@ de la columna es el nombre del claim**, y un verificador que recibe
   pidió una presentación con `subjectReference = ".*"`: te-api construyó la
   política del verificador con el valor escapado (`\.\*`), la credencial real
   no cuadró y la sesión acabó en `failed`.
+- **«Volver a intentarlo» abre una petición nueva y no toca la vieja.** Probado
+  en el navegador el 2026-08-30 sobre una comprobación con el plazo agotado: el
+  botón lanzó `POST /api/credentials/present` con los cuatro mismos valores del
+  diario, te-api devolvió otro `presentationId` con su propio plazo, y la pantalla
+  navegó a él con su QR y su cuenta atrás. La fila anterior se quedó como estaba.
+  En el canal de teléfono, cuando el timbre falla, el error sale **en el propio
+  bloque de estado** y no se anota ninguna fila — que es lo que ya hacía lanzar
+  la comprobación por primera vez.
 
 ## Del lado de te-api
 

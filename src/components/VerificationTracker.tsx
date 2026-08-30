@@ -1,9 +1,11 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { formatClock } from '@/lib/format';
+import { formatClock, formatCountdown } from '@/lib/format';
 import { describeVerification, type VerificationStatus } from '@/lib/verification-status';
+import { VerificationStage } from './VerificationStage';
 import { WalletLink } from './WalletLink';
 
 /**
@@ -21,6 +23,21 @@ import { WalletLink } from './WalletLink';
  *
  * El estado inicial llega **del servidor**, leído del diario del banco. Este
  * componente sólo sondea mientras siga pendiente.
+ *
+ * ## Qué hace este fichero y qué hace el escenario
+ *
+ * Aquí vive **el ciclo**: el sondeo, el desenlace, el reintento y las horas. En
+ * `VerificationStage` vive **cómo se ve** ese ciclo —el reloj del plazo, el
+ * latido de cada consulta contestada, el sello del final y el número de
+ * cliente—. Están separados porque son dos oficios: uno decide *qué es verdad*
+ * y el otro *cómo se enseña*, y mezclarlos es lo que hace que al retocar una
+ * animación se toque sin querer cuándo se deja de preguntar.
+ *
+ * Lo que este fichero le pasa al escenario no es «pinta esto bonito»: son
+ * **hechos con hora** —cuándo contestó la última consulta, si el desenlace ha
+ * ocurrido con la pantalla delante— para que allí no haya que inventarse
+ * ninguno. Ver la cabecera de `VerificationStage`, que es donde está escrita la
+ * regla de no animar lo que no ha pasado.
  *
  * ## Para quién está escrita esta pantalla
  *
@@ -106,6 +123,15 @@ export interface TrackedVerification extends HolderProof {
   readonly presentationId: string;
   readonly channel: Channel;
   readonly typeKey: string;
+  /**
+   * Los atributos que se pidieron, tal y como se mandaron.
+   *
+   * Están aquí por **el reintento**: volver a intentarlo tiene que pedir lo
+   * mismo que se pidió, y lo que se pidió lo sabe el diario del banco. Sin
+   * esto, el botón tendría que adivinarlo o mandar al agente a rellenar otra
+   * vez el formulario, que es justo el camino que no hay que rehacer.
+   */
+  readonly requestedClaims: readonly string[];
   readonly issuerDid: string;
   readonly externalId: string;
   readonly authorizationRequestUrl: string;
@@ -162,19 +188,6 @@ const POLL_INTERVAL_MS = 3000;
  */
 const POLL_GRACE_MS = 20_000;
 
-/**
- * Lo que el AGENTE tiene que hacer mientras se espera, **según por dónde se
- * avisó**.
- *
- * Cambia porque lo que hay que hacer a continuación es distinto: por teléfono
- * hay que pedirle a la persona que mire el móvil; en la sucursal, que apunte con
- * la cámara a esta pantalla.
- */
-const PENDING_TEXT: Record<Channel, string> = {
-  phone: 'Le hemos avisado a su móvil. Pídale que abra la app y confirme.',
-  qr: 'Enséñele el código. Tiene que escanearlo con su cartera y confirmar ahí.',
-};
-
 /** Cómo acabó, en cuatro palabras, para el último hito de la línea de tiempo. */
 const OUTCOME_MILESTONE: Record<Exclude<VerificationStatus, 'pending'>, string> = {
   verified: 'Ha confirmado desde su cartera',
@@ -188,6 +201,7 @@ export function VerificationTracker({
   qrSvg,
   labelFor,
   organizationName,
+  holderName,
 }: {
   verification: TrackedVerification;
   /** El QR, ya dibujado en el servidor. Sólo en el canal que lo usa. */
@@ -196,7 +210,16 @@ export function VerificationTracker({
   labelFor: Record<string, string>;
   /** El nombre de la organización, para el recibo. No está escrito en el código. */
   organizationName: string;
+  /**
+   * El nombre del padrón, o `null` si la ficha ya no está.
+   *
+   * Baja hasta aquí porque el escenario lo enseña **al lado del número de
+   * cliente**: los dos juntos son «con quién estoy hablando», y esa pregunta
+   * no se contesta con un nombre suelto en la miga de pan de arriba.
+   */
+  holderName: string | null;
 }) {
+  const router = useRouter();
   const [status, setStatus] = useState<VerificationStatus>(verification.status);
   const [disclosed, setDisclosed] = useState(verification.disclosedClaims);
   /**
@@ -225,6 +248,43 @@ export function VerificationTracker({
    * «caduca en 4:12» para que la espera no parezca una pantalla colgada.
    */
   const [now, setNow] = useState(() => Date.now());
+
+  /**
+   * Cuándo contestó la última consulta, y cuántas van.
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   *  ESTO ES LO QUE HACE QUE LA ESPERA NO PAREZCA UNA PANTALLA COLGADA
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * El escenario pinta con ellos «Comprobando si ha contestado · hace 2 s» y
+   * un punto que late. Late **cuando ha habido una respuesta de verdad**, no
+   * cuando pasan tres segundos: si la red se cae, el punto se para y el «hace
+   * …» crece, que es exactamente lo que hay que ver. Un latido de adorno
+   * seguiría animándose con el cable desenchufado.
+   *
+   * `pollTick` sube en cada respuesta buena y sirve de llave de React para el
+   * punto: al cambiar, el elemento se remonta y su animación vuelve a correr.
+   * Es la forma más barata de lanzar una animación por suceso sin guardar
+   * temporizadores.
+   *
+   * Sólo cuenta la consulta que **contestó bien**: un 429 del cubo de tasa o
+   * un corte no son un latido, y dejarlos contar haría que el punto siguiera
+   * latiendo mientras la pantalla ya no sabe nada.
+   */
+  const [lastPolledAt, setLastPolledAt] = useState<number | null>(null);
+  const [pollTick, setPollTick] = useState(0);
+  /**
+   * Si el desenlace ha ocurrido **con esta pantalla delante**.
+   *
+   * Es lo que separa «ha pasado ahora» de «pasó ayer»: se pone una sola vez, en
+   * el sondeo que trae el final, y nunca al cargar. Abrir mañana el recibo de
+   * hoy enseña el mismo resultado quieto, porque animar un desenlace de hace
+   * catorce horas sería representar un suceso que no está ocurriendo.
+   */
+  const [justSettled, setJustSettled] = useState(false);
+  /** El reintento en curso. Ver `retry`. */
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | undefined>();
 
   const pending = status === 'pending';
   const deadline = new Date(verification.expiresAt).getTime();
@@ -259,6 +319,9 @@ export function VerificationTracker({
         // Un sondeo bueno borra el aviso del anterior: dejarlo puesto haría que
         // una pantalla que ya funciona pareciera rota.
         setError(undefined);
+        // El latido. Va aquí y no antes del `ok` a propósito: ver `pollTick`.
+        setLastPolledAt(Date.now());
+        setPollTick((tick) => tick + 1);
         if (payload.status !== 'pending') {
           setDisclosed(payload.claims);
           // La forma de te-api no es plana: `holderKey` es un objeto con la
@@ -274,6 +337,9 @@ export function VerificationTracker({
             signedAt: payload.proof?.signedAt,
           });
           setSettledAt(new Date().toISOString());
+          // El orden importa poco para React —agrupa los dos— pero se escribe
+          // así porque se lee así: **primero ha pasado, y por eso se enseña**.
+          setJustSettled(true);
           setStatus(payload.status);
         }
       } catch {
@@ -303,122 +369,107 @@ export function VerificationTracker({
     return () => clearInterval(timer);
   }, [pending]);
 
+  /**
+   * **Volver a intentarlo**, sin rehacer el camino.
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   *  LO QUE SE VUELVE A PEDIR ES LO QUE SE PIDIÓ, Y LO DICE EL DIARIO
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * Hasta ahora, de esta pantalla no se salía: una credencial que no valía o
+   * un plazo agotado dejaban al agente —con el cliente al teléfono— teniendo
+   * que volver a la ficha, entrar en «verificar identidad», elegir otra vez el
+   * tipo, marcar otra vez los atributos y acertar otra vez con el canal. Cinco
+   * pasos para repetir algo que ya estaba decidido.
+   *
+   * El botón manda **los cuatro mismos valores** —cliente, tipo, atributos y
+   * canal— leídos de la fila del diario, que es donde se anotó lo que se pidió
+   * de verdad. No se copian del formulario, que ya no está en pantalla, ni se
+   * adivinan: se leen de lo que este servidor escribió al lanzarla.
+   *
+   * Es una petición **nueva**, con su identificador, su plazo y su fila: no se
+   * reabre la anterior. Un plazo agotado no se puede resucitar —te-api ya la
+   * dio por muerta— y reescribir la fila borraría del historial del cliente que
+   * hubo un primer intento que nadie contestó, que es justo lo que un banco
+   * necesita poder demostrar. Por eso se navega al identificador nuevo.
+   *
+   * La ruta vuelve a comprobarlo todo con la sesión del servidor —la
+   * organización, el cliente, el tipo y que esos atributos existan en esa
+   * ficha—, así que esto no es una puerta de atrás: es el mismo botón de
+   * lanzar con los valores ya puestos.
+   */
+  const retry = async () => {
+    setRetrying(true);
+    setRetryError(undefined);
+    try {
+      const response = await fetch('/api/credentials/present', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          externalId: verification.externalId,
+          type: verification.typeKey,
+          claims: verification.requestedClaims,
+          channel: verification.channel,
+        }),
+      });
+      const payload = (await response.json()) as { presentationId?: string; error?: string };
+      if (!response.ok || typeof payload.presentationId !== 'string') {
+        setRetryError(payload.error ?? `no se ha podido lanzar otra (${response.status})`);
+        setRetrying(false);
+        return;
+      }
+      // No se quita el `retrying`: la navegación tarda un instante y devolver
+      // el botón a su sitio antes de irse invita a pulsarlo dos veces — y dos
+      // pulsaciones son dos timbres en el móvil de la misma persona. Es la
+      // misma decisión que en `VerificationLauncher`, y por lo mismo.
+      router.push(`/verifications/${encodeURIComponent(payload.presentationId)}`);
+    } catch (cause) {
+      setRetryError(
+        cause instanceof Error ? cause.message : 'no se ha podido contactar con el servidor',
+      );
+      setRetrying(false);
+    }
+  };
+
   return (
     <>
       {/*
-        Los cinco finales, cada uno con su bloque y su título. El título dice el
-        resultado en cuatro palabras y el cuerpo explica qué hacer.
+        EL ESCENARIO: los cinco desenlaces y la espera, en un solo bloque.
 
-        El ROJO sigue siendo sólo del fraude. `rejected` y `failed` NO se
-        colapsan: te-api los devuelve separados a propósito y para quien está
-        al teléfono son sucesos opuestos —uno es «esta persona dice que no es
-        ella» y hay que cortar; el otro es «la credencial no ha valido» y se
-        reintenta—.
+        Antes eran cinco cajas de color, una por estado, cada una con su copia
+        del punto y del título. Ahora es un componente al que se le pasan los
+        hechos —el estado, el plazo, quién es el titular, cuándo contestó la
+        última consulta— y él decide cómo se ve. Ganar eso importaba por dos
+        razones que no son de estilo:
+
+         · el ROJO sigue siendo sólo del fraude, y ahora **por construcción**:
+           el tono lo pide una sola vez a `describeVerification` en vez de estar
+           escrito a mano cinco veces. `rejected` y `failed` no se pueden
+           colapsar por descuido al tocar una de las cinco cajas;
+         · la identidad del titular está en **los cinco** desenlaces y en el
+           mismo sitio, porque es un solo bloque y no cinco.
       */}
-      {status === 'pending' && !overdue && (
-        <div className="outcome waiting">
-          <span className="outcome-mark" aria-hidden="true" />
-          <div>
-            <h3>Esperando al titular</h3>
-            <p>{PENDING_TEXT[verification.channel]}</p>
-          </div>
-        </div>
-      )}
-
-      {/*
-        Pendiente y con el plazo vencido. No se afirma que te-api la haya dado
-        por caducada —eso lo dirá él— pero tampoco se sigue diciendo «esperando»
-        sobre algo cuyo plazo se agotó hace rato.
-      */}
-      {status === 'pending' && overdue && (
-        <div className="outcome warn">
-          <span className="outcome-mark" aria-hidden="true" />
-          <div>
-            <h3>Sin respuesta</h3>
-            <p>El plazo se agotó y nadie contestó. Vuelva a avisarle desde su ficha.</p>
-          </div>
-        </div>
-      )}
-
-      {status === 'verified' && (
-        <div className="outcome ok">
-          <span className="outcome-mark" aria-hidden="true" />
-          <div>
-            <h3>Es quien dice ser</h3>
-            <p>
-              Ha presentado su credencial y la verificación ha salido bien. Puede continuar con la
-              operación.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {status === 'rejected' && (
-        <div className="outcome alarm">
-          <span className="outcome-mark" aria-hidden="true" />
-          <div>
-            <h3>El titular dice que no ha sido él</h3>
-            <p>
-              Ha <strong>rechazado la petición desde su cartera</strong>. No continúe con la
-              operación y curse el aviso de fraude: si usted está hablando con alguien y el titular
-              dice que no, hay dos personas distintas.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {status === 'failed' && (
-        <div className="outcome warn">
-          <span className="outcome-mark" aria-hidden="true" />
-          <div>
-            <h3>La credencial no ha valido</h3>
-            <p>
-              No es un «no soy yo»: es la credencial fallando —caducada, revocada o de otro
-              titular—. Se puede volver a intentar.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {status === 'expired' && (
-        <div className="outcome warn">
-          <span className="outcome-mark" aria-hidden="true" />
-          <div>
-            <h3>Caducó sin respuesta</h3>
-            <p>Nadie contestó dentro del plazo. Vuelva a avisarle.</p>
-            {/*
-              T9 (`docs/TAREAS.md` §3.2): hoy una denuncia del titular
-              —«no estoy en ninguna llamada»— llega a te-api y muere ahí sin
-              tocar la sesión de presentación, así que acaba **aquí**, con
-              el ámbar de caducidad, y no en el bloque rojo de arriba. La
-              pantalla no lo puede distinguir y por eso no afirma que el
-              titular no mirara el móvil. Cuando el puente exista, `rejected`
-              llegará solo y pintará rojo sin tocar este componente.
-            */}
-            {/*
-              Se queda porque **cambia lo que el agente tiene que hacer**: sin
-              esta frase, un plazo agotado se lee como «no ha mirado el móvil» y
-              podría ser una denuncia. Lo que se ha quitado es el rodeo por
-              nuestra tubería —«mientras el aviso de fraude no llegue hasta
-              aquí»—, que explica el mecanismo en vez de decir qué hacer.
-            */}
-            <p className="muted" style={{ margin: 0 }}>
-              Una denuncia del titular —«no estoy en ninguna llamada»— se ve hoy exactamente igual
-              que un plazo agotado. Si sospecha, pregúntele.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {error !== undefined && <p className="alert">{error}</p>}
-
-      <PresentationTimeline
-        verification={verification}
+      <VerificationStage
         status={status}
         overdue={overdue}
+        channel={verification.channel}
+        requestedAt={verification.requestedAt}
+        expiresAt={verification.expiresAt}
         now={now}
+        holderName={holderName}
+        externalId={verification.externalId}
+        signedAt={proof.signedAt}
         settledAt={settledAt}
+        justSettled={justSettled}
+        lastPolledAt={lastPolledAt}
+        pollTick={pollTick}
+        onRetry={() => void retry()}
+        retrying={retrying}
+        retryError={retryError}
+        configureHref={`/customers/${encodeURIComponent(verification.externalId)}/verify`}
       />
+
+      {error !== undefined && <p className="alert">{error}</p>}
 
       {/*
         EL ENLACE SE OFRECE EN LOS DOS CANALES, Y ANTES SÓLO EN UNO.
@@ -481,6 +532,25 @@ export function VerificationTracker({
         </div>
       )}
 
+      {/*
+        LA LÍNEA DE TIEMPO VA DEBAJO DEL CÓDIGO, Y ANTES IBA ENCIMA.
+
+        Es el registro, no la acción. Mientras se espera, lo que el agente
+        necesita a mano es el código o el enlace —lo que hay que enseñarle o
+        mandarle al titular—; la sucesión de hitos con sus horas se consulta
+        después, o mañana, cuando alguien reconstruye la llamada. Con el
+        registro en medio, lo que había que tocar quedaba por debajo del pliegue
+        en un portátil de sucursal.
+      */}
+      <PresentationTimeline
+        verification={verification}
+        status={status}
+        overdue={overdue}
+        now={now}
+        settledAt={settledAt}
+        signedAt={proof.signedAt}
+      />
+
       {status === 'verified' && (
         <PresentationReceipt
           verification={verification}
@@ -524,12 +594,22 @@ function PresentationTimeline({
   overdue,
   now,
   settledAt,
+  signedAt,
 }: {
   verification: TrackedVerification;
   status: VerificationStatus;
   overdue: boolean;
   now: number;
   settledAt: string | null;
+  /**
+   * Cuándo firmó **el titular**, según el reloj de su teléfono.
+   *
+   * Es el hito que le faltaba a esta línea: hasta que te-api lo devolvió, el
+   * banco sólo podía archivar cuándo se enteró él. Se pinta sólo si viene —una
+   * presentación de antes de que te-api lo sirviera no lo tiene—, y cuando no
+   * viene la línea se lee igual de bien con un hito menos.
+   */
+  signedAt: string | null | undefined;
 }) {
   const waiting = status === 'pending' && !overdue;
 
@@ -567,7 +647,32 @@ function PresentationTimeline({
               <strong>Esperando su respuesta</strong>
               <span>Caduca sola cuando llegue a cero; entonces hay que volver a avisar.</span>
             </div>
-            <time>{countdown(verification.expiresAt, now)}</time>
+            <time>{formatCountdown(verification.expiresAt, now)}</time>
+          </li>
+        )}
+
+        {/*
+          LA HORA DEL TITULAR, QUE NO ES LA NUESTRA.
+
+          Este hito lo firma su teléfono, no este servidor, y por eso es el
+          único de la línea cuya hora el banco **no** pone. Va antes del
+          desenlace porque ocurrió antes: entre que el titular firma y que esta
+          consola se entera hay hasta un intervalo de consulta, y esa diferencia
+          —que se ve aquí de un vistazo, dos horas seguidas en la misma
+          columna— es exactamente lo que el recibo necesitaba para dejar de ser
+          «cuándo lo supimos» y pasar a ser «cuándo lo hizo».
+
+          Sólo se pinta si te-api lo devuelve. No hay hueco ni guion cuando
+          falta: una hora inventada en un registro que existe para reclamar es
+          peor que un hito de menos.
+        */}
+        {signedAt != null && signedAt !== '' && (
+          <li className="done ok">
+            <div>
+              <strong>Firmó desde su cartera</strong>
+              <span>hora de su teléfono, no la de esta consola</span>
+            </div>
+            <time>{formatClock(signedAt)}</time>
           </li>
         )}
 
@@ -789,14 +894,4 @@ function PresentationReceipt({
       </details>
     </div>
   );
-}
-
-/** `1:41`, para el hito en curso. */
-function countdown(expiresAt: string, now: number): string {
-  const remaining = new Date(expiresAt).getTime() - now;
-  if (Number.isNaN(remaining) || remaining <= 0) return '0:00';
-  const totalSeconds = Math.floor(remaining / 1000);
-  return `${String(Math.floor(totalSeconds / 60))}:${(totalSeconds % 60)
-    .toString()
-    .padStart(2, '0')}`;
 }

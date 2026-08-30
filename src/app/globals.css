@@ -987,14 +987,14 @@ button.secondary:hover:not([disabled]) {
 }
 
 /* ═════════════════════════════════════════════════════════════════════════
- *  LOS CINCO FINALES DE LA COMPROBACIÓN
+ *  EL ESCENARIO · la espera, y los cinco finales
  * ═════════════════════════════════════════════════════════════════════════
  *
- * Un `.alert` es una frase; esto es un resultado, y son dos cosas distintas.
- * El agente está al teléfono con alguien y tiene que saber cómo ha acabado la
- * comprobación **sin leer el párrafo**: por eso hay un título corto que dice el
- * resultado, una marca de color a la izquierda y una regla vertical del mismo
- * color. El párrafo dice qué hacer, y se lee después.
+ * Un `.alert` es una frase; esto es **el estado de la ceremonia**, y ocupa el
+ * sitio que ocupa porque durante cinco minutos es lo único que hay que mirar.
+ * El agente está al teléfono con alguien y tiene que saber cómo va y cómo ha
+ * acabado **sin leer el párrafo**: por eso hay un dibujo grande a la izquierda,
+ * un título de cuatro palabras, y sólo después el texto que dice qué hacer.
  *
  * Los colores, y por qué son cuatro y no dos:
  *
@@ -1003,90 +1003,399 @@ button.secondary:hover:not([disabled]) {
  * - **ámbar** — `failed` y `expired`. Ha ido mal pero no es fraude: se
  *   reintenta.
  * - **verde** — `verified`.
- * - **azul, con el punto latiendo** — `pending`. No es un final: es la espera, y
- *   distinguirla del ámbar es lo que evita que una comprobación en curso se lea
- *   como una que ya ha fallado. El latido dice que la pantalla sigue viva, que
- *   es justo lo que no se sabía cuando la espera era un párrafo quieto.
+ * - **azul** — `pending`. No es un final: es la espera, y distinguirla del
+ *   ámbar es lo que evita que una comprobación en curso se lea como una que ya
+ *   ha fallado.
+ *
+ * El tono entra por `--tone` y todo lo de dentro —el anillo, el sello, la regla
+ * de la izquierda, el latido— lo hereda con `currentColor`. Así el color se
+ * escribe **una vez por estado** y no una vez por pieza: es lo que impide que
+ * al añadir un adorno alguien pinte de rojo algo que no es un fraude.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ *  QUÉ SE MUEVE, Y POR QUÉ SÓLO ESO
+ * ─────────────────────────────────────────────────────────────────────────
+ *
+ * Dos cosas, y las dos son hechos con hora:
+ *
+ *  1. **El anillo se vacía** con el plazo que puso te-api. El tiempo corre lo
+ *     mire quien lo mire. Se vacía y no se llena: un anillo llenándose se lee
+ *     como progreso hacia el sí, y de eso esta pantalla no sabe nada.
+ *  2. **El punto late** cuando una consulta ha sido contestada — una por
+ *     latido, disparada desde el componente. Con el cable desenchufado se para,
+ *     que es exactamente lo que hay que ver.
+ *
+ * Y una tercera **sólo cuando ha ocurrido de verdad**: al llegar el desenlace,
+ * el bloque se asienta, un barrido del color del resultado lo cruza una vez y
+ * el sello se traza. Es `.settling`, que el componente pone una sola vez y sólo
+ * si el final ha pasado con la pantalla delante. Un recibo de ayer no se anima:
+ * no está ocurriendo nada.
+ *
+ * Lo que NO se mueve es todo lo demás. Nada insinúa que el titular haya
+ * recibido el aviso, ni que lo esté mirando, ni que esté a punto de firmar:
+ * eso no lo sabe nadie, y la línea de tiempo lo dice con todas las letras.
  */
-.outcome {
-  display: flex;
-  gap: 14px;
-  padding: 16px 18px;
-  border-radius: 10px;
+.stage {
+  --tone: var(--ink-3);
+  --tone-bg: var(--canvas);
+
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 18px;
+  padding: 22px 24px;
   border: 1px solid transparent;
-  border-left: 4px solid var(--ink-3);
-  background: var(--canvas);
-  margin-bottom: 18px;
+  border-left: 4px solid var(--tone);
+  border-radius: 12px;
+  background: var(--tone-bg);
+  color: var(--tone);
 }
 
-.outcome h3 {
-  font-size: 16px;
-  margin: 0 0 6px;
+.stage.ok {
+  --tone: var(--ok);
+  --tone-bg: var(--ok-bg);
 }
 
-.outcome p {
-  margin: 0 0 8px;
-  font-size: 13.5px;
-}
-
-.outcome p:last-child {
-  margin-bottom: 0;
-}
-
-.outcome .outcome-mark {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: var(--ink-3);
-}
-
-.outcome.ok {
-  border-left-color: var(--ok);
-  background: var(--ok-bg);
-  color: var(--ok);
-}
-
-.outcome.ok .outcome-mark {
-  background: var(--ok);
-}
-
-.outcome.warn {
-  border-left-color: var(--warn);
-  background: var(--warn-bg);
-  color: var(--warn);
-}
-
-.outcome.warn .outcome-mark {
-  background: var(--warn);
+.stage.caution {
+  --tone: var(--warn);
+  --tone-bg: var(--warn-bg);
 }
 
 /* El rojo, y sólo para el fraude. Ver la nota de arriba. */
-.outcome.alarm {
-  border-left-color: var(--danger);
-  background: var(--danger-bg);
-  color: var(--danger);
+.stage.alarm {
+  --tone: var(--danger);
+  --tone-bg: var(--danger-bg);
 }
 
-.outcome.alarm .outcome-mark {
-  background: var(--danger);
+.stage.waiting {
+  --tone: var(--navy);
+  --tone-bg: var(--navy-tint);
 }
 
-.outcome.waiting {
-  border-left-color: var(--navy);
-  background: var(--navy-tint);
-  color: var(--navy);
+.stage-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
 }
 
-.outcome.waiting .outcome-mark {
-  background: var(--navy);
-  animation: outcome-pulse 1.6s ease-in-out infinite;
+.stage-figure {
+  position: relative;
+  flex: none;
+  width: 96px;
+  height: 96px;
 }
 
-.outcome .muted {
-  color: inherit;
-  opacity: 0.78;
+.stage-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.stage-copy h2 {
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  margin: 4px 0 8px;
+}
+
+.stage-body {
+  margin: 0;
+  font-size: 14px;
+  max-width: 62ch;
+}
+
+/* Una salvedad sobre el mundo. Va en el mismo color, más floja: no es otro
+   estado, es un matiz del que está pintado. */
+.stage-caveat {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  opacity: 0.8;
+  max-width: 62ch;
+}
+
+/* ── El reloj del plazo ───────────────────────────────────────────────── */
+
+.stage-ring {
+  display: block;
+  width: 96px;
+  height: 96px;
+  /* Que el plazo empiece a las doce y no a las tres. */
+  transform: rotate(-90deg);
+}
+
+.stage-ring-track,
+.stage-ring-live {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 5;
+}
+
+.stage-ring-track {
+  opacity: 0.16;
+}
+
+.stage-ring-live {
+  stroke-linecap: round;
+  /*
+   * Un segundo exacto, lineal.
+   *
+   * El componente sólo repinta una vez por segundo —el reloj no toca la red—,
+   * así que sin esto el anillo daría saltitos de un grado. La transición
+   * cubre justo el hueco entre repintados y el plazo se ve correr seguido.
+   */
+  transition: stroke-dashoffset 1s linear;
+}
+
+.stage-ring-clock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ── El sello del desenlace ───────────────────────────────────────────── */
+
+.stage-mark {
+  display: block;
+  width: 96px;
+  height: 96px;
+}
+
+.stage-mark-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4;
+  opacity: 0.3;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.stage-mark-glyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stage-mark-dot {
+  fill: currentColor;
+}
+
+/*
+ * El trazado, **sólo si ha pasado con la pantalla delante**.
+ *
+ * Fuera de `.settling` no hay `stroke-dasharray` y el dibujo sale entero: es
+ * lo que ve quien abre el recibo mañana. Con `pathLength=1` en el SVG, el
+ * mismo par de fotogramas traza las cuatro formas aunque midan distinto.
+ */
+.stage.settling .stage-mark-ring {
+  stroke-dasharray: 1;
+  animation: mark-draw 460ms ease-out both;
+}
+
+.stage.settling .stage-mark-glyph {
+  stroke-dasharray: 1;
+  animation: mark-draw 360ms ease-out 240ms both;
+}
+
+/* El segundo trazo del aspa y la aguja pequeña del reloj: después del primero,
+   porque un aspa que se dibuja de una vez no se lee como un aspa. */
+.stage.settling .stage-mark-glyph.delayed {
+  animation-delay: 430ms;
+}
+
+.stage.settling .stage-mark-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mark-dot 240ms ease-out 520ms both;
+}
+
+/* El bloque se asienta. Muy poco: es un resultado, no un aviso emergente. */
+.stage.settling {
+  animation: stage-land 360ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+/* Un barrido del color del resultado, una sola vez. Es lo que hace que el
+   cambio se vea desde el otro lado de una sala de reuniones. */
+.stage.settling::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, currentColor 50%, transparent 70%);
+  opacity: 0;
+  animation: stage-wash 900ms ease-out 60ms both;
+}
+
+@keyframes mark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes mark-dot {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes stage-land {
+  from {
+    transform: scale(0.985);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes stage-wash {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.16;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* ── El latido de la consola ──────────────────────────────────────────── */
+
+/*
+ * «Comprobando si ha contestado · hace 2 s».
+ *
+ * Es la frase que separa una pantalla que espera de una colgada, y es verdad:
+ * el punto late una vez por consulta contestada y el «hace…» sale de la hora de
+ * esa respuesta. Si la red se cae, el punto se queda quieto y el número crece.
+ */
+.stage-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.stage-live-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: poll-ping 1400ms ease-out both;
+}
+
+@keyframes poll-ping {
+  0% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  60% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+  100% {
+    opacity: 0.45;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* ── Quién es, y su número ────────────────────────────────────────────── */
+
+/*
+ * La identidad no cambia de sitio al cambiar el estado: es el ancla.
+ *
+ * Va en tinta normal y no en el color del estado — un identificador que se
+ * canta por teléfono tiene que leerse igual de bien en verde que en rojo — y
+ * separada por una regla, porque contesta otra pregunta: arriba es «cómo ha
+ * ido» y aquí es «de quién estamos hablando».
+ */
+.stage-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(16, 23, 32, 0.1);
+  color: var(--ink);
+}
+
+.stage-who > div {
+  min-width: 0;
+}
+
+.stage-who dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+}
+
+.stage-who dd {
+  margin: 3px 0 0;
+  font-size: 15px;
+}
+
+/* Las horas: monoespaciadas para poder compararlas, pero sin el tamaño de nota
+   al pie que tiene `.mono` en una tabla. */
+.stage-who .mono {
+  font-size: 14px;
+  word-break: normal;
+}
+
+/*
+ * **El número de cliente**, y es el que se canta en voz alta.
+ *
+ * Grande, monoespaciado y con aire entre caracteres: el agente lo lee por
+ * teléfono para que el cliente confirme que los dos miran la misma ficha, y ahí
+ * confundir un cero con una o cuesta una llamada. `nowrap` porque partido por
+ * la mitad no sirve para nada — es el mismo motivo por el que una referencia no
+ * se parte dentro de una celda.
+ */
+.stage-who .stage-id {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  word-break: normal;
+  white-space: nowrap;
+}
+
+/* ── La salida ────────────────────────────────────────────────────────── */
+
+.stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.stage-retry-error {
+  margin: 14px 0 0;
+}
+
+/* En una ventana estrecha el sello y el texto se apilan: 96 px de dibujo más
+   una columna de texto no caben, y lo primero que se rompe es el título. */
+@media (max-width: 720px) {
+  .stage-top {
+    flex-direction: column;
+    gap: 14px;
+  }
 }
 
 @keyframes outcome-pulse {
@@ -1101,12 +1410,48 @@ button.secondary:hover:not([disabled]) {
   }
 }
 
-/* Quien haya pedido menos movimiento no quiere un punto latiendo en su pantalla. */
+/*
+ * ═════════════════════════════════════════════════════════════════════════
+ *  QUIEN HAYA PEDIDO MENOS MOVIMIENTO VE LOS MISMOS ESTADOS, QUIETOS
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * No es que se apague la pantalla: es que **la información no estaba en el
+ * movimiento**. El anillo sigue diciendo el plazo, el sello sigue siendo un
+ * aspa o un visto del color que toca, el latido sigue siendo un punto y el
+ * «hace 2 s» sigue contando. Lo que se quita es el recorrido.
+ *
+ * Si algo de esto sólo se entendiera moviéndose, el diseño estaría mal para
+ * todo el mundo — también para quien no ha pedido nada.
+ */
 @media (prefers-reduced-motion: reduce) {
-  .outcome.waiting .outcome-mark,
   .pill.waiting .pill-mark,
-  .timeline li.current::after {
+  .timeline li.current::after,
+  .stage-live-dot,
+  .stage.settling,
+  .stage.settling .stage-mark-ring,
+  .stage.settling .stage-mark-glyph,
+  .stage.settling .stage-mark-dot {
     animation: none;
+  }
+
+  /* El anillo salta de segundo a segundo en vez de deslizarse. Dice lo mismo. */
+  .stage-ring-live {
+    transition: none;
+  }
+
+  /* El barrido no tiene equivalente quieto, así que no hay barrido. */
+  .stage.settling::before {
+    display: none;
+  }
+
+  /* Sin animación que los trace, los trazos salen enteros y de una vez. */
+  .stage.settling .stage-mark-ring,
+  .stage.settling .stage-mark-glyph {
+    stroke-dashoffset: 0;
+  }
+
+  .stage.settling .stage-mark-dot {
+    opacity: 1;
   }
 }
 
@@ -1613,9 +1958,16 @@ dl.facts dt .mono,
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * La cuenta atrás del hito en curso vuelve al tamaño de las demás horas.
+ *
+ * Estaba a 17 px porque era el único sitio donde se veía correr el plazo. Ahora
+ * el reloj grande está arriba, dentro del anillo, y dos cuentas atrás del mismo
+ * plazo compitiendo por ser la grande se leen como dos plazos. Aquí se queda la
+ * que hace falta: la de la columna de horas, para leerlas seguidas.
+ */
 .timeline li.current time {
   color: var(--navy);
-  font-size: 17px;
   font-weight: 600;
 }
 

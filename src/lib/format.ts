@@ -58,3 +58,39 @@ export function formatClock(iso: string): string {
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleTimeString('es-ES', { hour12: false });
 }
+
+/**
+ * `4:12` — lo que le queda a un plazo, para una cuenta atrás.
+ *
+ * Está aquí y no dentro de la pantalla de seguimiento porque ahora lo pintan
+ * dos sitios de esa misma pantalla —el reloj grande del titular y la línea de
+ * tiempo— y dos relojes de la misma espera que redondearan distinto se leen
+ * como dos plazos distintos.
+ *
+ * Nunca baja de `0:00`: un plazo vencido se dice con otras palabras, no con un
+ * número negativo.
+ */
+export function formatCountdown(expiresAt: string, now: number): string {
+  const remaining = new Date(expiresAt).getTime() - now;
+  if (Number.isNaN(remaining) || remaining <= 0) return '0:00';
+  const totalSeconds = Math.floor(remaining / 1000);
+  return `${String(Math.floor(totalSeconds / 60))}:${(totalSeconds % 60)
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+/**
+ * `hace 4 s` — cuánto hace de algo que acaba de pasar.
+ *
+ * Se usa para decir cuándo fue la última vez que esta consola preguntó, que es
+ * lo que distingue una pantalla que espera de una colgada. Por debajo de dos
+ * segundos se dice «ahora mismo»: «hace 0 s» es un número que se lee como una
+ * avería, y además dejaría de ser verdad antes de que a nadie le diera tiempo
+ * a leerlo.
+ */
+export function formatSince(at: number, now: number): string {
+  const seconds = Math.max(0, Math.round((now - at) / 1000));
+  if (seconds < 2) return 'ahora mismo';
+  if (seconds < 60) return `hace ${seconds} s`;
+  return `hace ${Math.floor(seconds / 60)} min`;
+}

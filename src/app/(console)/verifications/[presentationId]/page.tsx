@@ -112,11 +112,23 @@ export default async function VerificationPage({
 
       <div className="split wide-side">
         <div className="col-main">
+          {/*
+            El nombre baja hasta el seguimiento porque el escenario lo enseña
+            **al lado del número de cliente**, en los cinco desenlaces: quien
+            está al teléfono tiene que poder decir en voz alta con quién cree
+            que está hablando y qué ficha está mirando, y eso son dos datos
+            juntos y no un nombre en la miga de pan.
+
+            Puede ser `null` —la ficha pudo corregirse después de la
+            comprobación, y una comprobación hecha no se borra por eso—, y
+            entonces se enseña el número solo, que sigue siendo verdad.
+          */}
           <VerificationTracker
             verification={verification}
             qrSvg={qrSvg}
             labelFor={labelFor}
             organizationName={session.organization.displayName}
+            holderName={holderName}
           />
         </div>
 
