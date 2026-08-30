@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { formatClock } from '@/lib/format';
 import { describeVerification, type VerificationStatus } from '@/lib/verification-status';
+import { WalletLink } from './WalletLink';
 
 /**
  * El seguimiento de una comprobación — **C2** (en curso) y **C3** (recibo) del
@@ -419,17 +420,37 @@ export function VerificationTracker({
         settledAt={settledAt}
       />
 
-      {status === 'pending' && !overdue && verification.channel === 'qr' && (
+      {/*
+        EL ENLACE SE OFRECE EN LOS DOS CANALES, Y ANTES SÓLO EN UNO.
+
+        El QR es del canal `qr` y ahí se queda: es para el cliente que está
+        delante del mostrador. El ENLACE es otra cosa —abre la cartera del
+        aparato que lo toca— y sirve igual en los dos casos:
+
+        - en `qr`, para quien tiene la consola abierta en su propio móvil y no
+          puede fotografiar su propia pantalla;
+        - en `phone`, para comprobar que el enlace funciona SIN depender de que
+          llegue el aviso push, que es una pieza aparte que puede fallar sola.
+          Antes, si el aviso no llegaba, no había ninguna otra forma de entrar
+          en la ceremonia desde esta pantalla.
+
+        Sólo mientras la petición está viva: pasado el plazo el enlace lleva a
+        una sesión que el verificador ya no reconoce, y la cartera enseñaría un
+        error en vez de una ceremonia.
+      */}
+      {status === 'pending' && !overdue && (
         <div className="card">
-          <h2>Su código</h2>
-          {/*
-            El SVG lo genera `qrcode` en NUESTRO servidor a partir del enlace
-            que devolvió te-api; no es HTML de terceros.
-          */}
-          <div className="qr" dangerouslySetInnerHTML={{ __html: qrSvg ?? '' }} />
-          <p style={{ marginTop: 16, marginBottom: 0 }}>
-            <span className="mono">{verification.authorizationRequestUrl}</span>
-          </p>
+          <h2>{verification.channel === 'qr' ? 'Su código' : 'Abrir en la cartera'}</h2>
+          {verification.channel === 'qr' && (
+            <>
+              {/*
+                El SVG lo genera `qrcode` en NUESTRO servidor a partir del
+                enlace que devolvió te-api; no es HTML de terceros.
+              */}
+              <div className="qr" dangerouslySetInnerHTML={{ __html: qrSvg ?? '' }} />
+            </>
+          )}
+          <WalletLink uri={verification.authorizationRequestUrl} label="la solicitud" />
         </div>
       )}
 

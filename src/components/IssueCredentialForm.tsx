@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DELIVERY_OPTIONS, type DeliveryChannel } from '@/lib/delivery';
 
+import { WalletLink } from './WalletLink';
+
 /**
  * La pantalla de emisión — **C0** del artifact «Llamada Verificada».
  *
@@ -117,7 +119,6 @@ export function IssueCredentialForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [result, setResult] = useState<IssueResult | undefined>();
-  const [copied, setCopied] = useState(false);
 
   const selectedType = useMemo(
     () => credentialTypes.find((option) => option.type === type),
@@ -144,7 +145,6 @@ export function IssueCredentialForm({
     setBusy(true);
     setError(undefined);
     setResult(undefined);
-    setCopied(false);
     try {
       const response = await fetch('/api/credentials/issue', {
         method: 'POST',
@@ -172,17 +172,6 @@ export function IssueCredentialForm({
       setError(cause instanceof Error ? cause.message : 'no se ha podido contactar con el servidor');
     } finally {
       setBusy(false);
-    }
-  };
-
-  const copyLink = async () => {
-    if (result === undefined) return;
-    try {
-      await navigator.clipboard.writeText(result.offerUri);
-      setCopied(true);
-    } catch {
-      // Sin permiso de portapapeles el enlace sigue visible y seleccionable
-      // debajo. No merece un error en pantalla.
     }
   };
 
@@ -339,15 +328,11 @@ export function IssueCredentialForm({
               </div>
             )}
 
-            {/* El enlace, siempre y en texto. Es la misma URI en los cuatro
-                canales: hay carteras que se abren desde el enlace y pantallas
-                desde las que no se puede fotografiar nada. */}
-            <p style={{ marginTop: 16 }}>
-              <span className="mono">{result.offerUri}</span>
-            </p>
-            <button type="button" className="secondary" onClick={copyLink}>
-              {copied ? 'Enlace copiado' : 'Copiar enlace'}
-            </button>
+            {/* El enlace, siempre. Es la misma URI en los cuatro canales: hay
+                carteras que se abren desde el enlace y pantallas desde las que
+                no se puede fotografiar nada. Y ahora se puede TOCAR, que es lo
+                que hace falta cuando la consola se abre desde el móvil. */}
+            <WalletLink uri={result.offerUri} label="la oferta" />
 
             {result.officialNumbers.length > 0 && (
               <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>

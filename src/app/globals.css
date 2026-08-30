@@ -1793,3 +1793,43 @@ main.narrow {
     flex-direction: column;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   El enlace que abre la cartera
+
+   Se usa en emisión y en seguimiento, y las dos tienen que verse igual: es el
+   mismo gesto —«esto lo abre el teléfono»— y dos maquetaciones distintas para
+   el mismo gesto se leen como dos cosas distintas.
+
+   La URI va en su propia línea y ROMPE POR CUALQUIER SITIO (`anywhere`): es una
+   cadena de cientos de caracteres sin espacios, y sin esto se sale de la
+   tarjeta y empuja la página entera a desplazarse en horizontal. En el móvil,
+   que es donde esta pantalla importa, eso deja los botones fuera de la vista.
+   ───────────────────────────────────────────────────────────────────────────── */
+.wallet-link {
+  margin-top: 16px;
+}
+
+.wallet-link-uri {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--paper);
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+/* `wrap` y no `nowrap`: en un teléfono estrecho los dos botones no caben en una
+   fila, y comprimidos se tocan. Envueltos, el segundo baja entero. */
+.wallet-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.wallet-link-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
