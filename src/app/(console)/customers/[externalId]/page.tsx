@@ -1,32 +1,52 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { IssueCredentialPanel } from '@/components/IssueCredentialPanel';
-import { RequestCredentialPanel } from '@/components/RequestCredentialPanel';
-import { resolveCredentialTypes, type CredentialTypeView } from '@/lib/credential-profiles';
-import { findCustomer, findCustomerAttribute } from '@/lib/customers';
-import { getEmployeeSession } from '@/lib/session';
-import { describeTeApiError, fetchB2bOrganizationCached, TeApiError } from '@/lib/te-api';
+import { VerificationPill } from '@/components/VerificationPill';
+import { listOffersForCustomer, type IssuedOffer } from '@/lib/credential-offers';
+import { loadCustomerContext } from '@/lib/customer-context';
+import { deliveryPhrase } from '@/lib/delivery';
+import { formatCalendarDate, formatTimestamp } from '@/lib/format';
+import { listVerificationsForCustomer, type VerificationRecord } from '@/lib/verifications';
 
 /**
- * La ficha del cliente, con los dos medios ciclos: emitir y comprobar.
+ * La ficha del cliente — **C1** del artifact «Llamada Verificada».
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  NADA DE ESTA PANTALLA SABE QUE EL BANCO SE LLAMA BANCO DEMO
+ *  UNA FICHA, NO UN FORMULARIO: AQUÍ NO SE EMITE NI SE COMPROBA NADA
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Los tipos de credencial **salen de te-api** (`GET /v1/b2b/organization`), no
- * de una lista escrita aquí: el desplegable no puede ofrecer un tipo que el
- * padrón de la organización no tiene, porque la lista y la comprobación vienen
- * de la misma fuente.
+ * Esta pantalla contesta tres preguntas y ninguna más: **quién es**, **qué ha
+ * pasado con su identidad digital** y **qué se puede hacer ahora**. Las dos
+ * acciones —emitir una credencial y comprobar quién habla— viven cada una en su
+ * propia dirección (`./credential` y `./verify`), y eso no es orden por gusto:
  *
- * Los **atributos** de cada tipo y los **rótulos** salen de
- * `credential-profiles.ts`, que los lee de configuración — te-api no los
- * expone. Un segundo partner con otro tipo se declara con tres variables de
- * entorno y esta pantalla no cambia.
+ *  · Emitir es **firmar en nombre del banco** un documento que dura años. Es
+ *    una operación con su propia pantalla, sus propias comprobaciones previas
+ *    y su propio resultado que hay que leer. Metida en un bloque de la ficha,
+ *    se ejecuta mientras se mira otra cosa.
+ *  · Comprobar abre una ceremonia que **le suena el teléfono a una persona** y
+ *    que hay que seguir hasta que conteste. Su seguimiento necesita una
+ *    dirección propia (`/verifications/<id>`) para poder recargarse, pasarse a
+ *    un compañero y volver a abrirse mañana.
  *
- * Si te-api no contesta, la ficha se enseña igual con el aviso: poder consultar
- * un cliente no tiene por qué depender de que la emisión esté operativa.
+ * La ficha se queda con lo que sí es de la ficha: los datos del titular y el
+ * diario de lo que este banco ha hecho con su identidad.
+ *
+ * ## Las dos columnas dicen algo
+ *
+ * A la izquierda, **lo que el banco ya tenía**: el padrón y su historia. A la
+ * derecha, con filete azul, **la capa de identidad**: el estado y las acciones.
+ * Un directivo que mire esta pantalla tiene que poder ver de un vistazo qué
+ * parte de su herramienta es la suya de siempre y qué parte es lo nuevo.
+ *
+ * ## Y lo que sigue sin haber: insignias verdes
+ *
+ * No hay ninguna marca de «credencial activa» ni de «perfil verificado», y no
+ * es un olvido. **El CRM no conoce ninguno de los dos estados**: te-api no
+ * cuenta si el titular aceptó la oferta ni con qué nivel de garantía nació su
+ * perfil. Una insignia verde que no pregunta a nadie es peor que ninguna,
+ * porque el agente se la cree. Lo que sí se enseña es lo que este banco hizo,
+ * con su fecha, y el panel dice en voz alta lo que no puede saber.
  */
 
 export const dynamic = 'force-dynamic';
@@ -37,189 +57,279 @@ export default async function CustomerPage({
   params: Promise<{ externalId: string }>;
 }) {
   const { externalId } = await params;
-  const session = await getEmployeeSession();
-  const customer = await findCustomer(session.organization.orgId, decodeURIComponent(externalId));
+  const { session, customer, teApiWarning } = await loadCustomerContext(externalId);
 
   if (customer === null) notFound();
 
-  let credentialTypes: readonly CredentialTypeView[] = [];
-  let issuerDid: string | undefined;
-  let teApiWarning: string | undefined;
+  const [offers, verifications] = await Promise.all([
+    listOffersForCustomer(session.organization.orgId, customer.externalId),
+    listVerificationsForCustomer(session.organization.orgId, customer.externalId),
+  ]);
 
-  try {
-    const organization = await fetchB2bOrganizationCached(session.organization);
-    // El cruce de las tres fuentes: el padrón dice qué tipos hay, la
-    // configuración qué lleva cada uno, y la ficha cuáles puede rellenar.
-    credentialTypes = resolveCredentialTypes(organization.credentialTypes, customer);
-    issuerDid = organization.did;
-  } catch (error) {
-    teApiWarning =
-      error instanceof TeApiError
-        ? describeTeApiError(error)
-        : error instanceof Error
-          ? error.message
-          : 'te-api no responde';
-  }
+  const lastOffer = offers[0];
+  const lastVerification = verifications[0];
+  const href = `/customers/${encodeURIComponent(customer.externalId)}`;
+
+  /**
+   * La comprobación que sigue viva, si la hay.
+   *
+   * «Viva» es pendiente **y dentro de plazo**: una fila que se quedó en
+   * `pending` con la hora vencida no es una ceremonia en curso, es una que
+   * nadie miró cuando caducó. Es la misma condición que decide el color de la
+   * insignia, y por eso el plazo se compara aquí igual que en
+   * `describeVerification`.
+   */
+  const liveVerification =
+    lastVerification !== undefined &&
+    lastVerification.status === 'pending' &&
+    new Date(lastVerification.expiresAt).getTime() > Date.now()
+      ? lastVerification
+      : undefined;
 
   return (
     <>
-      <h1>
-        {customer.givenName} {customer.familyName}
-      </h1>
-      {/*
-        La línea que el artifact pone bajo el nombre en C1. Sale de la fila y no
-        se compone con nada que el CRM no sepa: no hay ninguna insignia de
-        «credencial activa» ni de «perfil verificado», porque **el CRM no
-        conoce ninguno de los dos estados**. te-api no le cuenta si el titular
-        aceptó la oferta ni con qué nivel de garantía nació su perfil, y una
-        insignia verde que no pregunta a nadie es peor que ninguna: el agente
-        la creería.
-      */}
-      <p className="muted">
-        {customer.customerSince === null
-          ? null
-          : `Cliente desde ${formatCustomerSince(customer.customerSince)}`}
-        {customer.customerSince !== null && customer.accountLast4 !== null ? ' · ' : null}
-        {customer.accountLast4 === null ? null : `cuenta ···· ${customer.accountLast4}`}
-        {customer.customerSince !== null || customer.accountLast4 !== null ? <br /> : null}
-        <Link href="/customers">← Clientes</Link>
-      </p>
-
-      <div className="card">
-        <h2>Ficha</h2>
-        <dl className="facts">
-          <dt>Identificador</dt>
-          <dd className="mono">{customer.externalId}</dd>
-          <dt>Correo</dt>
-          <dd>{customer.email ?? '—'}</dd>
-          <dt>Teléfono</dt>
-          <dd>{customer.phone ?? '—'}</dd>
-          <dt>Cuenta</dt>
-          <dd>{customer.accountLast4 === null ? '—' : `···· ${customer.accountLast4}`}</dd>
-          <dt>Cliente desde</dt>
-          <dd>{customer.customerSince ?? '—'}</dd>
-        </dl>
-      </div>
-
-      {/*
-        Un bloque por tipo declarado, y no una lista fija de cuatro claims.
-        `sub` e `iss` van una sola vez arriba porque no dependen del tipo: el
-        primero es el id de esta ficha y el segundo el DID de la organización.
-      */}
-      <div className="card">
-        <h2>Lo que iría en la credencial</h2>
-        <p className="muted">
-          Se construye desde esta ficha, en el servidor. El correo y el teléfono no entran en
-          ninguna: no están en el catálogo de atributos divulgables del padrón, y un dato metido
-          «ya que estamos» acaba en todas las presentaciones que se hagan con esa credencial.
-        </p>
-        <dl className="facts">
-          <dt>sub</dt>
-          <dd className="mono">{customer.externalId}</dd>
-          {issuerDid !== undefined && (
-            <>
-              <dt>iss</dt>
-              <dd className="mono">{issuerDid}</dd>
-            </>
-          )}
-        </dl>
-
-        {credentialTypes.map((option) => (
-          <div key={option.type} className="type-block">
-            {/*
-              El `type_key` sólo se repite detrás del rótulo cuando son cosas
-              distintas. Sin rótulo declarado, `label` ES el `type_key`, y
-              «cliente cliente» es ruido.
-            */}
-            <h3>
-              {option.label}
-              {option.label === option.type ? null : (
-                <span className="mono">{option.type}</span>
-              )}
-            </h3>
-            {option.claims.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>
-                Esta ficha no rellena ningún atributo de este tipo.
-              </p>
-            ) : (
-              <dl className="facts">
-                {option.claims.map((claim) => (
-                  <div key={claim.name} style={{ display: 'contents' }}>
-                    <dt>
-                      {claim.label} <span className="mono">{claim.name}</span>
-                    </dt>
-                    <dd>{findCustomerAttribute(claim.name)?.read(customer) ?? '—'}</dd>
-                  </div>
-                ))}
-              </dl>
+      <header className="page-head">
+        <div>
+          <p className="eyebrow">
+            <Link href="/customers">Clientes</Link>
+          </p>
+          <h1>
+            {customer.givenName} {customer.familyName}
+          </h1>
+          <p className="page-facts">
+            <span className="mono">{customer.externalId}</span>
+            {customer.accountLast4 !== null && (
+              <span>
+                Cuenta <span className="mono">···· {customer.accountLast4}</span>
+              </span>
             )}
-          </div>
-        ))}
-      </div>
+            {customer.customerSince !== null && (
+              <span>Cliente desde {formatCalendarDate(customer.customerSince)}</span>
+            )}
+          </p>
+        </div>
+      </header>
 
       {teApiWarning !== undefined && (
-        <p className="alert">No se ha podido consultar te-api: {teApiWarning}</p>
+        <p className="alert">No se ha podido consultar TripleEnable: {teApiWarning}</p>
       )}
 
-      {/*
-        `officialNumbers` baja al navegador y no es un descuido: son los
-        teléfonos públicos del banco, los mismos que están en su web, y el
-        agente tiene que verlos antes de firmarlos dentro de una credencial que
-        va a durar años. Lo que no baja nunca es el secreto M2M, que vive en
-        `organizations.ts` detrás de `import 'server-only'`.
-      */}
-      <IssueCredentialPanel
-        externalId={customer.externalId}
-        holder={{
-          displayName: `${customer.givenName} ${customer.familyName}`,
-          accountLast4: customer.accountLast4,
-        }}
-        officialNumbers={session.organization.officialNumbers}
-        credentialTypes={credentialTypes}
-      />
+      <div className="split side-first">
+        <div className="col-main">
+          <div className="card">
+            <h2>Datos del titular</h2>
+            <dl className="facts">
+              <dt>Identificador</dt>
+              <dd className="mono">{customer.externalId}</dd>
+              <dt>Correo</dt>
+              <dd>{customer.email ?? <span className="none">no consta</span>}</dd>
+              <dt>Teléfono</dt>
+              <dd>{customer.phone ?? <span className="none">no consta</span>}</dd>
+              <dt>Cuenta</dt>
+              <dd className="mono">
+                {customer.accountLast4 === null ? (
+                  <span className="none">no consta</span>
+                ) : (
+                  `···· ${customer.accountLast4}`
+                )}
+              </dd>
+              <dt>Cliente desde</dt>
+              <dd>
+                {customer.customerSince === null ? (
+                  <span className="none">no consta</span>
+                ) : (
+                  formatCalendarDate(customer.customerSince)
+                )}
+              </dd>
+            </dl>
+          </div>
 
-      {/*
-        La vuelta del ciclo. Los atributos que se pueden pedir son los de cada
-        tipo cruzados con lo que esta ficha rellena, y salen de la misma
-        resolución que los construye al emitir: pedir uno que el banco no emite
-        sería una petición que ninguna cartera puede satisfacer.
+          <div className="card">
+            <h2>Actividad de identidad</h2>
+            <p className="muted">
+              Lo que esta consola ha hecho con la identidad de esta persona, de lo más reciente a
+              lo más antiguo. Es el registro del banco: cada línea es algo que hizo un empleado
+              suyo, con su hora.
+            </p>
+            <CustomerActivity offers={offers} verifications={verifications} />
+          </div>
+        </div>
 
-        `agent` baja al navegador a propósito y no es un descuido: no es un
-        secreto, es lo que el titular va a ver en su móvil, y el agente tiene que
-        poder leerlo en pantalla para decirlo en voz alta.
-      */}
-      <RequestCredentialPanel
-        externalId={customer.externalId}
-        credentialTypes={credentialTypes}
-        agent={session.agent}
-      />
+        <div className="col-side">
+          <div className="panel">
+            <h2>
+              Identidad digital
+              <span className="panel-mark">TripleEnable</span>
+            </h2>
+
+            <dl className="facts">
+              <dt>Credencial</dt>
+              <dd>
+                {lastOffer === undefined ? (
+                  <span className="none">Todavía no se le ha ofrecido ninguna</span>
+                ) : (
+                  <>
+                    Ofrecida el {formatTimestamp(lastOffer.createdAt)}
+                    <br />
+                    {lastOffer.typeKey} · {deliveryPhrase(lastOffer.delivery)}
+                  </>
+                )}
+              </dd>
+
+              <dt>Última verificación</dt>
+              <dd>
+                {lastVerification === undefined ? (
+                  <span className="none">Nunca se le ha comprobado la identidad</span>
+                ) : (
+                  <>
+                    <VerificationPill
+                      status={lastVerification.status}
+                      expiresAt={lastVerification.expiresAt}
+                    />
+                    <br />
+                    <Link href={`/verifications/${encodeURIComponent(lastVerification.presentationId)}`}>
+                      {formatTimestamp(lastVerification.requestedAt)}
+                    </Link>
+                  </>
+                )}
+              </dd>
+            </dl>
+
+            {/*
+              La frase que sostiene toda la honradez de esta pantalla. Va aquí,
+              debajo del estado, y no escondida en un pie: quien lea «ofrecida»
+              tiene que leer a continuación que ofrecida no es aceptada.
+
+              Se ha acortado, no ablandado. Lo que sobraba era el porqué
+              técnico —qué ruta de te-api falta—: al director que decide le
+              basta con que no lo sabemos, y a nadie le tranquiliza leer un
+              inventario de nuestras carencias en la ficha de su cliente.
+            */}
+            <p className="panel-note">
+              «Ofrecida» es lo que hizo el banco.{' '}
+              <strong>Si el titular la guardó, no lo sabemos</strong>, y por eso aquí no hay ninguna
+              insignia de «credencial activa».
+            </p>
+          </div>
+
+          <div className="panel">
+            <h2>Qué se puede hacer</h2>
+            <div className="actions">
+              {/*
+                Si hay una ceremonia viva, volver a ella es lo primero y no una
+                acción más: el agente que ha ido a mirar otra cosa mientras el
+                cliente busca el móvil tiene que poder regresar sin recordar la
+                dirección. Lanzar otra comprobación mientras la anterior sigue
+                abierta le hace sonar el teléfono dos veces a la misma persona.
+              */}
+              {liveVerification !== undefined && (
+                <Link
+                  className="action primary"
+                  href={`/verifications/${encodeURIComponent(liveVerification.presentationId)}`}
+                >
+                  <strong>Seguir la verificación en curso</strong>
+                  <span>Lanzada a las {formatTimestamp(liveVerification.requestedAt)}.</span>
+                </Link>
+              )}
+              <Link
+                className={liveVerification === undefined ? 'action primary' : 'action'}
+                href={`${href}/credential`}
+              >
+                <strong>Emitir credencial</strong>
+                <span>Crear la oferta y hacérsela llegar por uno de los cuatro canales.</span>
+              </Link>
+              {/*
+                Los dos niveles del artifact, cada uno abriendo la misma
+                pantalla en el nivel que le toca. Siguen siendo dos ceremonias
+                distintas —una se aprueba deslizando y la otra tecleando cuatro
+                cifras— y por eso son dos entradas y no un desplegable.
+              */}
+              <Link className="action" href={`${href}/verify`}>
+                <strong>Verificar quién habla</strong>
+                <span>Nivel 1 · que quien está al teléfono sea el titular.</span>
+              </Link>
+              <Link className="action" href={`${href}/verify?level=transaction`}>
+                <strong>Autorizar operación</strong>
+                <span>Nivel 2 · firmar un importe. Todavía no se puede ejecutar.</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }
 
 /**
- * `2024-03-12` → `12 mar 2024`, **sin restar un día por el camino**.
+ * El diario del cliente: ofertas y comprobaciones en una sola columna.
  *
- * ═══════════════════════════════════════════════════════════════════════════
- *  `new Date('2024-03-12')` NO ES EL 12 DE MARZO AQUÍ
- * ═══════════════════════════════════════════════════════════════════════════
- *
- * Una cadena `YYYY-MM-DD` a secas la interpreta JavaScript como medianoche
- * **UTC**, y al pintarla en una zona al oeste de Greenwich sale el día
- * anterior. Se vio en pantalla: la ficha de un cliente de alta el 12 de marzo
- * ponía «11 mar 2024».
- *
- * Es exactamente el mismo fallo que `src/lib/customers.ts` evita formateando
- * `customer_since` en Postgres —ahí está su nota larga— y que se volvió a
- * colar por la puerta de al lado en cuanto alguien construyó un `Date` con esa
- * cadena. La `T00:00:00` sin zona obliga a interpretarla en **hora local**,
- * que es lo que significa una fecha de alta comercial: un día del calendario,
- * sin hora y sin huso.
+ * Se mezclan a propósito. Para el agente son la misma historia —lo que este
+ * banco ha hecho con la identidad de esta persona— y separarlas en dos listas
+ * obliga a leer dos veces y a cruzar fechas a ojo para saber qué pasó antes.
  */
-function formatCustomerSince(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('es-ES', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+function CustomerActivity({
+  offers,
+  verifications,
+}: {
+  offers: readonly IssuedOffer[];
+  verifications: readonly VerificationRecord[];
+}) {
+  const entries = [
+    ...offers.map((offer) => ({ at: offer.createdAt, offer, verification: undefined })),
+    ...verifications.map((verification) => ({
+      at: verification.requestedAt,
+      offer: undefined,
+      verification,
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+
+  if (entries.length === 0) {
+    return (
+      <p className="none" style={{ margin: 0 }}>
+        Todavía no ha pasado nada. Empieza emitiéndole su credencial: sin ella no hay nada que
+        comprobar después.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="activity">
+      {entries.map((entry) => (
+        <li key={entry.offer?.offerId ?? entry.verification?.presentationId}>
+          <span className="activity-when">{formatTimestamp(entry.at)}</span>
+          <div className="activity-what">
+            {entry.offer !== undefined && (
+              <>
+                <strong>Credencial ofrecida</strong>
+                <span className="activity-sub">
+                  {entry.offer.typeKey} · {deliveryPhrase(entry.offer.delivery)} · desde{' '}
+                  <span className="mono">{entry.offer.createdBy}</span>
+                </span>
+              </>
+            )}
+            {entry.verification !== undefined && (
+              <>
+                <strong>
+                  Verificación de identidad{' '}
+                  <VerificationPill
+                    status={entry.verification.status}
+                    expiresAt={entry.verification.expiresAt}
+                  />
+                </strong>
+                <span className="activity-sub">
+                  {entry.verification.channel === 'phone'
+                    ? 'Aviso a su móvil'
+                    : 'QR en el mostrador'}{' '}
+                  · a nombre de {entry.verification.agentName} ·{' '}
+                  <Link href={`/verifications/${encodeURIComponent(entry.verification.presentationId)}`}>
+                    ver la verificación
+                  </Link>
+                </span>
+              </>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
 }

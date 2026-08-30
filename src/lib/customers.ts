@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { query } from './db';
+import type { VerificationStatus } from './verification-status';
 
 /**
  * El padrón de clientes de Banco Demo — lectura y alta.
@@ -49,18 +50,23 @@ interface CustomerRow extends Record<string, unknown> {
  * `toISOString()` en una zona al oeste de UTC sale el día anterior. El cliente
  * dado de alta el día 1 aparecería como del 31, y eso acabaría dentro de una
  * credencial firmada. Formatearlo en Postgres quita el problema de raíz.
+ *
+ * Las columnas llevan el alias `c.` porque el listado cruza esta tabla con la
+ * última oferta y la última comprobación de cada cliente, y las tres tienen
+ * `created_at`: sin prefijo, Postgres rechaza la consulta por ambigua. Todas
+ * las consultas declaran el mismo alias para que la lista sea una sola.
  */
 const SELECT_COLUMNS = `
-  id,
-  org_id,
-  external_id,
-  given_name,
-  family_name,
-  email,
-  phone,
-  account_last4,
-  to_char(customer_since, 'YYYY-MM-DD') as customer_since,
-  created_at
+  c.id,
+  c.org_id,
+  c.external_id,
+  c.given_name,
+  c.family_name,
+  c.email,
+  c.phone,
+  c.account_last4,
+  to_char(c.customer_since, 'YYYY-MM-DD') as customer_since,
+  c.created_at
 `;
 
 function toCustomer(row: CustomerRow): Customer {
@@ -78,12 +84,123 @@ function toCustomer(row: CustomerRow): Customer {
   };
 }
 
-export async function listCustomers(orgId: string): Promise<Customer[]> {
-  const rows = await query<CustomerRow>(
-    `select ${SELECT_COLUMNS} from customer where org_id = $1 order by created_at desc limit 500`,
-    [orgId],
+/**
+ * Una fila del listado: la ficha, más el estado de su identidad digital.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LAS DOS COLUMNAS DE ESTADO SALEN DEL DIARIO DEL BANCO, NO DE UNA SUPOSICIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `lastOffer*` es lo que ESTA consola ofreció y por dónde. `lastVerification*`
+ * es el desenlace que te-api dio de la última comprobación. Ninguna de las dos
+ * afirma que el titular tenga la credencial guardada ni que su perfil esté
+ * verificado: **eso no lo sabe nadie aquí**, te-api no tiene ruta que lo diga,
+ * y por eso no hay ninguna insignia que lo insinúe. Lo que hay son hechos con
+ * fecha.
+ */
+export interface CustomerListEntry extends Customer {
+  readonly lastOfferAt: string | null;
+  readonly lastOfferDelivery: string | null;
+  readonly lastVerificationId: string | null;
+  readonly lastVerificationAt: string | null;
+  readonly lastVerificationStatus: VerificationStatus | null;
+  readonly lastVerificationExpiresAt: string | null;
+}
+
+interface CustomerListRow extends CustomerRow {
+  last_offer_at: Date | null;
+  last_offer_delivery: string | null;
+  last_verification_id: string | null;
+  last_verification_at: Date | null;
+  last_verification_status: VerificationStatus | null;
+  last_verification_expires_at: Date | null;
+}
+
+/**
+ * Quita los acentos para poder buscar sin ellos.
+ *
+ * Un agente al teléfono teclea «perez», no «Pérez»: pedirle el acento para
+ * encontrar a un cliente es pedirle que sepa cómo está escrito lo que está
+ * buscando. Se hace con `translate` y no con la extensión `unaccent` porque
+ * esta base es la del CRM y no queremos que levantarla dependa de que alguien
+ * haya instalado una extensión — el juego de caracteres del castellano y el
+ * catalán cabe en una línea.
+ */
+const UNACCENT = `translate(lower($COLUMN$), 'áàäâãéèëêíìïîóòöôõúùüûñç', 'aaaaaeeeeiiiiooooouuuunc')`;
+
+function unaccented(column: string): string {
+  return UNACCENT.replace('$COLUMN$', column);
+}
+
+/**
+ * El listado con búsqueda, ya cruzado con el estado de cada cliente.
+ *
+ * El término se compara contra el nombre completo, el identificador, el correo
+ * y los cuatro de la cuenta, que es lo que un agente tiene delante cuando
+ * suena el teléfono: o le dicen cómo se llaman, o le cantan un número.
+ *
+ * El orden es **alfabético por apellidos**, como un padrón y no como un registro
+ * de altas: quien mira esta pantalla busca a una persona, no las últimas cuatro
+ * que se dieron de alta.
+ *
+ * Los dos `left join lateral` traen la última oferta y la última comprobación
+ * de cada fila en la misma consulta. Con una consulta por cliente esto serían
+ * cien viajes a la base para pintar cincuenta filas.
+ */
+export async function searchCustomers(
+  orgId: string,
+  term: string,
+): Promise<CustomerListEntry[]> {
+  const trimmed = term.trim();
+  const pattern = trimmed === '' ? null : `%${trimmed}%`;
+
+  const rows = await query<CustomerListRow>(
+    `select ${SELECT_COLUMNS},
+            offer.created_at   as last_offer_at,
+            offer.delivery     as last_offer_delivery,
+            ver.presentation_id as last_verification_id,
+            ver.requested_at    as last_verification_at,
+            ver.status          as last_verification_status,
+            ver.expires_at      as last_verification_expires_at
+       from customer c
+       left join lateral (
+         select o.created_at, o.delivery
+           from credential_offer o
+          where o.org_id = c.org_id and o.external_id = c.external_id
+          order by o.created_at desc
+          limit 1
+       ) offer on true
+       left join lateral (
+         select v.presentation_id, v.requested_at, v.status, v.expires_at
+           from verification v
+          where v.org_id = c.org_id and v.external_id = c.external_id
+          order by v.requested_at desc
+          limit 1
+       ) ver on true
+      where c.org_id = $1
+        and ($2::text is null
+             or ${unaccented("concat(c.given_name, ' ', c.family_name)")} like ${unaccented('$2')}
+             or lower(c.external_id) like lower($2)
+             or lower(coalesce(c.email, '')) like lower($2)
+             or coalesce(c.account_last4, '') like $2)
+      order by c.family_name, c.given_name
+      limit 500`,
+    [orgId, pattern],
   );
-  return rows.map(toCustomer);
+
+  return rows.map((row) => ({
+    ...toCustomer(row),
+    lastOfferAt: row.last_offer_at === null ? null : row.last_offer_at.toISOString(),
+    lastOfferDelivery: row.last_offer_delivery,
+    lastVerificationId: row.last_verification_id,
+    lastVerificationAt:
+      row.last_verification_at === null ? null : row.last_verification_at.toISOString(),
+    lastVerificationStatus: row.last_verification_status,
+    lastVerificationExpiresAt:
+      row.last_verification_expires_at === null
+        ? null
+        : row.last_verification_expires_at.toISOString(),
+  }));
 }
 
 /**
@@ -111,9 +228,9 @@ export async function listCustomers(orgId: string): Promise<Customer[]> {
  */
 export async function findCustomerByEmail(orgId: string, email: string): Promise<Customer | null> {
   const rows = await query<CustomerRow>(
-    `select ${SELECT_COLUMNS} from customer
-      where org_id = $1 and lower(email) = lower($2)
-      order by created_at asc
+    `select ${SELECT_COLUMNS} from customer c
+      where c.org_id = $1 and lower(c.email) = lower($2)
+      order by c.created_at asc
       limit 2`,
     [orgId, email],
   );
@@ -128,7 +245,7 @@ export async function findCustomerByEmail(orgId: string, email: string): Promise
 
 export async function findCustomer(orgId: string, externalId: string): Promise<Customer | null> {
   const rows = await query<CustomerRow>(
-    `select ${SELECT_COLUMNS} from customer where org_id = $1 and external_id = $2`,
+    `select ${SELECT_COLUMNS} from customer c where c.org_id = $1 and c.external_id = $2`,
     [orgId, externalId],
   );
   const row = rows[0];
@@ -155,8 +272,10 @@ export class DuplicateCustomerError extends Error {
 
 export async function createCustomer(orgId: string, input: CustomerInput): Promise<Customer> {
   try {
+    // `as c` para que el `returning` pueda usar el mismo alias que el resto de
+    // consultas y `SELECT_COLUMNS` sirva también aquí.
     const rows = await query<CustomerRow>(
-      `insert into customer
+      `insert into customer as c
          (org_id, external_id, given_name, family_name, email, phone, account_last4, customer_since)
        values ($1, $2, $3, $4, $5, $6, $7, $8)
        returning ${SELECT_COLUMNS}`,

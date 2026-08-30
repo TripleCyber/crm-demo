@@ -14,6 +14,13 @@ const nextConfig = {
   // `client_id` se leen SÓLO en código de servidor (`src/lib/organizations.ts`,
   // que además es `import 'server-only'`), y ese fichero no puede entrar en el
   // bundle del navegador ni por accidente.
+
+  // El indicador de desarrollo de Next se pone abajo a la izquierda por
+  // defecto, que es justo donde la barra lateral enseña **quién es el agente**:
+  // tapaba el nombre y el número que el titular va a ver en su móvil. Sólo se
+  // pinta en `next dev`, pero es en `next dev` donde se hacen las capturas que
+  // mira alguien de fuera.
+  devIndicators: { position: 'bottom-right' },
 };
 
 export default nextConfig;

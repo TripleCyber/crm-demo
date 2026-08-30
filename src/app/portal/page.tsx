@@ -37,8 +37,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   'sesion-perdida':
     'Se perdió el hilo del login. Suele pasar al volver con el botón «atrás» o si la ' +
     'pestaña ha estado abierta mucho rato. Vuelve a empezar.',
-  state: 'La respuesta de Logto no corresponde a esta petición de login. Vuelve a empezar.',
-  logto: 'Logto no ha completado el login. Vuelve a intentarlo.',
+  // Estos dos los lee un CLIENTE del banco, no un operador: «Logto» ahí es un
+  // nombre de una pieza nuestra que no significa nada para él y que además le
+  // dice que su banco depende de algo que no sabe qué es.
+  state: 'La respuesta no corresponde a esta petición de acceso. Vuelve a empezar.',
+  logto: 'No hemos podido completar el acceso. Vuelve a intentarlo.',
   canje: 'No hemos podido completar el login con TripleEnable. Vuelve a intentarlo.',
 };
 

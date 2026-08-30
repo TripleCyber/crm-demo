@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { saveOfferForPortal } from '@/lib/credential-offers';
+import { recordIssuedOffer } from '@/lib/credential-offers';
 import { findDeclaredType, resolveCredentialType } from '@/lib/credential-profiles';
 import { buildCredentialClaims, findCustomer, type Customer } from '@/lib/customers';
 import { getPortalBaseUrl } from '@/lib/portal-oidc';
@@ -187,19 +187,32 @@ export async function POST(request: Request): Promise<NextResponse> {
     // canales y el agente tiene que poder leerla para depurar.
     const qrSvg = delivery === 'qr' ? await renderQrSvg(offer.offerUri) : undefined;
 
-    // El canal `app` es el único que deja rastro: la oferta se guarda para que
-    // el titular la recoja al entrar en el portal. Ver `credential-offers.ts`.
-    if (delivery === 'app') {
-      await saveOfferForPortal({
-        orgId: session.organization.orgId,
-        externalId: customer.externalId,
-        offerId: offer.offerId,
-        offerUri: offer.offerUri,
-        typeKey: declared.type,
-        expiresAt: offer.expiresAt,
-        createdBy: session.actor,
-      });
-    }
+    // ── El registro, para los cuatro canales ───────────────────────────────
+    //
+    // Antes sólo se anotaba el canal `app`, porque era el único que lo
+    // necesitaba **para funcionar**: la oferta tiene que estar en algún sitio
+    // hasta que el titular entre en el portal.
+    //
+    // Ahora se anotan los cuatro, por una razón distinta: la ficha del cliente
+    // tiene que poder contestar «¿ya se le ofreció su credencial, cuándo y por
+    // dónde?». Eso el banco lo sabe de sus propios actos, y es lo más que se
+    // puede decir con verdad — **si el titular la aceptó no lo sabe nadie**,
+    // te-api no tiene ruta que lo diga, y por eso la ficha sigue sin pintar
+    // ninguna insignia de «credencial activa».
+    //
+    // El `delivery` va en la fila porque el portal se queda sólo con las suyas:
+    // una oferta que salió por QR ya se la llevó quien estaba delante de la
+    // pantalla. Ver `credential-offers.ts`.
+    await recordIssuedOffer({
+      orgId: session.organization.orgId,
+      externalId: customer.externalId,
+      offerId: offer.offerId,
+      offerUri: offer.offerUri,
+      typeKey: declared.type,
+      delivery,
+      expiresAt: offer.expiresAt,
+      createdBy: session.actor,
+    });
 
     return NextResponse.json({
       offerId: offer.offerId,

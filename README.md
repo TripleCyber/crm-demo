@@ -16,13 +16,14 @@ emisión son los de producción.
 |---|---|
 | ✅ | Next.js (App Router, TypeScript) con el patrón de `tenant-admin`: proxy en el servidor, ni un secreto en el navegador |
 | ✅ | Base propia Postgres con `customer`, migración reproducible y siembra aparte |
-| ✅ | Listado de clientes y alta de cliente |
+| ✅ | Listado de clientes con **buscador** (nombre, identificador, correo o los cuatro de la cuenta, sin acentos) y dos columnas de estado por cliente, y alta de cliente |
 | ✅ | Cliente del token B2B en el servidor: `client_credentials` + `resource` + `organization_id` + `scope`, cacheado y renovado antes de caducar |
 | ✅ | Botón «emitir credencial» → `POST /v1/b2b/credentials` de te-api → QR, enlace debajo y PIN aparte. **Probado de punta a punta el 2026-08-29**: la credencial se recogió con el flujo OID4VCI y salió con `iss = did:web:bank.demo-te.com`, `sub` = el `external_id` de la ficha y los cuatro claims como divulgaciones |
 | ✅ | Multi-organización desde el principio: mapa `orgId → {…}` por variables de entorno, sin código que tocar para añadir la segunda |
 | ⛔ | **Login de empleado con Logto OIDC.** Es la casilla que queda de F4a. Mientras no esté, esta consola **no está autenticada** y no puede publicarse donde llegue nadie de fuera |
 | ✅ | **Portal del cliente en `/portal`** (F4b): login OIDC del titular contra Logto y `POST /v1/b2b/links` desde el servidor. **Probado en el navegador el 2026-08-29**: Teófilo entró con su cuenta de TripleEnable y el vínculo quedó hecho — fila en `te.org_subject` de te-api, y volver a entrar es idempotente |
-| ⛔ | Estado de la credencial y del vínculo **en la ficha de la consola de agentes**: hoy el vínculo sólo se ve desde el portal y desde la base de te-api |
+| ✅ | **El diario del banco**: cada oferta emitida y cada comprobación lanzada quedan anotadas (`credential_offer`, `verification`), y la ficha las enseña con su hora y su autor. Es lo que permite que el listado tenga estado y que una verificación tenga dirección propia |
+| ⛔ | Estado real **de la credencial y del vínculo**: si el titular aceptó la oferta o si tiene cartera enrolada. te-api no lo cuenta, así que la ficha dice «ofrecida» —lo que hizo el banco— y **no pinta ninguna insignia** de «credencial activa» ni de «perfil verificado» |
 | ✅ | Botón «pedir credencial» → `POST /v1/b2b/presentations` de te-api → QR de la petición OID4VP, y en la misma pantalla lo que el titular enseñó. **Probado de punta a punta el 2026-08-29** con un guion que hace de cartera: `pending` → la cartera presenta → `verified` con `given_name` y `family_name`, y sólo con ésos |
 | ✅ | **La vía telefónica**: «está al teléfono · avisar a su móvil» → la misma presentación **más `POST /v1/b2b/wakeups`**, el timbre. Es lo que hace que la comprobación sirva para una llamada, donde el cliente no ve la pantalla del agente. **Probado el 2026-08-29**: la llamada sale con `kind: identity` y el `actor` del empleado, te-api contesta `{ wakeupId, expiresAt }` y anota `b2b.wakeup_created`. **Ningún teléfono ha sonado todavía** — ver «Lo que falta para que suene un teléfono» |
 | ⛔ | **Revocación** (la otra mitad de F4c) |
@@ -36,13 +37,38 @@ es estructural: dos grupos de rutas, dos disposiciones y dos sesiones distintas.
 
 | | Quién la usa | Qué ve | Qué autentica |
 |---|---|---|---|
-| `(console)` — `/customers`, `/diagnostics` | Un **empleado** del banco, desde el mostrador | El padrón entero de clientes | Nada todavía (F4a pendiente). Contra te-api autentica el **token M2M** |
+| `(console)` — `/customers`, `/verifications`, `/diagnostics` | Un **empleado** del banco, desde el mostrador | El padrón entero de clientes | Nada todavía (F4a pendiente). Contra te-api autentica el **token M2M** |
 | `portal` — `/portal` | El **titular** | Su ficha y su vínculo, nada más | Login **OIDC contra Logto** con la cuenta de TripleEnable de esa persona |
 
 El grupo `(console)` no cambia ninguna URL —los paréntesis son de Next.js— y
 existe para que la cabecera del banco viva en un fichero aparte de la del
 portal. Un `if` en una cabecera compartida se olvida; un enlace a «Clientes»
 pintado en la pantalla de un titular es un enlace que alguien va a pulsar.
+
+## Las pantallas de la consola, y por qué son cinco y no una
+
+**Cada acción tiene su dirección.** Es la estructura que dibuja el artifact
+«Llamada Verificada» en «Lo que ve Pedro» —C0 en `…/credencial`, C1 en la ficha,
+C2 y C3 en `…/verificaciones/<id>`— y no es orden por gusto: emitir es firmar en
+nombre del banco, y comprobar abre una ceremonia que hay que seguir hasta que el
+titular conteste. Las dos cosas metidas en la ficha convertían la pantalla en un
+formulario largo donde lo que se leía era el desplegable.
+
+| Ruta | Qué es | Artifact |
+|---|---|---|
+| `/customers` | El padrón, con buscador y el estado de identidad de cada cliente | — |
+| `/customers/<id>` | La **ficha**: datos del titular, diario de identidad y las tres acciones | C1 |
+| `/customers/<id>/credential` | **Emitir**: la oferta a la izquierda, lo que se va a firmar a la derecha | C0 |
+| `/customers/<id>/verify` | **Lanzar** la comprobación: los dos niveles, qué se pide y por dónde se avisa | C1 |
+| `/verifications/<presentationId>` | **Seguir** una comprobación: línea de tiempo, QR y recibo | C2 · C3 |
+| `/verifications` | El registro de comprobaciones de la organización | — |
+| `/customers/new` | Alta de cliente | — |
+| `/diagnostics` | La costura con te-api | — |
+
+Que el seguimiento tenga dirección propia es lo que arregla tres cosas de golpe:
+recargar la pestaña ya no pierde la ceremonia en curso, el enlace se le puede
+pasar a un compañero que termine la llamada, y el recibo sigue ahí mañana para
+adjuntarlo a un expediente.
 
 ## Cómo funciona la emisión
 
@@ -207,8 +233,9 @@ la emisión.
 
 ### Nada de Banco Demo está cableado en la comprobación
 
-`RequestCredentialPanel.tsx` no tiene escrito ni un `given_name` ni un
-`cliente`, y `session.ts` ya no compone «Agente de Banco Demo» a mano. Las tres
+`VerificationLauncher.tsx` y `VerificationTracker.tsx` no tienen escrito ni un
+`given_name` ni un `cliente`, y `session.ts` ya no compone «Agente de Banco
+Demo» a mano. Las tres
 fuentes, en orden:
 
 | Qué | De dónde sale |

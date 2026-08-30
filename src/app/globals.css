@@ -1,24 +1,65 @@
 /*
- * Hoja única, sin librería de estilos. Esto es una maqueta de consola interna:
- * lo que tiene que hacer es leerse bien en la pantalla del agente mientras el
- * cliente está delante. Nada más.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA HOJA DE LA CONSOLA · hoja única, sin librería de estilos
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Lo que tiene que hacer esta pantalla es leerse bien mientras el agente está
+ * al teléfono con un cliente. De ahí salen las tres decisiones que gobiernan
+ * todo lo demás:
+ *
+ *  1. **Tres familias con tres oficios.** Un serif sólo para el nombre del
+ *     banco —es una marca, y las marcas de los bancos son serif—, la de
+ *     sistema para la interfaz, y la monoespaciada para **todo lo que es una
+ *     referencia**: identificadores, cuentas, horas, DID. Un número de cliente
+ *     y un nombre de persona no se leen igual y no deben parecerlo; el agente
+ *     tiene que poder cantar un identificador por teléfono sin equivocarse de
+ *     carácter, y para eso las cifras tienen que estar alineadas y no tener
+ *     ambigua la o de la cero.
+ *
+ *  2. **El color dice el estado, y sólo el estado.** No hay ni un acento
+ *     decorativo. Rojo = fraude y nada más; ámbar = ha ido mal sin serlo;
+ *     verde = comprobado; azul = en curso. La regla está escrita entera en
+ *     `src/lib/verification-status.ts`, y aquí sólo se pinta.
+ *
+ *  3. **La columna de la izquierda no se mueve.** Es el ancla de una
+ *     herramienta que se usa ocho horas seguidas.
  */
 
 :root {
   color-scheme: light;
-  --ink: #14181f;
-  --ink-soft: #5b6472;
-  --line: #dfe3ea;
-  --surface: #ffffff;
-  --canvas: #f5f6f9;
-  --brand: #0d4f8b;
-  --brand-ink: #ffffff;
-  --danger: #a3211c;
-  --danger-bg: #fdeceb;
-  --ok: #1c6b4a;
-  --ok-bg: #e8f5ef;
+
+  /* Tinta: tres pesos, y ninguno es negro puro — sobre papel blanco cansa. */
+  --ink: #101720;
+  --ink-2: #56626f;
+  --ink-3: #8a95a2;
+
+  /* Papel y reglas. */
+  --paper: #ffffff;
+  --canvas: #eef1f5;
+  --rule: #dde3ea;
+  --rule-soft: #edf0f4;
+
+  /* La marca del banco. El azul profundo es el de la barra; el claro, el de
+     las superficies seleccionadas. */
+  --navy: #0a3a63;
+  --navy-deep: #0b2942;
+  --navy-line: #17456d;
+  --navy-ink: #eaf1f8;
+  --navy-tint: #e9f0f7;
+
+  /* Los cuatro estados. Ver la nota 2 de arriba. */
+  --ok: #12664a;
+  --ok-bg: #e6f4ee;
   --warn: #8a5300;
-  --warn-bg: #fdf2e0;
+  --warn-bg: #fcf1de;
+  --danger: #9d1f1a;
+  --danger-bg: #fbeae9;
+
+  --shadow-card: 0 1px 2px rgba(16, 23, 32, 0.05);
+  --shadow-rail: 1px 0 0 rgba(16, 23, 32, 0.08);
+
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  --serif: ui-serif, 'Iowan Old Style', Georgia, 'Times New Roman', serif;
 }
 
 * {
@@ -29,117 +70,744 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font: 14.5px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
-  color: var(--brand);
+  color: var(--navy);
 }
 
-.topbar {
+/* Foco visible en todo, y del color de la marca. Quien opera una consola ocho
+   horas acaba tabulando; un foco invisible convierte eso en adivinar. */
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  LA ESTRUCTURA · barra fija + zona de trabajo
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+.console {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  min-height: 100vh;
+}
+
+.rail {
   display: flex;
-  align-items: baseline;
-  gap: 24px;
-  padding: 14px 28px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  flex-direction: column;
+  background: var(--navy-deep);
+  color: var(--navy-ink);
+  box-shadow: var(--shadow-rail);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  /*
+   * `align-self: start` no es un detalle: sin él la celda de la rejilla estira
+   * la barra hasta la altura de TODA la página, y una barra pegajosa más alta
+   * que la ventana no se pega — se va hacia arriba con el resto y desaparece.
+   * Se vio en la pantalla de emisión, que es la más larga.
+   */
+  align-self: start;
 }
 
-.topbar strong {
-  font-size: 16px;
+.rail-brand {
+  padding: 20px 20px 18px;
+  border-bottom: 1px solid var(--navy-line);
 }
 
-.topbar nav {
-  display: flex;
-  gap: 16px;
+/* El nombre del banco en serif: es la única marca de la pantalla y la única
+   pieza que no es interfaz. Todo lo demás está en la de sistema. */
+.rail-brand strong {
+  display: block;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+}
+
+.rail-org {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: rgba(234, 241, 248, 0.6);
+}
+
+.rail-org.warn {
+  color: #f3c98b;
+}
+
+.rail-nav {
+  flex: 1;
+  padding: 14px 12px;
+  overflow-y: auto;
+}
+
+.rail-group {
+  margin: 14px 8px 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(234, 241, 248, 0.45);
+}
+
+.rail-group:first-child {
+  margin-top: 2px;
+}
+
+.rail-nav a {
+  display: block;
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  border-left: 2px solid transparent;
+  color: rgba(234, 241, 248, 0.82);
+  text-decoration: none;
   font-size: 14px;
 }
 
-.topbar .org {
-  margin-left: auto;
-  font-size: 13px;
-  color: var(--ink-soft);
+.rail-nav a:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
 }
 
+/* La sección abierta, marcada con una barra y no sólo con un fondo: en una
+   columna oscura un cambio de fondo del 7 % no se ve a un metro de distancia. */
+.rail-nav a.on {
+  background: rgba(255, 255, 255, 0.1);
+  border-left-color: #7fb2e0;
+  color: #fff;
+  font-weight: 600;
+}
+
+/*
+ * Quién eres, abajo del todo.
+ *
+ * No es un adorno de perfil: ese nombre y ese número son lo que le sale al
+ * titular en el móvil cuando suena el timbre. Tenerlos a la vista es lo que
+ * permite decir en voz alta lo mismo que el cliente está leyendo.
+ */
+.rail-agent {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 18px;
+  border-top: 1px solid var(--navy-line);
+}
+
+.rail-avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.rail-agent strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.rail-agent span {
+  display: block;
+  font-size: 11.5px;
+  color: rgba(234, 241, 248, 0.6);
+}
+
+.rail-agent-warn {
+  margin: 0;
+  font-size: 11.5px;
+  color: #f3c98b;
+}
+
+/* La zona de trabajo. El ancho máximo es el de una tabla de seis columnas que
+   se lee sin barrer la cabeza de lado a lado. */
 main {
   max-width: 960px;
   margin: 0 auto;
   padding: 28px;
 }
 
+main.workspace {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 30px 36px 64px;
+  width: 100%;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  LA CABECERA DE PÁGINA
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.page-head > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-actions {
+  display: flex;
+  gap: 10px;
+  flex: none;
+  padding-top: 18px;
+}
+
+/*
+ * El sobretítulo dice **dónde estás**, no adorna. En el listado es la sección;
+ * en una ficha es el enlace de vuelta. Nunca lleva texto que no sea navegación.
+ */
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.eyebrow a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.eyebrow a:hover {
+  color: var(--navy);
+  text-decoration: underline;
+}
+
 h1 {
-  font-size: 22px;
-  margin: 0 0 4px;
+  font-size: 23px;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  margin: 0;
+  font-weight: 600;
+}
+
+.page-sub {
+  margin: 7px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 70ch;
+}
+
+/* La línea de datos duros bajo el nombre de una ficha: identificador, cuenta,
+   alta. Separados por puntos y con las referencias en monoespaciada. */
+.page-facts {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.page-facts span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
 }
 
 h2 {
-  font-size: 16px;
+  font-size: 15px;
   margin: 0 0 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+  font-weight: 600;
 }
 
 .muted {
-  color: var(--ink-soft);
+  color: var(--ink-2);
   font-size: 13px;
   margin: 0 0 20px;
 }
 
+/* ═════════════════════════════════════════════════════════════════════════
+ *  SUPERFICIES
+ * ═════════════════════════════════════════════════════════════════════════ */
+
 .card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
   padding: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+/* La partición de dos columnas: el registro del banco a la izquierda, la
+   identidad digital a la derecha. Ver la nota de la ficha. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+.split.wide-side {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.col-side {
+  position: sticky;
+  top: 30px;
+}
+
+/*
+ * El panel de la columna derecha.
+ *
+ * Se distingue de una tarjeta normal por el filete azul de arriba, y eso
+ * significa algo: **todo lo que lleva ese filete es la capa de identidad**.
+ * Los datos del banco no lo llevan. Un directivo que mire esta pantalla tiene
+ * que poder ver de un vistazo qué parte de su herramienta es suya de siempre y
+ * qué parte es lo que le estamos vendiendo.
+ */
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-top: 2px solid var(--navy);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+.panel > h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/*
+ * La marca de la esquina del panel dice **de quién es esa capa** o **qué
+ * estándar habla**: «TripleEnable», «SD-JWT VC», «OID4VP». No lleva
+ * mayúsculas forzadas a propósito — los nombres propios y las siglas ya vienen
+ * escritos como se escriben, y `text-transform` convertía «TripleEnable» en
+ * «TRIPLEENABLE», que no es como se llama nadie.
+ */
+.panel-mark {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.panel-note {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.panel-note:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  EL DETALLE TÉCNICO · plegado y cerrado de salida
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * Esta consola la mira un director de operaciones y la audita un ingeniero
+ * del mismo banco, y los dos tienen razón en lo que piden. La superficie dice
+ * lo que la entidad consigue; el mecanismo —protocolos, rutas, cadencias,
+ * nombres de claim, identificadores de emisor— vive aquí dentro.
+ *
+ * **No se quita, se baja de nivel.** Quitarlo le daría la razón a quien
+ * sospeche que se oculta algo, y ésa es exactamente la sospecha que este
+ * producto no se puede permitir. Cerrado de salida porque no es lo primero
+ * que hay que leer: a un `<details>` se llega solo, y quien no lo abre no ha
+ * perdido nada.
+ *
+ * Va en gris y pequeño a propósito. Es una nota al pie, no una tarjeta más.
+ */
+.tech {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.tech > summary {
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+/* El triángulo por defecto de Safari se pinta fuera de la caja y desalinea la
+   línea entera. Se quita y se dibuja uno propio, que además gira al abrir. */
+.tech > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tech > summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 0.12s ease;
+}
+
+.tech[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.tech > summary:hover {
+  color: var(--ink-2);
+}
+
+.tech > *:not(summary) {
+  margin: 10px 0 0;
+}
+
+.tech dl.facts {
+  font-size: 12.5px;
+}
+
+/*
+ * Dentro del detalle, el rótulo de una lista de datos no grita: no es una
+ * ficha, es una nota.
+ *
+ * Y sobre todo **no se pasa a mayúsculas**. En un panel el rótulo va en
+ * versalitas porque es una etiqueta; aquí muchos rótulos son el nombre exacto
+ * de un campo —`sub`, `given_name`, `official_numbers`— y ponerlos en
+ * mayúsculas los convierte en una referencia falsa: quien copie `GIVEN_NAME`
+ * de esta pantalla escribirá algo que no existe.
+ */
+/* Los dos selectores largos no son adorno: `.panel dl.facts dt` empata en
+   especificidad y va después en la hoja, así que sin ellos el panel volvería a
+   poner en mayúsculas los nombres de campo. */
+.tech dl.facts dt,
+.panel .tech dl.facts dt,
+.col-side .tech dl.facts dt {
+  color: var(--ink-3);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 12px;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  LA BARRA DE HERRAMIENTAS DEL LISTADO
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.search {
+  flex: 1;
+  max-width: 440px;
+  margin: 0;
+}
+
+.search input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  font: inherit;
+  color: var(--ink);
+}
+
+.search input::placeholder {
+  color: var(--ink-3);
+}
+
+.toolbar-clear {
+  font-size: 13px;
+}
+
+.toolbar-count {
+  margin: 0 0 0 auto;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  LAS TABLAS
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+.table-wrap {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+/* Una tabla ancha se desplaza dentro de su caja y nunca empuja la página. */
+@media (max-width: 1080px) {
+  .table-wrap {
+    overflow-x: auto;
+  }
+}
+
+/*
+ * En una pantalla estrecha la tabla NO se aprieta: se recorta y se desplaza.
+ *
+ * Con seis columnas en 390 px, «Miguel Ángel Ferrer Lozano» ocupaba cuatro
+ * líneas y la fecha de alta tres. Lo que se hace es lo que hace cualquier
+ * herramienta de trabajo: **quitar las columnas que no deciden nada** —el
+ * contacto y la fecha de alta, que están enteros en la ficha— y dejar las que
+ * sirven para elegir a quién abrir. El resto conserva un ancho mínimo legible
+ * y se arrastra de lado si hace falta.
+ *
+ * Va por posición, así que **cada tabla dice cuál es** con su propia clase: la
+ * de clientes y la de verificaciones no tienen las mismas columnas, y una regla
+ * genérica por número habría escondido la columna del resultado —la que dice si
+ * hubo un fraude— en la pantalla equivocada. Si el orden de una cambia, cambia
+ * aquí al lado, que es donde está escrito.
+ */
+@media (max-width: 900px) {
+  table.data {
+    min-width: 560px;
+  }
+
+  /* Clientes: fuera el contacto y la fecha de alta. Los dos están enteros en la
+     ficha, y ninguno decide a quién se abre. */
+  table.customers :is(th, td):nth-child(2),
+  table.customers :is(th, td):nth-child(4) {
+    display: none;
+  }
+
+  /* Verificaciones: se quedan quién, cómo acabó y cuándo. El canal, el agente y
+     los atributos pedidos están en la pantalla de la verificación. */
+  table.verifications :is(th, td):nth-child(4),
+  table.verifications :is(th, td):nth-child(5),
+  table.verifications :is(th, td):nth-child(6) {
+    display: none;
+  }
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
+  background: var(--paper);
 }
 
 th,
 td {
   text-align: left;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 13.5px;
+  vertical-align: top;
 }
 
 th {
-  background: #fafbfd;
-  font-size: 12px;
+  background: #f7f9fb;
+  border-bottom: 1px solid var(--rule);
+  font-size: 10.5px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  white-space: nowrap;
 }
 
 tbody tr:last-child td {
   border-bottom: none;
 }
 
+table.data tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* El nombre es el enlace y va en negrita: es lo que el ojo busca al recorrer
+   la columna. La segunda línea, la referencia, va debajo y más pequeña. */
+.row-link {
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.row-link:hover {
+  color: var(--navy);
+  text-decoration: underline;
+}
+
+td .sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+td .mono.sub {
+  font-size: 11.5px;
+}
+
+/* Un hueco es un hueco, y se dice. Un guion suelto en gris claro se lee como
+   «aquí no hay nada» sin gritarlo. */
+.none {
+  color: var(--ink-3);
+}
+
+.cell-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.cell-link:hover .pill {
+  border-color: currentColor;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  LAS INSIGNIAS DE ESTADO
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * El color **nunca va solo**: la insignia lleva siempre su texto. Uno de cada
+ * doce hombres no distingue el rojo del verde, y un punto de color no dice
+ * «rechazada por el titular».
+ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill-mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.pill.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.pill.caution {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+/* El rojo, y sólo para el fraude. */
+.pill.alarm {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.pill.waiting {
+  background: var(--navy-tint);
+  color: var(--navy);
+}
+
+.pill.waiting .pill-mark {
+  animation: outcome-pulse 1.6s ease-in-out infinite;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  PANTALLA VACÍA
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * Una pantalla sin nada es una invitación a hacer algo, no un mensaje de error:
+ * dice qué falta y deja el botón que lo arregla.
+ */
+.empty {
+  background: var(--paper);
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  padding: 40px 28px;
+  text-align: center;
+}
+
+.empty h2 {
+  margin-bottom: 8px;
+}
+
+.empty p {
+  margin: 0 auto 18px;
+  max-width: 56ch;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  FORMULARIOS Y BOTONES
+ * ═════════════════════════════════════════════════════════════════════════ */
+
 .field {
   display: block;
   margin-bottom: 14px;
 }
 
-.field span {
+.field > span,
+legend {
   display: block;
-  font-size: 13px;
-  color: var(--ink-soft);
-  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+  margin-bottom: 5px;
 }
 
 input,
 select {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
   font: inherit;
-  background: var(--surface);
+  background: var(--paper);
   color: var(--ink);
 }
 
@@ -154,28 +822,132 @@ select {
 
 button {
   font: inherit;
+  font-weight: 500;
   padding: 9px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--brand);
-  background: var(--brand);
-  color: var(--brand-ink);
+  border-radius: 7px;
+  border: 1px solid var(--navy);
+  background: var(--navy);
+  color: #fff;
   cursor: pointer;
 }
 
+button:hover:not([disabled]) {
+  background: #0d4a7c;
+}
+
 button[disabled] {
-  opacity: 0.55;
-  cursor: progress;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 button.secondary {
-  background: var(--surface);
-  color: var(--brand);
+  background: var(--paper);
+  color: var(--navy);
+  border-color: var(--rule);
 }
 
-.alert {
-  padding: 10px 14px;
-  border-radius: 6px;
+button.secondary:hover:not([disabled]) {
+  background: var(--navy-tint);
+  border-color: var(--navy);
+}
+
+/*
+ * Un enlace con aspecto de botón. Se usa donde hay una navegación de verdad
+ * —`/portal/login` redirige a Logto, «emitir credencial» abre otra pantalla—
+ * y tiene que ser un `<a>` para que funcione con JavaScript apagado y para que
+ * se pueda abrir en otra pestaña. Lo que se ajusta es cómo se ve, no lo que es.
+ */
+.button-link {
+  display: inline-block;
+  padding: 9px 16px;
+  border-radius: 7px;
+  border: 1px solid var(--navy);
+  background: var(--navy);
+  color: #fff;
+  text-decoration: none;
   font-size: 14px;
+  font-weight: 500;
+}
+
+.button-link:hover {
+  background: #0d4a7c;
+}
+
+.button-link.secondary {
+  background: var(--paper);
+  color: var(--navy);
+  border-color: var(--rule);
+}
+
+.button-link.secondary:hover {
+  background: var(--navy-tint);
+  border-color: var(--navy);
+}
+
+/* Los botones de acción de la ficha: uno debajo de otro, a todo el ancho de la
+   columna, con su explicación. La acción es lo que se pulsa; la frase de abajo
+   dice qué va a pasar antes de pulsarla. */
+.actions {
+  display: grid;
+  gap: 10px;
+}
+
+.action {
+  display: block;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  text-align: left;
+}
+
+.action:hover {
+  border-color: var(--navy);
+  background: var(--navy-tint);
+}
+
+.action strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.action span {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.action.primary {
+  border-color: var(--navy);
+  background: var(--navy);
+}
+
+.action.primary strong,
+.action.primary span {
+  color: #fff;
+}
+
+.action.primary span {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.action.primary:hover {
+  background: #0d4a7c;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  AVISOS
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+.alert {
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
   margin-bottom: 16px;
   background: var(--danger-bg);
   color: var(--danger);
@@ -195,22 +967,16 @@ button.secondary {
  * —se vuelve a intentar—. te-api se molesta en devolverlos separados; pintarlos
  * del mismo rojo los volvería a juntar en el único sitio donde alguien los mira
  * de verdad, que es esta pantalla. **El rojo se queda para el fraude** y lo que
- * ha ido mal sin serlo —caducado, credencial que no vale— es ámbar. (El rojo lo
- * sigue usando también el aviso de una llamada que ha fallado, que es otra
- * cosa y no compite: ahí no hay ningún final que interpretar.)
- *
- * La ESPERA ya no comparte el ámbar: tiene su propio azul en `.outcome.waiting`
- * más abajo, porque una comprobación en curso no es una que haya fallado.
+ * ha ido mal sin serlo —caducado, credencial que no vale— es ámbar.
  */
 .alert.warn {
   background: var(--warn-bg);
   color: var(--warn);
 }
 
-/*
- * ═══════════════════════════════════════════════════════════════════════════
+/* ═════════════════════════════════════════════════════════════════════════
  *  LOS CINCO FINALES DE LA COMPROBACIÓN
- * ═══════════════════════════════════════════════════════════════════════════
+ * ═════════════════════════════════════════════════════════════════════════
  *
  * Un `.alert` es una frase; esto es un resultado, y son dos cosas distintas.
  * El agente está al teléfono con alguien y tiene que saber cómo ha acabado la
@@ -234,20 +1000,21 @@ button.secondary {
   display: flex;
   gap: 14px;
   padding: 16px 18px;
-  border-radius: 8px;
-  border-left: 4px solid var(--ink-soft);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  border-left: 4px solid var(--ink-3);
   background: var(--canvas);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .outcome h3 {
-  font-size: 15px;
+  font-size: 16px;
   margin: 0 0 6px;
 }
 
 .outcome p {
   margin: 0 0 8px;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .outcome p:last-child {
@@ -258,9 +1025,9 @@ button.secondary {
   flex: none;
   width: 12px;
   height: 12px;
-  margin-top: 4px;
+  margin-top: 5px;
   border-radius: 50%;
-  background: var(--ink-soft);
+  background: var(--ink-3);
 }
 
 .outcome.ok {
@@ -295,13 +1062,13 @@ button.secondary {
 }
 
 .outcome.waiting {
-  border-left-color: var(--brand);
-  background: #eef4fa;
-  color: var(--brand);
+  border-left-color: var(--navy);
+  background: var(--navy-tint);
+  color: var(--navy);
 }
 
 .outcome.waiting .outcome-mark {
-  background: var(--brand);
+  background: var(--navy);
   animation: outcome-pulse 1.6s ease-in-out infinite;
 }
 
@@ -324,38 +1091,82 @@ button.secondary {
 
 /* Quien haya pedido menos movimiento no quiere un punto latiendo en su pantalla. */
 @media (prefers-reduced-motion: reduce) {
-  .outcome.waiting .outcome-mark {
+  .outcome.waiting .outcome-mark,
+  .pill.waiting .pill-mark,
+  .timeline li.current::after {
     animation: none;
   }
 }
 
+/* ═════════════════════════════════════════════════════════════════════════
+ *  LISTAS DE DATOS
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+dl.facts {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 9px 16px;
+  margin: 0;
+  font-size: 13.5px;
+}
+
+dl.facts dt {
+  color: var(--ink-2);
+}
+
+dl.facts dd {
+  margin: 0;
+}
+
+/* En una columna estrecha las dos columnas de la lista no caben: se apilan, y
+   el rótulo pasa a ser una etiqueta pequeña encima del dato. */
+.col-side dl.facts,
+.panel dl.facts {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.col-side dl.facts dt,
+.panel dl.facts dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+  margin-top: 12px;
+}
+
+.col-side dl.facts dt:first-of-type,
+.panel dl.facts dt:first-of-type {
+  margin-top: 0;
+}
+
+.col-side dl.facts dd,
+.panel dl.facts dd {
+  margin-top: 2px;
+}
+
+code,
+.mono {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
 /*
- * Las casillas de «qué se le pide». Son la decisión de divulgación selectiva y
- * se pulsan una a una mirando otra pantalla, así que la fila entera es el área
- * de pulsación y no sólo la casilla de 13 píxeles.
+ * En una celda, una referencia NO se parte.
+ *
+ * El `break-all` de arriba existe para las URIs largas —una
+ * `openid4vp://…` de trescientos caracteres tiene que caber en su tarjeta—,
+ * pero aplicado a una tabla partía «···· 6642» en dos líneas y dejaba el «2»
+ * solo debajo. Un número de cuenta cortado por la mitad es exactamente el dato
+ * que el agente va a cantar por teléfono.
  */
-.claims .claim {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 7px 10px;
-  margin-top: 4px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  cursor: pointer;
-}
-
-.claims .claim input {
-  width: auto;
-  flex: none;
-  margin: 0;
-}
-
-.claims .claim span {
-  margin: 0;
-  font-size: 14px;
-  color: var(--ink);
+td.mono,
+td .mono,
+td time {
+  word-break: normal;
+  white-space: nowrap;
 }
 
 /*
@@ -371,8 +1182,8 @@ dl.facts dt .mono,
 .type-block h3 .mono {
   display: block;
   word-break: normal;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--ink-3);
+  font-size: 11.5px;
 }
 
 .type-block h3 .mono {
@@ -380,15 +1191,15 @@ dl.facts dt .mono,
   margin-left: 8px;
 }
 
-/* Un tipo de credencial dentro de «lo que iría en la credencial». */
+/* Un tipo de credencial dentro de «lo que llevará dentro». */
 .type-block {
-  margin-top: 18px;
+  margin-top: 16px;
   padding-top: 14px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--rule-soft);
 }
 
 .type-block h3 {
-  font-size: 14px;
+  font-size: 13.5px;
   margin: 0 0 10px;
 }
 
@@ -396,28 +1207,90 @@ dl.facts dt .mono,
   font-weight: 400;
 }
 
-dl.facts {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 8px 16px;
+/* ═════════════════════════════════════════════════════════════════════════
+ *  EL DIARIO DE LA FICHA
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * Ofertas y comprobaciones en la misma columna y en orden, porque para el
+ * agente son la misma historia: lo que este banco ha hecho con la identidad de
+ * esta persona. Cada fila dice qué pasó, cuándo y quién lo hizo.
+ */
+.activity {
+  list-style: none;
   margin: 0;
-  font-size: 14px;
+  padding: 0;
 }
 
-dl.facts dt {
-  color: var(--ink-soft);
+.activity li {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-soft);
 }
 
-dl.facts dd {
-  margin: 0;
+.activity li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
-code,
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  word-break: break-all;
+.activity li:first-child {
+  padding-top: 0;
 }
+
+.activity-when {
+  flex: none;
+  width: 108px;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-what {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-what strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/*
+ * La segunda línea lleva **clase propia y no un selector por elemento**.
+ *
+ * Estaba escrito como `.activity-what span`, y eso alcanzaba también a la
+ * insignia de estado y a las referencias de dentro de la frase: las tres son
+ * `<span>`. El selector ganaba en especificidad a `.pill`, así que la insignia
+ * se pintaba a todo el ancho de la fila y cada referencia se iba a su propia
+ * línea. Es el fallo clásico de mezclar selectores de clase con selectores de
+ * elemento; la regla se pone donde se quiere que llegue y en ningún sitio más.
+ */
+.activity-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+/* Una referencia dentro de una frase no se parte por la mitad: la línea del
+   diario se lee como una frase, no como una pared de texto troceada. */
+.activity-what .mono {
+  word-break: normal;
+}
+
+.activity-what a {
+  text-decoration: none;
+}
+
+.activity-what a:hover {
+  text-decoration: underline;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  EL QR, EL PIN Y LOS CANALES · C0
+ * ═════════════════════════════════════════════════════════════════════════ */
 
 /* El QR: el SVG llega del servidor y se escala al ancho de su caja. */
 .qr {
@@ -425,8 +1298,8 @@ code,
   max-width: 100%;
   padding: 12px;
   background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
 }
 
 .qr svg {
@@ -437,54 +1310,117 @@ code,
 
 /* El PIN se enseña grande porque hay que cantarlo en voz alta. */
 .pin {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 30px;
-  letter-spacing: 0.18em;
+  font-family: var(--mono);
+  font-size: 32px;
+  letter-spacing: 0.2em;
   font-weight: 600;
+  margin: 4px 0 10px;
 }
 
-/*
- * El portal del cliente (`/portal`).
- *
- * Se distingue a propósito de la consola de agentes: la barra lleva el color
- * del banco en vez del blanco de la consola, y la columna es más estrecha. No
- * es decoración — quien mira una de las dos pantallas tiene que saber sin
- * pensarlo en cuál está, porque una enseña el padrón entero de clientes y la
- * otra la ficha de una sola persona.
- */
-.topbar.portal {
-  background: var(--brand);
-  border-bottom-color: var(--brand);
-  color: var(--brand-ink);
+.official {
+  margin: 4px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--navy);
+  border-radius: 8px;
+  background: var(--navy-tint);
 }
 
-.topbar.portal .org {
-  color: rgba(255, 255, 255, 0.78);
+.official h3 {
+  font-size: 13.5px;
+  margin: 0 0 8px;
 }
 
-main.narrow {
-  max-width: 640px;
+.official ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
 }
 
-/*
- * Un enlace con aspecto de botón. `/portal/login` es una navegación de verdad
- * —redirige a Logto— así que tiene que ser un `<a>` para que funcione con
- * JavaScript apagado; lo que se ajusta es cómo se ve, no lo que es.
- */
-.button-link {
-  display: inline-block;
-  padding: 9px 16px;
+.official li {
+  font-size: 15px;
+  font-family: var(--mono);
+}
+
+/* Un canal de entrega. La fila entera es el área de pulsación, como las
+   casillas de «qué se le pide» y por lo mismo: se elige mirando otra pantalla. */
+.channels .channel,
+.claims .claim {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  margin-top: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.channels .channel input,
+.claims .claim input {
+  width: auto;
+  flex: none;
+  margin: 3px 0 0;
+}
+
+.channels .channel span,
+.claims .claim span {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.channels .channel small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.channels .channel:has(input:checked),
+.claims .claim:has(input:checked) {
+  border-color: var(--navy);
+  background: var(--navy-tint);
+}
+
+/* Lo que sale después de emitir, según el canal elegido. */
+.delivery {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--canvas);
+}
+
+.delivery h3 {
+  font-size: 13.5px;
+  margin: 0 0 8px;
+}
+
+.delivery p {
+  font-size: 13.5px;
+  margin: 0 0 12px;
+}
+
+/* El borrador del correo, tal y como se va a mandar. Se enseña entero a
+   propósito: el agente tiene que poder comprobar de un vistazo que el código de
+   un solo uso NO está dentro. */
+.delivery pre {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--rule);
   border-radius: 6px;
-  border: 1px solid var(--brand);
-  background: var(--brand);
-  color: var(--brand-ink);
-  text-decoration: none;
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-x: auto;
 }
 
-/*
- * ═══════════════════════════════════════════════════════════════════════════
+/* ═════════════════════════════════════════════════════════════════════════
  *  LOS DOS NIVELES · C1
- * ═══════════════════════════════════════════════════════════════════════════
+ * ═════════════════════════════════════════════════════════════════════════
  *
  * No son pestañas de un formulario: son dos ceremonias distintas, y el agente
  * tiene que ver que son dos cosas y cuál está eligiendo. Por eso son grandes,
@@ -505,11 +1441,16 @@ main.narrow {
   flex: 1;
   display: block;
   text-align: left;
-  padding: 12px 14px;
-  background: var(--surface);
+  padding: 13px 15px;
+  background: var(--paper);
   color: var(--ink);
-  border: 1px solid var(--line);
+  border: 1px solid var(--rule);
   font-weight: 600;
+}
+
+.levels .level:hover:not([disabled]) {
+  background: var(--paper);
+  border-color: var(--navy);
 }
 
 .levels .level small {
@@ -517,17 +1458,18 @@ main.narrow {
   margin-top: 3px;
   font-weight: 400;
   font-size: 12px;
-  color: var(--ink-soft);
+  color: var(--ink-2);
 }
 
 .levels .level.on {
-  border-color: var(--brand);
-  background: #eef4fa;
-  color: var(--brand);
+  border-color: var(--navy);
+  background: var(--navy-tint);
+  color: var(--navy);
+  box-shadow: inset 0 0 0 1px var(--navy);
 }
 
 .levels .level.on small {
-  color: var(--brand);
+  color: var(--navy);
   opacity: 0.82;
 }
 
@@ -535,144 +1477,41 @@ main.narrow {
 .level-pane {
   padding: 16px 18px;
   margin-bottom: 20px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--rule);
   border-radius: 8px;
   background: var(--canvas);
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .level-pane h3 {
-  font-size: 14px;
+  font-size: 13.5px;
   margin: 18px 0 10px;
 }
 
-/*
- * ═══════════════════════════════════════════════════════════════════════════
- *  LOS NÚMEROS OFICIALES Y LOS CUATRO CANALES · C0
- * ═══════════════════════════════════════════════════════════════════════════
- */
-.official {
-  margin: 4px 0 18px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--brand);
-  border-radius: 6px;
-  background: #eef4fa;
-}
-
-.official h3 {
-  font-size: 14px;
-  margin: 0 0 8px;
-}
-
-.official ul {
-  margin: 0 0 10px;
-  padding-left: 20px;
-}
-
-.official li {
-  font-size: 15px;
-}
-
-/* Un canal de entrega. La fila entera es el área de pulsación, como las
-   casillas de «qué se le pide» y por lo mismo: se elige mirando otra pantalla. */
-.channels .channel {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 9px 12px;
-  margin-top: 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  cursor: pointer;
-}
-
-.channels .channel input {
-  width: auto;
-  flex: none;
-  margin: 3px 0 0;
-}
-
-.channels .channel span {
-  margin: 0;
-  font-size: 14px;
-  color: var(--ink);
-}
-
-.channels .channel small {
-  display: block;
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-
-.channels .channel:has(input:checked) {
-  border-color: var(--brand);
-  background: #eef4fa;
-}
-
-/* Lo que sale después de emitir, según el canal elegido. */
-.delivery {
-  margin-top: 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--canvas);
-}
-
-.delivery h3 {
-  font-size: 14px;
-  margin: 0 0 8px;
-}
-
-.delivery p {
-  font-size: 14px;
-  margin: 0 0 12px;
-}
-
-/* El borrador del correo, tal y como se va a mandar. Se enseña entero a
-   propósito: el agente tiene que poder comprobar de un vistazo que el código de
-   un solo uso NO está dentro. */
-.delivery pre {
-  margin: 0 0 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-x: auto;
-}
-
-/*
- * ═══════════════════════════════════════════════════════════════════════════
+/* ═════════════════════════════════════════════════════════════════════════
  *  LA LÍNEA DE TIEMPO · C2
- * ═══════════════════════════════════════════════════════════════════════════
+ * ═════════════════════════════════════════════════════════════════════════
  *
  * Es lo que convierte la espera en algo que se lee de un vistazo mientras se
  * habla por teléfono. Cada hito lleva **su hora**, y la del hito en curso es
  * una cuenta atrás que se mueve: una pantalla con un número que cambia no se
  * confunde con una colgada, que era el problema real del párrafo quieto.
- *
- * El punto del hito en curso late con la misma animación que la marca de
- * espera de `.outcome.waiting`, y comparte su regla de `prefers-reduced-motion`.
  */
 .timeline-block {
-  margin: 4px 0 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: var(--shadow-card);
 }
 
 .timeline-block h3 {
-  font-size: 13px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-  margin: 0 0 12px;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  margin: 0 0 14px;
 }
 
 .timeline {
@@ -687,7 +1526,7 @@ main.narrow {
   align-items: baseline;
   gap: 12px;
   padding: 0 0 16px 22px;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 /* La regla vertical que une los hitos. El último no la lleva: una línea que
@@ -699,7 +1538,7 @@ main.narrow {
   top: 14px;
   bottom: 0;
   width: 1px;
-  background: var(--line);
+  background: var(--rule);
 }
 
 .timeline li:last-child::before {
@@ -714,15 +1553,27 @@ main.narrow {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--ink-soft);
+  background: var(--ink-3);
 }
 
 .timeline li.done::after {
   background: var(--ok);
 }
 
+/*
+ * El hito final se pinta del color del desenlace, no del verde de «ocurrió».
+ * La misma regla de siempre: el rojo es sólo del rechazo del titular.
+ */
+.timeline li.alarm::after {
+  background: var(--danger);
+}
+
+.timeline li.caution::after {
+  background: var(--warn);
+}
+
 .timeline li.current::after {
-  background: var(--brand);
+  background: var(--navy);
   animation: outcome-pulse 1.6s ease-in-out infinite;
 }
 
@@ -738,67 +1589,207 @@ main.narrow {
 .timeline li span {
   display: block;
   font-size: 12px;
-  color: var(--ink-soft);
+  color: var(--ink-2);
 }
 
 /* La hora, en la misma columna en todos los hitos para poder leerlas seguidas. */
 .timeline li time {
   flex: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
 
 .timeline li.current time {
-  color: var(--brand);
-  font-size: 16px;
+  color: var(--navy);
+  font-size: 17px;
   font-weight: 600;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .timeline li.current::after {
-    animation: none;
-  }
-}
-
-/*
- * ═══════════════════════════════════════════════════════════════════════════
+/* ═════════════════════════════════════════════════════════════════════════
  *  EL RECIBO · C3
- * ═══════════════════════════════════════════════════════════════════════════
+ * ═════════════════════════════════════════════════════════════════════════
  *
  * Se distingue del resto de tarjetas porque es lo que el banco archiva: el
- * borde verde dice que esto es el resultado bueno y no un panel más de la
- * ficha.
+ * filete verde dice que esto es el resultado bueno y no un panel más.
  */
 .receipt {
-  margin-top: 16px;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--rule);
   border-left: 3px solid var(--ok);
-  border-radius: 8px;
-  background: var(--surface);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: var(--shadow-card);
 }
 
 .receipt h3 {
-  font-size: 14px;
-  margin: 0 0 12px;
+  font-size: 13.5px;
+  margin: 0 0 14px;
 }
 
 .receipt h4 {
-  font-size: 13px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-  margin: 18px 0 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: 20px 0 10px;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  EL PORTAL DEL CLIENTE (`/portal`)
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * Se distingue a propósito de la consola de agentes: cabecera con el color del
+ * banco, columna estrecha y **ninguna barra lateral**. No es decoración — quien
+ * mira una de las dos pantallas tiene que saber sin pensarlo en cuál está,
+ * porque una enseña el padrón entero de clientes y la otra la ficha de una sola
+ * persona.
+ */
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding: 14px 28px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+}
+
+.topbar strong {
+  font-family: var(--serif);
+  font-size: 17px;
+}
+
+.topbar .org {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.topbar.portal {
+  background: var(--navy-deep);
+  border-bottom-color: var(--navy-deep);
+  color: #fff;
+}
+
+.topbar.portal .org {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+main.narrow {
+  max-width: 640px;
 }
 
 /* La oferta que espera al titular en el portal. Es lo primero que tiene que
    ver al entrar, así que lleva el color de la marca y no el gris de las demás. */
 .card.offer {
-  border-left: 3px solid var(--brand);
+  border-left: 3px solid var(--navy);
 }
 
 .card.offer p {
-  font-size: 14px;
+  font-size: 13.5px;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  PANTALLAS ESTRECHAS
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * La consola se usa en un puesto con monitor, pero un directivo la abre en un
+ * portátil pequeño o en una tableta durante una demostración, y una barra
+ * lateral fija de 232 px se come esa pantalla. Por debajo de 900 px la columna
+ * pasa a ser una cabecera y las dos columnas se apilan.
+ */
+@media (max-width: 900px) {
+  .console {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 10px 16px;
+  }
+
+  .rail-brand {
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .rail-nav {
+    display: flex;
+    gap: 4px;
+    padding: 0;
+    flex: 1;
+    overflow: visible;
+  }
+
+  .rail-group {
+    display: none;
+  }
+
+  .rail-nav a {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px 6px 0 0;
+    margin: 0;
+  }
+
+  .rail-nav a.on {
+    border-left-color: transparent;
+    border-bottom-color: #7fb2e0;
+  }
+
+  .rail-agent {
+    border-top: none;
+    padding: 0;
+  }
+
+  main.workspace {
+    padding: 22px 18px 48px;
+  }
+
+  .split,
+  .split.wide-side {
+    grid-template-columns: 1fr;
+  }
+
+  .col-side {
+    position: static;
+  }
+
+  /*
+   * En la ficha, y sólo en la ficha, la columna de identidad sube al principio
+   * cuando las dos se apilan.
+   *
+   * En un móvil, dejarla debajo del diario significa que las tres acciones
+   * —emitir, verificar, autorizar— quedan a un dedo de recorrido de todo el
+   * historial. En las otras dos pantallas partidas el orden se queda como está,
+   * y a propósito: en el seguimiento de una verificación, lo primero tiene que
+   * ser **cómo acabó**, nunca el detalle de la petición.
+   */
+  .split.side-first .col-side {
+    order: -1;
+  }
+
+  .page-head {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .page-actions {
+    padding-top: 0;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .levels {
+    flex-direction: column;
+  }
 }

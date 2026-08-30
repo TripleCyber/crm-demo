@@ -13,6 +13,7 @@ import {
   TeApiError,
   type TeApiOperation,
 } from '@/lib/te-api';
+import { recordVerification, settleVerification } from '@/lib/verifications';
 
 /**
  * `POST /api/credentials/present` — el botón «pedir credencial».
@@ -243,6 +244,35 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
     }
 
+    // ── El diario del banco ────────────────────────────────────────────────
+    //
+    // Se anota **aquí y no antes**: si el timbre falla, la ceremonia no ha
+    // empezado y la fila no debe existir. Una comprobación «pendiente» que
+    // nunca se llegó a pedir aparecería en el historial del cliente y el agente
+    // creería que le avisó.
+    //
+    // Es lo que convierte esta pantalla en una dirección que se puede volver a
+    // abrir: sin la fila, recargar la pestaña perdía la ceremonia en curso y no
+    // quedaba rastro de lo que se pidió a quién. Ver `db/003_verification.sql`.
+    await recordVerification({
+      orgId: session.organization.orgId,
+      externalId: customer.externalId,
+      presentationId: presentation.presentationId,
+      typeKey: declared.type,
+      requestedClaims: claims,
+      channel,
+      issuerDid: organization.did,
+      authorizationRequestUrl: presentation.authorizationRequestUrl,
+      requestUri: presentation.requestUri,
+      expiresAt: presentation.expiresAt,
+      agentId: session.agent.id,
+      agentName: session.agent.displayName,
+      actor: session.actor,
+      requestedAt,
+      wakeupId,
+      wakeupAt,
+    });
+
     return NextResponse.json({
       presentationId: presentation.presentationId,
       authorizationRequestUrl: presentation.authorizationRequestUrl,
@@ -288,6 +318,33 @@ export async function GET(request: Request): Promise<NextResponse> {
     // `org_id` del token en el `where`, así que la de otra organización
     // responde igual que una inventada.
     const status = await fetchPresentationStatus(session.organization, presentationId);
+
+    // ── Reconciliar el diario ──────────────────────────────────────────────
+    //
+    // ═════════════════════════════════════════════════════════════════════
+    //  EL DESENLACE SE ESCRIBE AQUÍ PORQUE AQUÍ ES DONDE LO DICE te-api
+    // ═════════════════════════════════════════════════════════════════════
+    //
+    // Un `GET` que escribe pide explicación. La alternativa era que el
+    // navegador mandara el resultado a una segunda ruta, y eso convierte el
+    // diario del banco en un campo editable: cualquiera con la consola de red
+    // abierta cerraría en verde la comprobación de otro. El valor tiene que
+    // entrar en la base desde el mismo sitio del que sale, y ese sitio es esta
+    // llamada con el token de la organización. El navegador dispara la
+    // consulta; no aporta el dato.
+    //
+    // Es idempotente: `settleVerification` sólo toca filas en `pending`, así
+    // que los sondeos que llegan después del primero no reescriben nada — ni
+    // aunque haya dos pestañas abiertas o alguien abra la dirección mañana.
+    if (status.status !== 'pending') {
+      await settleVerification(
+        session.organization.orgId,
+        presentationId,
+        status.status,
+        status.claims,
+      );
+    }
+
     return NextResponse.json(status);
   } catch (error) {
     return errorResponse(error, 'consultando la presentación');

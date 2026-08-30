@@ -75,6 +75,43 @@ export interface PresentationStatus {
   readonly status: 'pending' | 'verified' | 'rejected' | 'failed' | 'expired';
   /** Sólo los atributos que se pidieron, y sólo cuando `status` es `verified`. */
   readonly claims: Record<string, unknown> | null;
+  /**
+   * La llave con la que firmó el titular, del `cnf` de la credencial
+   * presentada. NO es un `did:key:`: nuestro emisor pone una JWK cruda, y
+   * te-api no se inventa la conversión. `thumbprint` es la huella RFC 7638 —44
+   * caracteres, estable— y es lo que se enseña; `jwk` es lo que hace falta para
+   * comprobar la firma sin nosotros.
+   */
+  readonly holderKey: { readonly thumbprint: string; readonly jwk: Record<string, unknown> } | null;
+  /**
+   * El vínculo de esta persona **con esta organización**.
+   *
+   * NO es su perfil en TripleEnable, y la diferencia importa: el perfil es el
+   * mismo en todas las organizaciones, así que dos partners que guardaran sus
+   * recibos podrían cruzarlos y descubrir que el cliente 4471 de uno y el 8823
+   * del otro son la misma persona. El vínculo contesta la misma pregunta y no
+   * sirve para cruzarlos.
+   */
+  readonly holderLinkId: string | null;
+  /**
+   * La prueba, entera o nada. Suelta, la firma no demuestra nada: hace falta la
+   * presentación que se firmó, el resumen que se hasheó, y a quién y con qué
+   * número se dirigía. Por eso viaja como un objeto y no como cuatro campos.
+   */
+  readonly proof: {
+    /** La SD-JWT presentada, con sus divulgaciones y el KB-JWT al final. */
+    readonly presentation: string;
+    /** El KB-JWT: lo que ata esa presentación a esa llave. */
+    readonly keyBinding: string;
+    /** El resumen de la presentación, tal como lo firmó el titular. */
+    readonly sdHash: string;
+    /** A quién iba dirigida. Sin esto, la firma se podría reusar en otro sitio. */
+    readonly audience: string;
+    /** El número de un solo uso. Sin esto, se podría reusar más tarde. */
+    readonly nonce: string;
+    /** Cuándo firmó **el titular**. No es cuándo se enteró este banco. */
+    readonly signedAt: string;
+  } | null;
 }
 
 export interface RequestPresentationInput {
