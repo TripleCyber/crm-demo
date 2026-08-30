@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { findCustomerByEmail } from '@/lib/customers';
-import { getActiveOrganization } from '@/lib/organizations';
 import { exchangeCode, getPortalBaseUrl, PortalLoginError } from '@/lib/portal-oidc';
 import { saveSession, takeAuthorizationRequest, type LinkOutcome } from '@/lib/portal-session';
+import { getRequestOrganization } from '@/lib/request-organization';
 import { describeTeApiError, linkCustomer, TeApiError } from '@/lib/te-api';
 
 /**
@@ -40,7 +40,12 @@ import { describeTeApiError, linkCustomer, TeApiError } from '@/lib/te-api';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const home = new URL('/portal', getPortalBaseUrl());
+  // La organización se resuelve lo primero, por el dominio de la petición: de
+  // ella sale el `home` al que vuelven TODAS las salidas de esta ruta —incluida
+  // la de error— y el `redirect_uri` con el que se canjea el código. Resolverla
+  // más abajo dejaba las primeras salidas apuntando al portal de otra.
+  const organization = await getRequestOrganization();
+  const home = new URL('/portal', getPortalBaseUrl(organization));
   const params = request.nextUrl.searchParams;
 
   // La petición de autorización se lee y se borra SIEMPRE, aunque Logto haya
@@ -74,7 +79,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(home);
   }
 
-  const organization = getActiveOrganization();
   if (organization.portal === undefined) {
     home.searchParams.set('error', 'sin-portal');
     return NextResponse.redirect(home);
@@ -82,7 +86,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   let identity;
   try {
-    identity = await exchangeCode(organization.portal, code, authorizationRequest);
+    identity = await exchangeCode(organization, organization.portal, code, authorizationRequest);
   } catch (error) {
     // Un `PortalLoginError` ya trae el motivo recortado; cualquier otra cosa es
     // un fallo de red o un cambio de forma en la respuesta de Logto. Los dos
@@ -112,7 +116,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       message:
         identity.email === null
           ? 'Logto no nos ha dado tu correo, así que no podemos encontrar tu ficha de cliente.'
-          : 'No encontramos ninguna ficha de cliente con ese correo en Banco Demo.',
+          : `No encontramos ninguna ficha de cliente con ese correo en ${organization.displayName}.`,
     };
   } else {
     try {

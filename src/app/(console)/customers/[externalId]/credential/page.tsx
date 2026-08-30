@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { IssueCredentialForm } from '@/components/IssueCredentialForm';
 import { loadCustomerContext } from '@/lib/customer-context';
-import { findCustomerAttribute } from '@/lib/customers';
+import { findCustomerAttribute, referenceOf } from '@/lib/customers';
 
 /**
  * **C0 · emitir credencial.** Su propia pantalla, y no un bloque de la ficha.
@@ -48,6 +48,10 @@ export default async function IssueCredentialPage({
   const href = `/customers/${encodeURIComponent(customer.externalId)}`;
   const holderName = `${customer.givenName} ${customer.familyName}`;
 
+  // La referencia del sector, compuesta aquí: el formulario es de navegador y
+  // no puede leer el catálogo de atributos, que es `server-only`.
+  const holderReference = referenceOf(customer);
+
   // El cruce de las tres fuentes: el padrón dice qué tipos hay, la
   // configuración qué lleva cada uno, y la ficha con qué se rellenan.
   const types = credentialTypes.map((option) => ({
@@ -80,7 +84,7 @@ export default async function IssueCredentialPage({
             el banco** y sale de su padrón, nunca del navegador.
           */}
           <p className="page-sub">
-            La crea <strong>este banco</strong>: lo que lleva dentro sale de su padrón y de ningún
+            La crea <strong>esta organización</strong>: lo que lleva dentro sale de su padrón y de ningún
             otro sitio. TripleEnable la firma a nombre de esta entidad y la lleva hasta la cartera
             del titular.
           </p>
@@ -103,7 +107,15 @@ export default async function IssueCredentialPage({
       */}
       <IssueCredentialForm
         externalId={customer.externalId}
-        holder={{ displayName: holderName, accountLast4: customer.accountLast4 }}
+        holder={{
+          displayName: holderName,
+          reference:
+            holderReference === undefined
+              ? null
+              : (holderReference.attribute.display === undefined
+                  ? holderReference.value
+                  : holderReference.attribute.display(holderReference.value)),
+        }}
         issuerDid={issuerDid}
         officialNumbers={session.organization.officialNumbers}
         credentialTypes={types}

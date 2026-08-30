@@ -38,7 +38,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   // clase de detalle que nadie mira hasta que lo ve un cliente.
   let bankName = 'Consola de agentes';
   let orgId: string | undefined;
-  let configurationProblem: string | undefined;
+  let misconfigured = false;
   let agent: { id: string; displayName: string } | undefined;
 
   try {
@@ -46,8 +46,13 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
     bankName = session.organization.displayName;
     orgId = session.organization.orgId;
     agent = session.agent;
-  } catch (error) {
-    configurationProblem = error instanceof Error ? error.message : 'sin configurar';
+  } catch {
+    // El mensaje del error **no se pinta aquí**, y es a propósito: nombra la
+    // variable de entorno que falta, y quien tiene esta barra delante es un
+    // agente con un cliente al teléfono. Se le dice que la consola está a
+    // medio configurar y dónde está el detalle; el mensaje entero, con el
+    // nombre de la variable, sigue estando en Diagnóstico.
+    misconfigured = true;
   }
 
   return (
@@ -66,7 +71,11 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
 
         {agent === undefined ? (
           <div className="rail-agent">
-            <p className="rail-agent-warn">{configurationProblem}</p>
+            <p className="rail-agent-warn">
+              {misconfigured
+                ? 'Consola sin configurar. El detalle está en Diagnóstico.'
+                : 'Sin identificar.'}
+            </p>
           </div>
         ) : (
           <div className="rail-agent">

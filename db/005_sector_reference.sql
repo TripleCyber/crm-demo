@@ -1,0 +1,65 @@
+-- 005_sector_reference · el padrón deja de ser el de un banco.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+--  POR QUÉ HACE FALTA UNA COLUMNA Y NO VALE UNA VARIABLE DE ENTORNO
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- El 2026-08-30 entraron Seguros Aurora y Clínica San Rafael. Un asegurado
+-- tiene número de póliza y un paciente tiene número de historia, igual que un
+-- cliente del banco tiene los cuatro últimos de su cuenta, y las tres son la
+-- misma cosa: **el dato con el que el titular reconoce de qué relación se
+-- habla** cuando le llega una credencial o le suena el teléfono.
+--
+-- Y tiene que ser una columna. `CUSTOMER_ATTRIBUTES` en `src/lib/customers.ts`
+-- ya lo dice: «un atributo sólo se puede poner en una credencial si hay una
+-- columna del padrón de donde sacarlo», así que declarar `policy_number` en un
+-- `.env` sería configuración que miente — no crea la columna, y lo que no está
+-- en el padrón no se puede firmar.
+--
+-- ── Por qué DOS columnas y no una genérica ────────────────────────────────
+--
+-- Una sola `sector_reference` con una etiqueta por organización habría salido
+-- más barata, y estaría mal por donde acaba el valor: el nombre de la columna
+-- es el nombre del claim, y el claim viaja dentro de la credencial firmada. Un
+-- verificador que recibe `sector_reference: "PA-2019-004471"` no sabe qué
+-- tiene delante; con `policy_number` sí. Lo que se ahorra en el esquema se paga
+-- en el sitio donde el dato tiene que significar algo, que es fuera.
+--
+-- Las tres son `null` en las fichas de las otras dos organizaciones, y eso no
+-- es desperdicio: es la forma en la que la pantalla de emisión se filtra sola.
+-- `resolveCredentialType` descarta los atributos que la ficha no rellena, así
+-- que al agente del banco no le aparece «Número de póliza» sin que nadie haya
+-- tenido que escribir un `if` por organización.
+--
+-- ── Lo que esta migración NO hace ─────────────────────────────────────────
+--
+-- No toca ni una fila existente. Las tres columnas nuevas nacen `null`, así que
+-- las 14 fichas de Banco Demo quedan exactamente como estaban y su credencial
+-- de `cliente` sigue llevando lo mismo que llevaba. Sembrar es otra cosa y va
+-- por `npm run db:seed`, fuera de las migraciones y a propósito: una fila
+-- sembrada en un fichero versionado es un dato de prueba que se despliega solo.
+
+-- El número de póliza de un asegurado.
+--
+-- Sin `check` de formato: cada aseguradora numera como quiere y una expresión
+-- regular inventada aquí rechazaría pólizas legítimas el día que entre la
+-- segunda. `account_last4` sí lo lleva porque «los cuatro últimos» son
+-- literalmente cuatro dígitos, no un formato que alguien haya elegido.
+alter table customer
+  add column if not exists policy_number text;
+
+-- El número de historia clínica de un paciente.
+--
+-- ⚠ Es un identificador administrativo, NO un dato clínico. Dice «esta persona
+--   tiene expediente en esta clínica» y nada más: ni diagnóstico, ni
+--   tratamiento, ni especialidad. La decisión está escrita en
+--   `docs/fases/F1-ALTA-MANUAL.md` §7 y se respeta aquí — un dato de salud
+--   dentro de algo firmado viaja en cada presentación y se queda cacheado en el
+--   teléfono, y la divulgación selectiva protege al titular de enseñarlo pero
+--   no de que esté ahí.
+--
+--   Que llegue o no a la credencial lo decide `CRM_TYPE_PACIENTE_CLAIMS`, no
+--   esta columna: estar en el padrón y estar en la credencial son dos cosas
+--   distintas, y ésta es sólo la primera.
+alter table customer
+  add column if not exists medical_record_number text;

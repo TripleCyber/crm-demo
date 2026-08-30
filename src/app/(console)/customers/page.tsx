@@ -4,6 +4,8 @@ import { VerificationPill } from '@/components/VerificationPill';
 import { deliveryPhrase } from '@/lib/delivery';
 import { formatCalendarDate, formatTimestamp } from '@/lib/format';
 import { searchCustomers, type CustomerListEntry } from '@/lib/customers';
+import { describeConsoleFailure } from '@/lib/console-failures';
+import { columnLabelOf, displayAttribute, listReferenceAttribute } from '@/lib/customers';
 import { getEmployeeSession } from '@/lib/session';
 
 /**
@@ -54,13 +56,21 @@ export default async function CustomersPage({
     const session = await getEmployeeSession();
     customers = await searchCustomers(session.organization.orgId, term);
   } catch (error) {
-    // Aquí cae la base sin migrar y la configuración incompleta. Se enseña el
-    // mensaje tal cual: nombra la variable o la tabla que falta y no lleva
-    // ningún secreto.
-    failure = error instanceof Error ? error.message : 'fallo desconocido';
+    // Aquí cae la base sin migrar y la configuración incompleta. El mensaje
+    // crudo nombra la variable o la tabla que falta —cierto y sin secretos—,
+    // pero eso es lenguaje para quien despliega, no para quien atiende. Se
+    // traduce, y el original va al registro y a Diagnóstico.
+    failure = describeConsoleFailure(error, 'el listado de clientes no cargó');
   }
 
   const searching = term.trim() !== '';
+
+  // Qué referencia rotula la tercera columna: la cuenta en el banco, la póliza
+  // en la aseguradora, la historia en la clínica. Sale de lo que el padrón
+  // rellena y no de una variable, porque quien tiene pólizas es quien las
+  // rellena. `undefined` = ninguna, y entonces la columna no se pinta: una
+  // columna entera de guiones no informa de nada.
+  const reference = listReferenceAttribute(customers);
 
   return (
     <>
@@ -77,8 +87,15 @@ export default async function CustomersPage({
             de sistemas ajenos justo debajo de su padrón de clientes le dice lo
             contrario de lo que la frase pretende.
           */}
+          {/*
+            «De esta organización» y no «del banco»: los tres dominios los sirve
+            el mismo despliegue, y esta frase la lee también el agente de la
+            aseguradora y el de la clínica. La idea —los datos no salen de aquí—
+            es la misma para los tres y es de las mejores que tiene el producto.
+          */}
           <p className="page-sub">
-            El padrón es del banco y no sale de aquí. Ningún sistema de TripleEnable lo lee.
+            El padrón es de esta organización y no sale de aquí. Ningún sistema de TripleEnable
+            lo lee.
           </p>
         </div>
         <div className="page-actions">
@@ -104,7 +121,11 @@ export default async function CustomersPage({
                 type="search"
                 name="q"
                 defaultValue={term}
-                placeholder="Nombre, identificador, correo o los cuatro de la cuenta"
+                placeholder={
+                  reference === undefined
+                    ? 'Nombre, identificador o correo'
+                    : `Nombre, identificador, correo o ${reference.label.toLowerCase()}`
+                }
                 autoComplete="off"
               />
             </label>
@@ -128,9 +149,9 @@ export default async function CustomersPage({
                 <>
                   <h2>Ninguna ficha coincide</h2>
                   <p>
-                    La búsqueda mira el nombre completo, el identificador, el correo y los cuatro
-                    de la cuenta — y sólo dentro de esta organización. No hay ningún directorio
-                    global que consultar.
+                    La búsqueda mira el nombre completo, el identificador, el correo y la
+                    referencia de la ficha — y sólo dentro de esta organización. No hay ningún
+                    directorio global que consultar.
                   </p>
                   <Link className="button-link secondary" href="/customers">
                     Ver todas las fichas
@@ -156,7 +177,7 @@ export default async function CustomersPage({
                   <tr>
                     <th>Cliente</th>
                     <th>Contacto</th>
-                    <th>Cuenta</th>
+                    {reference !== undefined && <th>{columnLabelOf(reference)}</th>}
                     <th>Alta</th>
                     <th>Credencial</th>
                     <th>Última verificación</th>
@@ -178,13 +199,11 @@ export default async function CustomersPage({
                         {customer.email ?? <span className="none">sin correo</span>}
                         {customer.phone !== null && <span className="mono sub">{customer.phone}</span>}
                       </td>
-                      <td className="mono">
-                        {customer.accountLast4 === null ? (
-                          <span className="none">—</span>
-                        ) : (
-                          `···· ${customer.accountLast4}`
-                        )}
-                      </td>
+                      {reference !== undefined && (
+                        <td className="mono">
+                          {displayAttribute(reference, customer) ?? <span className="none">—</span>}
+                        </td>
+                      )}
                       <td>
                         {customer.customerSince === null ? (
                           <span className="none">—</span>

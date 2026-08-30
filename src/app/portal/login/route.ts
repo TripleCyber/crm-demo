@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 
-import { getActiveOrganization } from '@/lib/organizations';
 import {
   buildAuthorizationUrl,
   getPortalBaseUrl,
   newAuthorizationRequest,
 } from '@/lib/portal-oidc';
 import { saveAuthorizationRequest } from '@/lib/portal-session';
+import { getRequestOrganization } from '@/lib/request-organization';
 
 /**
  * `GET /portal/login` — arranca el login OIDC contra Logto.
@@ -22,22 +22,27 @@ import { saveAuthorizationRequest } from '@/lib/portal-session';
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
-  const organization = getActiveOrganization();
+  const organization = await getRequestOrganization();
 
   if (organization.portal === undefined) {
     // Sin aplicación de portal declarada no hay login que empezar. Se manda a
-    // la pantalla, que lo explica con las dos variables que faltan, en vez de
-    // producir un error de Logto que nombra un `client_id` vacío.
+    // la pantalla, que lo explica en el idioma del titular, en vez de producir
+    // un error de Logto que nombra un `client_id` vacío.
     //
-    // El origen sale de `CRM_PORTAL_BASE_URL` —la misma función que compone el
-    // `redirect_uri`, y no una segunda copia— y **no de la cabecera `Host`**:
-    // componer una redirección con un `Host` que escribe quien llama es la
-    // forma clásica de acabar con una redirección abierta.
-    return NextResponse.redirect(new URL('/portal?error=sin-portal', getPortalBaseUrl()));
+    // El origen sale de la dirección pública declarada de ESTA organización
+    // —la misma función que compone el `redirect_uri`, y no una segunda copia—
+    // y **no de la cabecera `Host`**: el `Host` sirve para saber de quién es la
+    // petición, pero componer con él una redirección es la forma clásica de
+    // acabar con una redirección abierta.
+    return NextResponse.redirect(
+      new URL('/portal?error=sin-portal', getPortalBaseUrl(organization)),
+    );
   }
 
   const authorizationRequest = newAuthorizationRequest();
   await saveAuthorizationRequest(authorizationRequest);
 
-  return NextResponse.redirect(buildAuthorizationUrl(organization.portal, authorizationRequest));
+  return NextResponse.redirect(
+    buildAuthorizationUrl(organization, organization.portal, authorizationRequest),
+  );
 }

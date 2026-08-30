@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { describeConsoleFailure } from '@/lib/console-failures';
 import { createCustomer, DuplicateCustomerError, validateCustomerInput } from '@/lib/customers';
 import { getEmployeeSession } from '@/lib/session';
 
@@ -41,6 +42,8 @@ export async function createCustomerAction(
     email: read('email'),
     phone: read('phone'),
     accountLast4: read('accountLast4'),
+    policyNumber: read('policyNumber'),
+    medicalRecordNumber: read('medicalRecordNumber'),
     customerSince: read('customerSince'),
   });
 
@@ -61,7 +64,10 @@ export async function createCustomerAction(
         fields: { externalId: 'ya existe en esta organización' },
       };
     }
-    return { error: error instanceof Error ? error.message : 'no se ha podido dar de alta' };
+    // El duplicado de arriba SÍ se dice tal cual: es del padrón, lo entiende
+    // quien está dando el alta y lo puede corregir. Lo que cae aquí es
+    // configuración o base, que no es ni una cosa ni la otra.
+    return { error: describeConsoleFailure(error, 'el alta de cliente falló') };
   }
 
   // `redirect` lanza una excepción de control de Next: tiene que quedar FUERA

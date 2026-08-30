@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { getActiveOrganization, type OrganizationConfig } from './organizations';
+import type { OrganizationConfig } from './organizations';
+import { getRequestOrganization } from './request-organization';
 
 /**
  * La organización activa de la consola de empleados.
@@ -16,8 +17,11 @@ import { getActiveOrganization, type OrganizationConfig } from './organizations'
  * ## El estado de hoy, dicho sin adornos
  *
  * **El login de empleado con Logto OIDC todavía no está.** Es la casilla de
- * F4a que queda pendiente. Mientras tanto la organización activa sale de
- * `CRM_ACTIVE_ORG_ID`, o de la única declarada si sólo hay una.
+ * F4a que queda pendiente. Mientras tanto la organización sale del **dominio**
+ * por el que entró la petición (`./request-organization.ts`): un despliegue
+ * sirve `bank.`, `seguros.` y `clinica.demo-te.com`, y cada uno es la consola
+ * de su organización. Un host que no es de nadie cae en `CRM_ACTIVE_ORG_ID`,
+ * que es lo que hace que `localhost` siga funcionando en desarrollo.
  *
  * Cuando entre el login, lo que cambia es el cuerpo de `getEmployeeSession`:
  * el `orgId` saldrá del claim `organizations` del ID token y el `actor` del
@@ -92,14 +96,15 @@ function unidentifiedAgent(organization: OrganizationConfig): AgentIdentity {
 export async function getEmployeeSession(): Promise<EmployeeSession> {
   // `async` desde el principio aunque hoy no espere nada: leer la sesión de
   // Logto sí será asíncrono, y cambiar la firma después obliga a tocar cada
-  // llamada.
+  // llamada. Con la resolución por `Host` ya espera de verdad —`headers()` lo
+  // es en Next 15—, así que la previsión sirvió para lo que se puso.
   //
-  // La elección de organización la resuelve `getActiveOrganization()`, que es
-  // la misma que usa el portal del cliente. Estaba escrita aquí y se movió
-  // cuando entró el portal: dos copias del mismo «cuál es mi banco» acaban
-  // discrepando, y entonces la consola emite para una organización y el portal
-  // vincula contra otra.
-  const organization = getActiveOrganization();
+  // La elección la resuelve `getRequestOrganization()`, que es la misma que usa
+  // el portal del cliente. Estaba escrita aquí y se movió cuando entró el
+  // portal: dos copias del mismo «cuál es mi banco» acaban discrepando, y
+  // entonces la consola emite para una organización y el portal vincula contra
+  // otra.
+  const organization = await getRequestOrganization();
   const fallback = unidentifiedAgent(organization);
 
   return {

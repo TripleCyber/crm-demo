@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { logConsoleFailure } from './console-failures';
 import { resolveCredentialTypes, type CredentialTypeView } from './credential-profiles';
 import { findCustomer, type Customer } from './customers';
 import { getEmployeeSession, type EmployeeSession } from './session';
@@ -71,12 +72,29 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
       customer,
       credentialTypes: [],
       issuerDid: undefined,
+      // `describeTeApiError` sí traduce lo suyo a algo que un agente entiende.
+      // Lo que caía en la otra rama era el mensaje crudo de `B2bTokenError` o
+      // de la configuración —«Logto ha rechazado el token M2M de eptrz3ww9y1n
+      // (401)»—, que es correcto y es lenguaje de integrador: nombra una pieza
+      // nuestra y un identificador de Logto en la pantalla de quien está
+      // atendiendo. El detalle sigue entero en el registro y en Diagnóstico.
       teApiWarning:
         error instanceof TeApiError
           ? describeTeApiError(error)
-          : error instanceof Error
-            ? error.message
-            : 'te-api no responde',
+          : shortFailure(error),
     };
   }
+}
+
+/**
+ * La mitad que va detrás de «No se ha podido consultar TripleEnable: …».
+ *
+ * Corta a propósito: la pantalla ya ha dicho qué no funciona, así que aquí sólo
+ * falta qué hacer. El detalle —«Logto ha rechazado el token M2M de eptrz3ww9y1n
+ * (401)», que nombra una pieza nuestra y un identificador de Logto delante de
+ * quien está atendiendo— va al registro y a Diagnóstico.
+ */
+function shortFailure(error: unknown): string {
+  logConsoleFailure(error, 'no se pudo consultar el padrón de te-api');
+  return 'vuelve a intentarlo en un momento, y si sigue igual mira Diagnóstico.';
 }

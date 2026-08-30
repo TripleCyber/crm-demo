@@ -60,10 +60,17 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/db ./db
 COPY --from=build /app/scripts ./scripts
 
-# `public/.well-known/did.json` viaja aquí dentro: es el documento DID de
-# `did:web:bank.demo-te.com`, y sin él la cartera rechaza las credenciales que
-# emite este banco. Va con la imagen y no montado aparte para que desplegar y el
-# contenido sean la misma operación.
+# Los documentos DID **ya no son ficheros de `public/`**, y esto es lo que hay
+# que saber al desplegar: los genera una ruta
+# (`src/app/.well-known/did.json/route.ts`) a partir del `Host` de la petición y
+# del `CRM_ORG_<SLUG>_DOMAIN` de cada organización, así que van dentro del
+# bundle que copia `standalone` y no hay ningún fichero que montar.
+#
+# Lo que sí es una CONDICIÓN DE DESPLIEGUE: sin `CRM_ORG_<SLUG>_DOMAIN` en el
+# entorno, esa organización no publica documento DID —la ruta devuelve 404— y la
+# cartera rechaza sus credenciales. El síntoma en el teléfono es «no podemos
+# verificar quién emite esto», que no se parece a «falta una variable». La
+# pantalla `/diagnostics` lo dice en una fila para no tener que adivinarlo.
 
 # Sin privilegios. La imagen de node ya trae el usuario `node`.
 USER node

@@ -101,7 +101,19 @@ export function IssueCredentialForm({
    * porque es el dato sobre el que se decide: no es una repetición de la
    * cabecera, es la comprobación que hace el agente antes de pulsar.
    */
-  holder: { readonly displayName: string; readonly accountLast4: string | null };
+  holder: {
+    readonly displayName: string;
+    /**
+     * La referencia de su sector, **ya escrita**: `···· 4471` en el banco,
+     * `SA-2019-0418804` en la aseguradora, `HC-0118204` en la clínica.
+     *
+     * Llega compuesta desde el servidor y no como un `accountLast4` en crudo,
+     * que es lo que había: este componente es de navegador y no puede importar
+     * `src/lib` —todo eso es `server-only`—, así que no sabe ni puede saber qué
+     * referencia usa esta organización. Que la componga quien sí lo sabe.
+     */
+    readonly reference: string | null;
+  };
   /** El `iss` de la credencial. Sale del padrón de te-api, no de aquí. */
   issuerDid: string | undefined;
   /**
@@ -385,7 +397,7 @@ export function IssueCredentialForm({
             <dt>Titular</dt>
             <dd>
               {holder.displayName}
-              {holder.accountLast4 === null ? null : ` · ···· ${holder.accountLast4}`}
+              {holder.reference === null ? null : ` · ${holder.reference}`}
             </dd>
             <dt>Identificador</dt>
             <dd className="mono">{externalId}</dd>
@@ -426,10 +438,28 @@ export function IssueCredentialForm({
           <div className="official">
             <h3>Números oficiales</h3>
             {officialNumbers.length === 0 ? (
+              /*
+                ═══════════════════════════════════════════════════════════════
+                 AQUÍ PONÍA EL NOMBRE DE UNA VARIABLE DE ENTORNO, Y ESTABA MAL
+                ═══════════════════════════════════════════════════════════════
+
+                Decía «Se declaran en CRM_ORG_<SLUG>_OFFICIAL_NUMBERS». Quien lee
+                esto es un agente de atención al cliente con un teléfono en la
+                mano: ese nombre no le dice qué hacer, le dice que la
+                herramienta que está usando está a medio montar. Y además no lo
+                puede arreglar él.
+
+                Lo que sí necesita saber es lo que ahora pone: qué le falta a la
+                credencial que va a firmar, qué consecuencia tiene para el
+                titular, y a quién pedírselo. El nombre exacto de la variable
+                está en Diagnóstico, que es la pantalla de quien sí puede
+                ponerla — y por eso el enlace va ahí y no a una explicación.
+              */
               <p className="muted" style={{ margin: 0 }}>
-                Esta organización no declara ninguno, así que la credencial saldrá sin ellos y el
-                titular no podrá contrastar desde qué número le llaman. Se declaran en{' '}
-                <span className="mono">CRM_ORG_&lt;SLUG&gt;_OFFICIAL_NUMBERS</span>.
+                Todavía no están dados de alta los teléfonos oficiales de la entidad, así que la
+                credencial saldrá sin ellos y el titular no podrá comprobar desde qué número le
+                llamamos. Se puede emitir igual. Para darlos de alta, habla con quien lleva la
+                integración: el detalle está en <a href="/diagnostics">Diagnóstico</a>.
               </p>
             ) : (
               <>
@@ -441,7 +471,7 @@ export function IssueCredentialForm({
                 <p className="muted" style={{ margin: 0 }}>
                   Van firmados dentro de la credencial. El titular los puede consultar sin llamada y
                   sin conexión, y por eso su cartera puede decir «uno de los números que guarda tu
-                  credencial» en vez de «te llama tu banco».
+                  credencial» en vez de «te llama tu entidad».
                 </p>
               </>
             )}

@@ -3,7 +3,11 @@ import 'server-only';
 import { createHash, randomBytes } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
-import { getLogtoConfig, type PortalAppConfig } from './organizations';
+import {
+  getLogtoConfig,
+  type OrganizationConfig,
+  type PortalAppConfig,
+} from './organizations';
 
 /**
  * El login OIDC del **portal de clientes** — el paso del que nace el vínculo.
@@ -88,11 +92,27 @@ function getJwks(): ReturnType<typeof createRemoteJWKSet> {
   return jwksCache;
 }
 
-/** La URL pública de este portal. De ella sale el `redirect_uri`. */
-export function getPortalBaseUrl(): string {
-  const raw = process.env.CRM_PORTAL_BASE_URL?.trim();
+/**
+ * La URL pública del portal **de esta organización**. De ella sale el
+ * `redirect_uri`.
+ *
+ * Es por organización y no global desde que un despliegue sirve tres dominios:
+ * cada organización tiene su propia aplicación en Logto con su propio
+ * `redirect_uri` declarado, y una URL global mandaría al titular de Seguros
+ * Aurora a `bank.demo-te.com` — donde su cookie no existe y donde el vínculo se
+ * pediría contra el padrón del banco.
+ *
+ * `CRM_PORTAL_BASE_URL` sigue siendo el respaldo, y sigue siendo lo que se usa
+ * en local: ahí las tres viven en `http://localhost:3000` y no hay nada que
+ * separar.
+ */
+export function getPortalBaseUrl(organization: OrganizationConfig): string {
+  const raw = organization.portalBaseUrl ?? process.env.CRM_PORTAL_BASE_URL?.trim();
   if (raw === undefined || raw === '') {
-    throw new Error('falta CRM_PORTAL_BASE_URL: el portal no sabe cuál es su propia dirección');
+    throw new Error(
+      'el portal no sabe cuál es su propia dirección: falta CRM_ORG_<SLUG>_PORTAL_BASE_URL ' +
+        '(o CRM_PORTAL_BASE_URL para todas)',
+    );
   }
   return raw.replace(/\/+$/, '');
 }
@@ -106,8 +126,8 @@ export function getPortalBaseUrl(): string {
  * Tres copias de una cadena que tiene que coincidir tres veces es una errata
  * esperando a ocurrir, y el error que produce (`invalid_grant`) no la nombra.
  */
-export function getRedirectUri(): string {
-  return `${getPortalBaseUrl()}/portal/callback`;
+export function getRedirectUri(organization: OrganizationConfig): string {
+  return `${getPortalBaseUrl(organization)}/portal/callback`;
 }
 
 function base64url(input: Buffer): string {
@@ -123,15 +143,23 @@ export function newAuthorizationRequest(): AuthorizationRequest {
   };
 }
 
-/** A dónde se manda el navegador para que la persona se autentique. */
+/**
+ * A dónde se manda el navegador para que la persona se autentique.
+ *
+ * Lleva la organización además de su aplicación de portal porque el
+ * `redirect_uri` es **suyo**: cada una tiene su dominio y su aplicación en
+ * Logto, y el que se manda aquí tiene que ser el mismo que el declarado allí y
+ * el mismo que se manda al canjear el código.
+ */
 export function buildAuthorizationUrl(
+  organization: OrganizationConfig,
   portal: PortalAppConfig,
   request: AuthorizationRequest,
 ): string {
   const challenge = base64url(createHash('sha256').update(request.codeVerifier).digest());
   const url = new URL(`${issuer()}/auth`);
   url.searchParams.set('client_id', portal.clientId);
-  url.searchParams.set('redirect_uri', getRedirectUri());
+  url.searchParams.set('redirect_uri', getRedirectUri(organization));
   url.searchParams.set('response_type', 'code');
   // `email` porque es con lo que el banco encuentra la ficha del titular en SU
   // padrón; `profile` sólo para poder saludarle por su nombre. Ni un scope más:
@@ -145,9 +173,12 @@ export function buildAuthorizationUrl(
 }
 
 /** El portal cierra la sesión también en Logto, no sólo su propia cookie. */
-export function buildEndSessionUrl(idTokenHint?: string): string {
+export function buildEndSessionUrl(
+  organization: OrganizationConfig,
+  idTokenHint?: string,
+): string {
   const url = new URL(`${issuer()}/session/end`);
-  url.searchParams.set('post_logout_redirect_uri', `${getPortalBaseUrl()}/portal`);
+  url.searchParams.set('post_logout_redirect_uri', `${getPortalBaseUrl(organization)}/portal`);
   if (idTokenHint !== undefined) url.searchParams.set('id_token_hint', idTokenHint);
   return url.toString();
 }
@@ -168,6 +199,7 @@ export class PortalLoginError extends Error {
  * misma respuesta que se está comprobando no comprueba nada.
  */
 export async function exchangeCode(
+  organization: OrganizationConfig,
   portal: PortalAppConfig,
   code: string,
   request: AuthorizationRequest,
@@ -187,7 +219,7 @@ export async function exchangeCode(
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: getRedirectUri(),
+      redirect_uri: getRedirectUri(organization),
       code_verifier: request.codeVerifier,
     }),
     cache: 'no-store',

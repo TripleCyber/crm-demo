@@ -1,11 +1,31 @@
 import type { Metadata } from 'next';
 
+import { getRequestOrganization } from '@/lib/request-organization';
+
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'Banco Demo',
-  description: 'Consola de agentes y portal de clientes de Banco Demo',
-};
+/**
+ * El título de la pestaña, con el nombre de **la organización del dominio**.
+ *
+ * Era una constante con «Banco Demo» dentro, y con tres dominios sobre el mismo
+ * despliegue eso pone el nombre del banco en la pestaña del portal de la
+ * clínica. Es de las cosas que nadie mira hasta que la ve un cliente, y una
+ * captura de pantalla la conserva.
+ *
+ * Si la organización no se puede resolver se queda un rótulo genérico: no se
+ * afirma el nombre de ninguna.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const organization = await getRequestOrganization();
+    return {
+      title: organization.displayName,
+      description: `Consola de agentes y portal de clientes de ${organization.displayName}`,
+    };
+  } catch {
+    return { title: 'CRM', description: 'Consola de agentes y portal de clientes' };
+  }
+}
 
 /**
  * La raíz sólo pone el documento. **La cabecera vive en cada sección.**

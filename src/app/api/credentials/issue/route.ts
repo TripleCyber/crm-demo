@@ -233,7 +233,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       mail: delivery === 'email' ? composeMailDraft(customer, offer.offerUri) : undefined,
       // Dónde va el titular a recogerla. Sólo en su canal, y es una dirección
       // pública: no lleva la oferta dentro.
-      portalUrl: delivery === 'app' ? `${getPortalBaseUrl()}/portal` : undefined,
+      // La dirección es la de ESTA organización: con tres dominios sobre el
+      // mismo despliegue, una global mandaría al asegurado de Seguros Aurora al
+      // portal del banco, donde no tiene ficha.
+      portalUrl: delivery === 'app' ? `${getPortalBaseUrl(session.organization)}/portal` : undefined,
     });
   } catch (error) {
     if (error instanceof TeApiError) {

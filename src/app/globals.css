@@ -974,6 +974,18 @@ button.secondary:hover:not([disabled]) {
   color: var(--warn);
 }
 
+/*
+ * `warn` a secas: un valor que falta dentro de una lista de datos.
+ *
+ * Sin fondo, a diferencia de `.alert.warn`: esto no es un aviso que interrumpa,
+ * es una fila de Diagnóstico que dice «esto no está declarado». El ámbar basta
+ * para que se distinga de las que sí lo están al recorrer la columna, que es lo
+ * único que tiene que hacer.
+ */
+.warn {
+  color: var(--warn);
+}
+
 /* ═════════════════════════════════════════════════════════════════════════
  *  LOS CINCO FINALES DE LA COMPROBACIÓN
  * ═════════════════════════════════════════════════════════════════════════

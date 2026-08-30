@@ -1,15 +1,14 @@
 import 'server-only';
 
 /**
- * El mapa `orgId → { m2mClientId, m2mSecret, issuerUrl, verifierUrl }`.
+ * El mapa `orgId → { domain, m2mClientId, m2mSecret, issuerUrl, verifierUrl }`.
  *
  * ## Por qué un mapa y no cuatro variables sueltas
  *
- * Hoy Banco Demo es el único inquilino, y con cuatro variables planas
- * (`CRM_M2M_CLIENT_ID`, …) esto funcionaría igual. El día que entre el segundo
- * banco, esas cuatro variables hay que convertirlas en un mapa y **cada sitio
- * que las lea hay que reescribirlo**. Nace ya como mapa para que añadir el
- * segundo inquilino sea añadir cinco variables de entorno y nada más.
+ * Nació como mapa con un solo inquilino —Banco Demo— para que el segundo no
+ * obligara a reescribir cada sitio que leyera esas variables. **Desde el
+ * 2026-08-30 hay tres**: Banco Demo, Seguros Aurora y Clínica San Rafael, y los
+ * tres los sirve **un solo despliegue** desde tres dominios distintos.
  *
  * ## Cómo se declara una organización
  *
@@ -17,6 +16,7 @@ import 'server-only';
  *
  *     CRM_ORG_BANCODEMO_ID=ww51qgtvpc9h
  *     CRM_ORG_BANCODEMO_NAME=Banco Demo, S.A.
+ *     CRM_ORG_BANCODEMO_DOMAIN=bank.demo-te.com
  *     CRM_ORG_BANCODEMO_M2M_CLIENT_ID=<app M2M de esa organización>
  *     CRM_ORG_BANCODEMO_M2M_SECRET=<su secreto>
  *     CRM_ORG_BANCODEMO_ISSUER_URL=https://te-api.idp.tripleenable.com
@@ -27,6 +27,24 @@ import 'server-only';
  * `CRM_ORG_BANCODEMO_M2M_CLIENT_ID` se leería como una organización llamada
  * `BANCODEMO_M2M_CLIENT`. Con el juego de caracteres cerrado a `[A-Z0-9]`, esa
  * clave sencillamente no encaja.
+ *
+ * ## El dominio es lo que elige de qué organización es cada petición
+ *
+ * Un despliegue, tres dominios. `CRM_ORG_<SLUG>_DOMAIN` es lo que ata cada uno
+ * a su organización, y de él salen dos cosas que no se pueden separar:
+ *
+ *  · el `did:web:<dominio>` que la organización publica en
+ *    `/.well-known/did.json`, y
+ *  · qué padrón de clientes enseña la consola cuando la petición llega por ahí.
+ *
+ * Tienen que salir del mismo sitio: si el documento DID de un dominio y los
+ * clientes que se ven en ese mismo dominio pudieran discrepar, la consola de
+ * Seguros Aurora estaría emitiendo credenciales firmadas como del banco.
+ *
+ * La correspondencia es **una lista cerrada y en un solo sentido**: se busca el
+ * `Host` recibido dentro de lo declarado. Nunca al revés — el `Host` lo escribe
+ * quien llama, y componer un documento DID con él sería dejar que cualquiera
+ * que apunte un DNS a esta máquina se fabrique una identidad en su dominio.
  *
  * ## `issuerUrl` y `verifierUrl` son de te-api. NUNCA de walt.id
  *
@@ -54,6 +72,34 @@ export interface OrganizationConfig {
   readonly orgId: string;
   /** Nombre para la interfaz. El legal de verdad lo dice te-api en `/organization`. */
   readonly displayName: string;
+  /**
+   * El dominio de esta organización — `bank.demo-te.com`, sin esquema.
+   *
+   * Es **su identidad**, no una dirección más: de aquí sale el
+   * `did:web:<dominio>` que publica en `/.well-known/did.json`, que es lo que
+   * la cartera resuelve para comprobar quién firmó una credencial. Cambiarlo
+   * deja huérfana cada credencial ya emitida (`docs/fases/DOMINIOS.md`).
+   *
+   * `undefined` = esta organización no tiene dominio declarado. Entonces
+   * **no publica documento DID** —la ruta devuelve 404, que es la verdad— y
+   * sólo se llega a ella fijando `CRM_ACTIVE_ORG_ID`. Se enseña en Diagnóstico
+   * para que no haya que adivinarlo.
+   */
+  readonly domain: string | undefined;
+  /**
+   * Hosts que además encaminan a esta organización, **sin ser su identidad**.
+   *
+   * Existe por una sola razón: en local no hay tres dominios con TLS, y sin
+   * esto probar las tres organizaciones obliga a reiniciar el servidor tres
+   * veces cambiando `CRM_ACTIVE_ORG_ID`. Con `seguros.localhost` declarado
+   * aquí, un solo `next dev` sirve las tres.
+   *
+   * **No entra jamás en un documento DID.** Ése se compone siempre con
+   * `domain`, así que un alias mal puesto encamina a una consola —lo mismo que
+   * ya hace el dominio de verdad, que es público— pero no puede publicar una
+   * identidad en un dominio que no le corresponde.
+   */
+  readonly devHosts: readonly string[];
   /** La aplicación M2M de ESTA organización. Sólo servidor. */
   readonly m2mClientId: string;
   /** Su secreto. Sólo servidor, y no se escribe en ningún log. */
@@ -104,6 +150,22 @@ export interface OrganizationConfig {
    * mismo identificador significara dos cosas distintas.
    */
   readonly portal: PortalAppConfig | undefined;
+  /**
+   * La dirección pública del portal **de esta organización**.
+   *
+   * Con un despliegue por organización bastaba una global
+   * (`CRM_PORTAL_BASE_URL`), y sigue sirviendo de respaldo. Con tres dominios
+   * sobre el mismo despliegue no: de aquí sale el `redirect_uri`, y Logto lo
+   * compara carácter a carácter con el declarado en **la aplicación de esa
+   * organización**. Una sola global mandaría al titular de Seguros Aurora a
+   * `bank.demo-te.com`, donde su cookie de sesión no existe y donde el vínculo
+   * se pediría contra el padrón del banco.
+   *
+   * No se compone a partir de `domain` —que sería `https://<domain>`— porque en
+   * local el portal vive en `http://localhost:3000` y el esquema y el puerto no
+   * se deducen de un dominio.
+   */
+  readonly portalBaseUrl: string | undefined;
 }
 
 /** La aplicación OIDC del portal de clientes: *traditional web*, con secreto. */
@@ -193,6 +255,8 @@ function readSlug(slug: string): OrganizationConfig {
   return {
     orgId,
     displayName: process.env[`${prefix}_NAME`]?.trim() ?? orgId,
+    domain: normalizeHost(process.env[`${prefix}_DOMAIN`]),
+    devHosts: readHostList(`${prefix}_DEV_HOSTS`),
     m2mClientId: requireEnv(`${prefix}_M2M_CLIENT_ID`),
     m2mSecret: requireEnv(`${prefix}_M2M_SECRET`),
     // Sin barra final: las URLs se componen con plantillas, y
@@ -200,6 +264,7 @@ function readSlug(slug: string): OrganizationConfig {
     issuerUrl: issuerUrl.replace(/\/+$/, ''),
     verifierUrl: verifierUrl.replace(/\/+$/, ''),
     officialNumbers: readOfficialNumbers(`${prefix}_OFFICIAL_NUMBERS`),
+    portalBaseUrl: emptyToUndefined(process.env[`${prefix}_PORTAL_BASE_URL`])?.replace(/\/+$/, ''),
     portal:
       portalClientId === undefined || portalClientId === '' || portalClientSecret === undefined
         ? undefined
@@ -214,6 +279,43 @@ function readSlug(slug: string): OrganizationConfig {
 function emptyToUndefined(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+}
+
+/**
+ * Un `Host` reducido a lo que identifica al inquilino, o `undefined`.
+ *
+ * Las cuatro normalizaciones son las cuatro formas en las que el mismo dominio
+ * llega escrito distinto, y cada una es un fallo de encaminamiento silencioso:
+ *
+ *  · **Mayúsculas** — `Bank.Demo-TE.com` es el mismo host (RFC 4343). Un
+ *    navegador no lo escribe así, pero `curl` sí y la cartera va detrás de lo
+ *    que ponga el `did:web`.
+ *  · **El puerto** — `seguros.localhost:3000` en desarrollo. Es de la máquina,
+ *    no de la organización: el mismo servidor en otro puerto sigue siendo suyo.
+ *  · **El punto final** — `bank.demo-te.com.` es la forma absoluta y válida.
+ *  · **Los espacios** — de la variable de entorno, no del protocolo.
+ *
+ * Lo que **no** se hace es aceptar un `Host` vacío o con barras: eso no es un
+ * host, es alguien probando. Devuelve `undefined` y la búsqueda no encuentra
+ * nada, que es lo correcto.
+ */
+function normalizeHost(value: string | undefined): string | undefined {
+  const trimmed = value?.trim().toLowerCase();
+  if (trimmed === undefined || trimmed === '') return undefined;
+  // El puerto se quita por el ÚLTIMO `:` y sólo si lo que sigue son dígitos:
+  // una IPv6 literal (`[::1]:3000`) tiene dos puntos dentro del corchete.
+  const withoutPort = trimmed.replace(/:\d+$/, '');
+  const withoutTrailingDot = withoutPort.replace(/\.$/, '');
+  if (withoutTrailingDot === '' || /[/\\?#\s]/.test(withoutTrailingDot)) return undefined;
+  return withoutTrailingDot;
+}
+
+/** Una lista de hosts separados por comas o espacios, ya normalizados. */
+function readHostList(name: string): readonly string[] {
+  return (process.env[name] ?? '')
+    .split(/[\s,]+/)
+    .map((entry) => normalizeHost(entry))
+    .filter((entry): entry is string => entry !== undefined);
 }
 
 /**
@@ -270,8 +372,62 @@ export function getOrganizations(): ReadonlyMap<string, OrganizationConfig> {
     );
   }
 
+  // Dos organizaciones sobre el mismo host es la misma errata de copiar y pegar
+  // que dos con el mismo `organization_id`, pero peor: no rompe nada al
+  // arrancar y lo que hace es servir el padrón —y el documento DID— de una en
+  // el dominio de la otra. Se comprueba aquí, una vez, y revienta al arrancar.
+  const seen = new Map<string, string>();
+  for (const organization of organizations.values()) {
+    for (const host of hostsOf(organization)) {
+      const owner = seen.get(host);
+      if (owner !== undefined) {
+        throw new OrganizationConfigError(
+          `el host ${host} está declarado en dos organizaciones (${owner} y ${organization.orgId})`,
+        );
+      }
+      seen.set(host, organization.orgId);
+    }
+  }
+
   organizationsCache = organizations;
   return organizations;
+}
+
+/** Todos los hosts que encaminan a esta organización: el suyo y sus alias. */
+function hostsOf(organization: OrganizationConfig): readonly string[] {
+  return organization.domain === undefined
+    ? organization.devHosts
+    : [organization.domain, ...organization.devHosts];
+}
+
+/**
+ * La organización que vive en ese `Host`, o `undefined`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  NO TIENE RESPALDO, Y ÉSA ES SU RAZÓN DE SER
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Un host que no encaja con nada devuelve `undefined` y **nunca la primera
+ * organización declarada**. Quien la llama decide qué hacer con eso, y las dos
+ * decisiones son distintas a propósito:
+ *
+ *  · `/.well-known/did.json` responde **404**. Devolver el documento del banco
+ *    «por defecto» sería publicar la identidad de Banco Demo en un dominio que
+ *    no es suyo, y cualquiera que apuntase un DNS aquí tendría un `did:web`
+ *    respaldado por nuestras claves.
+ *  · La consola cae en `CRM_ACTIVE_ORG_ID`, que es una decisión escrita por
+ *    quien despliega —no una suposición— y es lo que hace que `localhost`
+ *    siga funcionando.
+ */
+export function findOrganizationByHost(
+  host: string | null | undefined,
+): OrganizationConfig | undefined {
+  const normalized = normalizeHost(host ?? undefined);
+  if (normalized === undefined) return undefined;
+  for (const organization of getOrganizations().values()) {
+    if (hostsOf(organization).includes(normalized)) return organization;
+  }
+  return undefined;
 }
 
 /** La configuración de una organización, o error si no está declarada. */
@@ -284,17 +440,18 @@ export function getOrganization(orgId: string): OrganizationConfig {
 }
 
 /**
- * La organización con la que trabaja este despliegue del CRM.
+ * La organización de este despliegue **cuando el `Host` no dice cuál es**.
  *
- * `CRM_ACTIVE_ORG_ID` la elige; si sólo hay una declarada, ésa. **Es una sola
- * función y la usan las dos secciones** —la consola de agentes (`./session.ts`)
- * y el portal del cliente— porque las dos tienen que responder lo mismo: si el
- * portal sirviera a un banco y la consola a otro, el vínculo se pediría para
- * una organización y el cliente saldría del padrón de la otra.
+ * Ya no es la forma normal de elegir: desde que un despliegue sirve tres
+ * dominios, quien elige es el dominio de la petición
+ * (`./request-organization.ts`). Esto es lo que queda para las peticiones que
+ * llegan por un host que no encaja con nada —`localhost:3000` en desarrollo— y
+ * para el código que no tiene petición delante.
  *
- * Cuando entre el login de empleado, la consola dejará de llamar aquí y sacará
- * la organización del ID token; el portal seguirá usando esto, porque el portal
- * de un banco sirve a **ese** banco y a ninguno más.
+ * `CRM_ACTIVE_ORG_ID` la elige; si sólo hay una declarada, ésa. Con varias
+ * declaradas y sin variable **falla**, y eso es lo que se quiere: en producción
+ * la variable NO se pone, así que un host desconocido no acaba enseñando el
+ * padrón de la primera organización que hubiera en el mapa.
  */
 export function getActiveOrganization(): OrganizationConfig {
   const requested = process.env.CRM_ACTIVE_ORG_ID?.trim();
@@ -304,7 +461,8 @@ export function getActiveOrganization(): OrganizationConfig {
   const [only] = [...organizations.values()];
   if (organizations.size !== 1 || only === undefined) {
     throw new OrganizationConfigError(
-      'hay varias organizaciones declaradas: fija CRM_ACTIVE_ORG_ID para elegir con cuál se trabaja',
+      'esta dirección no corresponde a ninguna organización declarada, y hay varias: ' +
+        'entra por el dominio de la organización (CRM_ORG_<SLUG>_DOMAIN) o fija CRM_ACTIVE_ORG_ID',
     );
   }
   return only;

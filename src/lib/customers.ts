@@ -4,7 +4,10 @@ import { query } from './db';
 import type { VerificationStatus } from './verification-status';
 
 /**
- * El padrón de clientes de Banco Demo — lectura y alta.
+ * El padrón de clientes de una organización — lectura y alta.
+ *
+ * «De una», y desde el 2026-08-30 son tres: Banco Demo, Seguros Aurora y
+ * Clínica San Rafael, sobre la misma tabla y el mismo despliegue.
  *
  * Cada consulta lleva el `org_id` en el `where`, sin excepción. No es
  * defensivo por gusto: es el requisito de auditoría de F4 («un empleado de otra
@@ -24,6 +27,20 @@ export interface Customer {
   readonly email: string | null;
   readonly phone: string | null;
   readonly accountLast4: string | null;
+  /**
+   * El número de póliza, en las aseguradoras. `null` en el resto.
+   *
+   * Es el equivalente de `accountLast4` en su sector: el dato con el que el
+   * titular reconoce de qué relación se le habla. Ver `db/005_…`.
+   */
+  readonly policyNumber: string | null;
+  /**
+   * El número de historia clínica, en las clínicas. `null` en el resto.
+   *
+   * Identificador administrativo, **no un dato clínico**: dice que esta persona
+   * tiene expediente, no de qué. Ver la nota en `db/005_…`.
+   */
+  readonly medicalRecordNumber: string | null;
   /** `YYYY-MM-DD` ya formateado por Postgres. Ver la nota de abajo. */
   readonly customerSince: string | null;
   readonly createdAt: string;
@@ -38,6 +55,8 @@ interface CustomerRow extends Record<string, unknown> {
   email: string | null;
   phone: string | null;
   account_last4: string | null;
+  policy_number: string | null;
+  medical_record_number: string | null;
   customer_since: string | null;
   created_at: Date;
 }
@@ -65,6 +84,8 @@ const SELECT_COLUMNS = `
   c.email,
   c.phone,
   c.account_last4,
+  c.policy_number,
+  c.medical_record_number,
   to_char(c.customer_since, 'YYYY-MM-DD') as customer_since,
   c.created_at
 `;
@@ -79,6 +100,8 @@ function toCustomer(row: CustomerRow): Customer {
     email: row.email,
     phone: row.phone,
     accountLast4: row.account_last4,
+    policyNumber: row.policy_number,
+    medicalRecordNumber: row.medical_record_number,
     customerSince: row.customer_since,
     createdAt: row.created_at.toISOString(),
   };
@@ -136,8 +159,15 @@ function unaccented(column: string): string {
  * El listado con búsqueda, ya cruzado con el estado de cada cliente.
  *
  * El término se compara contra el nombre completo, el identificador, el correo
- * y los cuatro de la cuenta, que es lo que un agente tiene delante cuando
- * suena el teléfono: o le dicen cómo se llaman, o le cantan un número.
+ * y **la referencia del sector** —los cuatro de la cuenta, el número de póliza
+ * o el de historia—, que es lo que un agente tiene delante cuando suena el
+ * teléfono: o le dicen cómo se llaman, o le cantan un número.
+ *
+ * Las tres referencias se buscan siempre, sin mirar de qué organización es la
+ * consulta. No hace falta distinguir: el `where` ya lleva el `org_id`, así que
+ * buscar `policy_number` en el padrón del banco no puede encontrar nada de
+ * nadie — y no distinguir es lo que hace que el buscador funcione igual en las
+ * tres sin un `if` por sector.
  *
  * El orden es **alfabético por apellidos**, como un padrón y no como un registro
  * de altas: quien mira esta pantalla busca a una persona, no las últimas cuatro
@@ -182,7 +212,9 @@ export async function searchCustomers(
              or ${unaccented("concat(c.given_name, ' ', c.family_name)")} like ${unaccented('$2')}
              or lower(c.external_id) like lower($2)
              or lower(coalesce(c.email, '')) like lower($2)
-             or coalesce(c.account_last4, '') like $2)
+             or coalesce(c.account_last4, '') like $2
+             or lower(coalesce(c.policy_number, '')) like lower($2)
+             or lower(coalesce(c.medical_record_number, '')) like lower($2))
       order by c.family_name, c.given_name
       limit 500`,
     [orgId, pattern],
@@ -259,6 +291,8 @@ export interface CustomerInput {
   readonly email: string | null;
   readonly phone: string | null;
   readonly accountLast4: string | null;
+  readonly policyNumber: string | null;
+  readonly medicalRecordNumber: string | null;
   readonly customerSince: string | null;
 }
 
@@ -276,8 +310,9 @@ export async function createCustomer(orgId: string, input: CustomerInput): Promi
     // consultas y `SELECT_COLUMNS` sirva también aquí.
     const rows = await query<CustomerRow>(
       `insert into customer as c
-         (org_id, external_id, given_name, family_name, email, phone, account_last4, customer_since)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+         (org_id, external_id, given_name, family_name, email, phone, account_last4,
+          policy_number, medical_record_number, customer_since)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        returning ${SELECT_COLUMNS}`,
       [
         orgId,
@@ -287,6 +322,8 @@ export async function createCustomer(orgId: string, input: CustomerInput): Promi
         input.email,
         input.phone,
         input.accountLast4,
+        input.policyNumber,
+        input.medicalRecordNumber,
         input.customerSince,
       ],
     );
@@ -324,6 +361,8 @@ export function validateCustomerInput(raw: {
   email?: string;
   phone?: string;
   accountLast4?: string;
+  policyNumber?: string;
+  medicalRecordNumber?: string;
   customerSince?: string;
 }): { input: CustomerInput; issues: ValidationIssue[] } {
   const issues: ValidationIssue[] = [];
@@ -337,6 +376,8 @@ export function validateCustomerInput(raw: {
   const givenName = trim(raw.givenName);
   const familyName = trim(raw.familyName);
   const accountLast4 = optional(raw.accountLast4);
+  const policyNumber = optional(raw.policyNumber);
+  const medicalRecordNumber = optional(raw.medicalRecordNumber);
   const customerSince = optional(raw.customerSince);
 
   // El juego de caracteres es cerrado a propósito: el `external_id` viaja como
@@ -360,6 +401,20 @@ export function validateCustomerInput(raw: {
     issues.push({ field: 'accountLast4', message: 'son exactamente cuatro dígitos' });
   }
 
+  // La póliza y la historia se comprueban por LARGO y por juego de caracteres,
+  // no por formato: cada aseguradora y cada clínica numeran como quieren, y una
+  // expresión regular inventada aquí rechazaría números legítimos. Lo que sí se
+  // cierra es lo que rompe al viajar dentro de un JWT y por una URL, que es lo
+  // mismo que se le exige al `external_id`.
+  for (const [field, value] of [
+    ['policyNumber', policyNumber],
+    ['medicalRecordNumber', medicalRecordNumber],
+  ] as const) {
+    if (value !== null && !/^[A-Za-z0-9./_:-]{1,64}$/.test(value)) {
+      issues.push({ field, message: 'sólo letras, dígitos y . / _ : - (hasta 64 caracteres)' });
+    }
+  }
+
   if (customerSince !== null && !/^\d{4}-\d{2}-\d{2}$/.test(customerSince)) {
     issues.push({ field: 'customerSince', message: 'la fecha va en formato AAAA-MM-DD' });
   }
@@ -372,6 +427,8 @@ export function validateCustomerInput(raw: {
       email: optional(raw.email),
       phone: optional(raw.phone),
       accountLast4,
+      policyNumber,
+      medicalRecordNumber,
       customerSince,
     },
     issues,
@@ -419,6 +476,28 @@ export interface CustomerAttribute {
   readonly identifying: boolean;
   /** De dónde sale en la ficha. `null` = esta ficha no lo tiene. */
   readonly read: (customer: Customer) => string | null;
+  /**
+   * Cómo se escribe el valor en pantalla, si no es tal cual.
+   *
+   * Sólo lo usa `account_last4`, y para algo que no es adorno: el valor
+   * guardado es `4471` y lo que hay que leer es `···· 4471`, porque son los
+   * cuatro ÚLTIMOS de un número más largo. Enseñar `4471` a secas invita a
+   * leerlo como el número de cuenta entero.
+   *
+   * Lo que viaja a la credencial es siempre `read`, nunca esto: dentro de algo
+   * firmado van los cuatro dígitos, no los puntos.
+   */
+  readonly display?: (value: string) => string;
+  /**
+   * El rótulo corto, para la cabecera de una columna.
+   *
+   * «Últimos cuatro de la cuenta» es lo correcto junto a una casilla que decide
+   * qué se firma —ahí el agente tiene que leer exactamente qué está pidiendo—,
+   * y es demasiado largo encima de una columna de cinco caracteres. Se declara
+   * aparte en vez de recortar el largo en pantalla: recortar produce «Últimos
+   * cuatro de la…», que no es un rótulo.
+   */
+  readonly shortLabel?: string;
 }
 
 /**
@@ -442,6 +521,43 @@ export const CUSTOMER_ATTRIBUTES: readonly CustomerAttribute[] = [
     label: 'Últimos cuatro de la cuenta',
     identifying: false,
     read: (c) => c.accountLast4,
+    display: (value) => `···· ${value}`,
+    shortLabel: 'Cuenta',
+  },
+  /*
+    ─────────────────────────────────────────────────────────────────────────
+    LOS DOS DE LOS OTROS DOS SECTORES
+    ─────────────────────────────────────────────────────────────────────────
+
+    Entran en el catálogo GENERAL y no en uno por organización, y no es pereza:
+    el catálogo dice qué columnas del padrón son divulgables, y la tabla es una
+    sola para las tres. Lo que decide qué ve cada agente es el filtro que ya
+    existía —`resolveCredentialType` descarta lo que la ficha no rellena—, así
+    que a quien atiende en el banco no le aparece «Número de póliza» sin que
+    nadie haya escrito un `if` por organización. El día que dos organizaciones
+    del mismo sector tengan que llevar cosas distintas, eso ya lo resuelve
+    `CRM_TYPE_<TIPO>_CLAIMS`.
+
+    Los dos van `identifying: false`, igual que `account_last4`: no son con lo
+    que se confirma «quién eres» —eso son el nombre y los apellidos—, son con lo
+    que el titular reconoce de qué relación se le está hablando. Marcarlos por
+    defecto en la pantalla de comprobación sería pedir de más en cada
+    comprobación, que es justo lo que la divulgación selectiva existe para no
+    tener que hacer.
+  */
+  {
+    claim: 'policy_number',
+    label: 'Número de póliza',
+    identifying: false,
+    read: (c) => c.policyNumber,
+    shortLabel: 'Póliza',
+  },
+  {
+    claim: 'medical_record_number',
+    label: 'Número de historia',
+    identifying: false,
+    read: (c) => c.medicalRecordNumber,
+    shortLabel: 'Historia',
   },
   {
     claim: 'customer_since',
@@ -490,4 +606,80 @@ export function buildCredentialClaims(
     if (value !== null && value !== '') claims[attribute.claim] = value;
   }
   return claims;
+}
+
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA «REFERENCIA»: LA CUENTA, LA PÓLIZA Y LA HISTORIA SON LA MISMA COSA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * En los tres sectores hay un dato con el que el titular reconoce **de qué
+ * relación se le está hablando**: los cuatro últimos de su cuenta en el banco,
+ * su número de póliza en la aseguradora, su número de historia en la clínica.
+ * Hace el mismo trabajo en los tres y por eso ocupa el mismo sitio en pantalla.
+ *
+ * Estaba escrito «Cuenta» a mano en tres pantallas. Con un solo inquilino eso
+ * era correcto; con tres, la consola de Seguros Aurora enseñaba una columna
+ * «Cuenta» vacía en las diez filas — una columna muerta que además le dice al
+ * asegurado, si mira por encima del hombro del agente, que esto es software de
+ * un banco.
+ *
+ * La resolución es **por los datos y no por configuración**, y es deliberado:
+ * la organización que rellena pólizas es la que tiene pólizas. Una variable de
+ * entorno más sería una variable que se puede poner mal, para decir algo que
+ * el padrón ya dice.
+ */
+const REFERENCE_CLAIMS = ['account_last4', 'policy_number', 'medical_record_number'] as const;
+
+const REFERENCE_ATTRIBUTES: readonly CustomerAttribute[] = CUSTOMER_ATTRIBUTES.filter(
+  (attribute) => (REFERENCE_CLAIMS as readonly string[]).includes(attribute.claim),
+);
+
+/** La referencia de UNA ficha: la primera de las tres que rellena. */
+export function referenceOf(
+  customer: Customer,
+): { attribute: CustomerAttribute; value: string } | undefined {
+  for (const attribute of REFERENCE_ATTRIBUTES) {
+    const value = attribute.read(customer);
+    if (value !== null && value !== '') return { attribute, value };
+  }
+  return undefined;
+}
+
+/**
+ * La referencia que rotula la COLUMNA de un listado.
+ *
+ * Se elige la que más fichas rellenan y no la primera que aparece: un padrón
+ * migrado a medias puede tener una ficha suelta con la columna del sector
+ * equivocado, y esa ficha no puede decidir el rótulo de las otras cien.
+ *
+ * `undefined` = ninguna ficha rellena ninguna, y entonces la columna **no se
+ * pinta**. Una columna entera de guiones no informa de nada; que no esté dice
+ * lo mismo y ocupa menos.
+ */
+export function listReferenceAttribute(
+  customers: readonly Customer[],
+): CustomerAttribute | undefined {
+  let best: { attribute: CustomerAttribute; count: number } | undefined;
+  for (const attribute of REFERENCE_ATTRIBUTES) {
+    const count = customers.filter((customer) => {
+      const value = attribute.read(customer);
+      return value !== null && value !== '';
+    }).length;
+    if (count > 0 && (best === undefined || count > best.count)) best = { attribute, count };
+  }
+  return best?.attribute;
+}
+
+/** El valor ya escrito como se lee en pantalla. */
+export function displayAttribute(attribute: CustomerAttribute, customer: Customer): string | null {
+  const value = attribute.read(customer);
+  if (value === null || value === '') return null;
+  return attribute.display === undefined ? value : attribute.display(value);
+}
+
+/** El rótulo corto si lo hay, y el largo si no. */
+export function columnLabelOf(attribute: CustomerAttribute): string {
+  return attribute.shortLabel ?? attribute.label;
 }

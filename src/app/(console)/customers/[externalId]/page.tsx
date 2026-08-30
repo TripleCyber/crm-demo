@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { VerificationPill } from '@/components/VerificationPill';
 import { listOffersForCustomer, type IssuedOffer } from '@/lib/credential-offers';
+import { columnLabelOf, referenceOf } from '@/lib/customers';
 import { loadCustomerContext } from '@/lib/customer-context';
 import { deliveryPhrase } from '@/lib/delivery';
 import { formatCalendarDate, formatTimestamp } from '@/lib/format';
@@ -70,6 +71,9 @@ export default async function CustomerPage({
   const lastVerification = verifications[0];
   const href = `/customers/${encodeURIComponent(customer.externalId)}`;
 
+  // La referencia del sector de ESTA ficha. Ver `referenceOf` en `lib/customers.ts`.
+  const reference = referenceOf(customer);
+
   /**
    * La comprobación que sigue viva, si la hay.
    *
@@ -98,9 +102,21 @@ export default async function CustomerPage({
           </h1>
           <p className="page-facts">
             <span className="mono">{customer.externalId}</span>
-            {customer.accountLast4 !== null && (
+            {/*
+              La referencia del sector, no «Cuenta» escrito a mano: en el banco
+              son los cuatro últimos de la cuenta, en la aseguradora la póliza y
+              en la clínica el número de historia. Las tres hacen el mismo
+              trabajo —que el titular reconozca de qué relación se habla— y por
+              eso ocupan el mismo sitio. Ver `referenceOf` en `lib/customers.ts`.
+            */}
+            {reference !== undefined && (
               <span>
-                Cuenta <span className="mono">···· {customer.accountLast4}</span>
+                {columnLabelOf(reference.attribute)}{' '}
+                <span className="mono">
+                  {reference.attribute.display === undefined
+                    ? reference.value
+                    : reference.attribute.display(reference.value)}
+                </span>
               </span>
             )}
             {customer.customerSince !== null && (
@@ -125,14 +141,24 @@ export default async function CustomerPage({
               <dd>{customer.email ?? <span className="none">no consta</span>}</dd>
               <dt>Teléfono</dt>
               <dd>{customer.phone ?? <span className="none">no consta</span>}</dd>
-              <dt>Cuenta</dt>
-              <dd className="mono">
-                {customer.accountLast4 === null ? (
-                  <span className="none">no consta</span>
-                ) : (
-                  `···· ${customer.accountLast4}`
-                )}
-              </dd>
+              {/*
+                La fila lleva el rótulo LARGO —«Últimos cuatro de la cuenta»—
+                porque aquí hay sitio y porque es la ficha: quien la lee está
+                comprobando un dato concreto, no recorriendo una columna.
+                Cuando la ficha no rellena ninguna de las tres, la fila no se
+                pinta: «no consta» debajo de un rótulo que no es de su sector
+                («Cuenta» en una clínica) informa peor que no estar.
+              */}
+              {reference !== undefined && (
+                <>
+                  <dt>{reference.attribute.label}</dt>
+                  <dd className="mono">
+                    {reference.attribute.display === undefined
+                      ? reference.value
+                      : reference.attribute.display(reference.value)}
+                  </dd>
+                </>
+              )}
               <dt>Cliente desde</dt>
               <dd>
                 {customer.customerSince === null ? (
@@ -148,7 +174,7 @@ export default async function CustomerPage({
             <h2>Actividad de identidad</h2>
             <p className="muted">
               Lo que esta consola ha hecho con la identidad de esta persona, de lo más reciente a
-              lo más antiguo. Es el registro del banco: cada línea es algo que hizo un empleado
+              lo más antiguo. Es el registro de la organización: cada línea es algo que hizo un empleado
               suyo, con su hora.
             </p>
             <CustomerActivity offers={offers} verifications={verifications} />
@@ -206,7 +232,7 @@ export default async function CustomerPage({
               inventario de nuestras carencias en la ficha de su cliente.
             */}
             <p className="panel-note">
-              «Ofrecida» es lo que hizo el banco.{' '}
+              «Ofrecida» es lo que hizo esta organización.{' '}
               <strong>Si el titular la guardó, no lo sabemos</strong>, y por eso aquí no hay ninguna
               insignia de «credencial activa».
             </p>

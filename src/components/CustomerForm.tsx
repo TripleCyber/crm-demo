@@ -88,6 +88,41 @@ export function CustomerForm() {
         </label>
       </div>
 
+      {/*
+        ═══════════════════════════════════════════════════════════════════════
+         LOS TRES SECTORES COMPARTEN FORMULARIO, Y SE RELLENA EL QUE TOQUE
+        ═══════════════════════════════════════════════════════════════════════
+
+        Los tres campos —cuenta, póliza, historia— son la misma cosa en tres
+        sectores: el dato con el que el titular reconoce de qué relación se le
+        habla. Se enseñan los tres y son opcionales, en vez de esconder dos
+        según la organización.
+
+        No es dejarlo a medias: este formulario es de CLIENTE (`'use client'`),
+        no importa nada de `src/lib` —todo eso es `server-only`— y por tanto no
+        sabe ni puede saber de qué organización es la pantalla. Ocultarlos
+        obligaría a bajar la organización al navegador para una decisión
+        cosmética. Lo que sí decide por organización es lo que importa: qué
+        atributos ofrece la pantalla de emisión, y eso ya lo filtra el servidor
+        descartando los que la ficha no rellena.
+      */}
+      <div className="row">
+        <label className="field">
+          <span>Número de póliza</span>
+          <input name="policyNumber" placeholder="PA-2019-004471" />
+          {fieldError('policyNumber') !== undefined && (
+            <small style={{ color: 'var(--danger)' }}>{fieldError('policyNumber')}</small>
+          )}
+        </label>
+        <label className="field">
+          <span>Número de historia</span>
+          <input name="medicalRecordNumber" placeholder="HC-0044718" />
+          {fieldError('medicalRecordNumber') !== undefined && (
+            <small style={{ color: 'var(--danger)' }}>{fieldError('medicalRecordNumber')}</small>
+          )}
+        </label>
+      </div>
+
       <SubmitButton />
     </form>
   );

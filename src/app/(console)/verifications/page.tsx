@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { VerificationPill } from '@/components/VerificationPill';
 import { CUSTOMER_ATTRIBUTES } from '@/lib/customers';
 import { formatTimestamp } from '@/lib/format';
+import { describeConsoleFailure } from '@/lib/console-failures';
 import { getEmployeeSession } from '@/lib/session';
 import { listRecentVerifications, type VerificationListEntry } from '@/lib/verifications';
 
@@ -47,7 +48,7 @@ export default async function VerificationsPage() {
     const session = await getEmployeeSession();
     verifications = await listRecentVerifications(session.organization.orgId);
   } catch (error) {
-    failure = error instanceof Error ? error.message : 'fallo desconocido';
+    failure = describeConsoleFailure(error, 'el listado de verificaciones no cargó');
   }
 
   return (
@@ -58,7 +59,7 @@ export default async function VerificationsPage() {
           <h1>Verificaciones</h1>
           <p className="page-sub">
             Cada vez que un agente le pide a un cliente que demuestre quién es, queda una línea
-            aquí. La escribe este banco; el desenlace lo dice TripleEnable.
+            aquí. La escribe esta organización; el desenlace lo dice TripleEnable.
           </p>
         </div>
       </header>

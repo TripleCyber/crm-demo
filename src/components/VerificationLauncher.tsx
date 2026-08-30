@@ -212,7 +212,7 @@ export function VerificationLauncher({
               <p className="muted">
                 Se le enviará una solicitud <strong>firmada a nombre de esta entidad</strong>, y su
                 cartera comprobará esa firma antes de enseñar nada. La verificación la hace
-                TripleEnable: este banco no tiene que custodiar ninguna clave.
+                TripleEnable: esta organización no tiene que custodiar ninguna clave.
               </p>
 
               <label className="field">

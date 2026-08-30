@@ -158,7 +158,7 @@ export default async function VerificationPage({
               dirección exacta sigue estando, abajo.
             */}
             <p className="panel-note">
-              La comprobación la hace TripleEnable. Este banco no tiene que montar ni custodiar
+              La comprobación la hace TripleEnable. Esta organización no tiene que montar ni custodiar
               ningún verificador: pone la pregunta y lee la respuesta.
             </p>
             <details className="tech">

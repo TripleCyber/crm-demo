@@ -1,8 +1,9 @@
 import { findPendingOffer } from '@/lib/credential-offers';
 import { findCustomer } from '@/lib/customers';
-import { getActiveOrganization } from '@/lib/organizations';
+import type { OrganizationConfig } from '@/lib/organizations';
 import { getRedirectUri } from '@/lib/portal-oidc';
 import { getSession, type PortalSession } from '@/lib/portal-session';
+import { getRequestOrganization } from '@/lib/request-organization';
 
 /**
  * La pantalla del portal del cliente. Tiene exactamente tres estados:
@@ -29,11 +30,23 @@ import { getSession, type PortalSession } from '@/lib/portal-session';
  */
 export const dynamic = 'force-dynamic';
 
-/** Los motivos que `/portal/login` y `/portal/callback` saben devolver. */
+/**
+ * Los motivos que `/portal/login` y `/portal/callback` saben devolver.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  AQUÍ NO SE NOMBRA NI UNA VARIABLE DE ENTORNO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Quien lee esta pantalla es un CLIENTE. `CRM_ORG_<SLUG>_PORTAL_CLIENT_ID` no
+ * le dice qué hacer, le dice que su banco está a medio montar — y además no lo
+ * puede arreglar él ni la persona a la que va a llamar. Se le dice qué no
+ * funciona y a quién preguntar; el nombre de la variable vive en Diagnóstico,
+ * que es la pantalla de quien sí puede ponerla.
+ */
 const ERROR_MESSAGES: Record<string, string> = {
   'sin-portal':
-    'Este portal no tiene aplicación de Logto configurada todavía. Faltan ' +
-    'CRM_ORG_<SLUG>_PORTAL_CLIENT_ID y CRM_ORG_<SLUG>_PORTAL_CLIENT_SECRET.',
+    'El acceso con TripleEnable todavía no está disponible en este portal. ' +
+    'Si necesitas vincular tu cuenta, llámanos y lo hacemos contigo.',
   'sesion-perdida':
     'Se perdió el hilo del login. Suele pasar al volver con el botón «atrás» o si la ' +
     'pestaña ha estado abierta mucho rato. Vuelve a empezar.',
@@ -60,46 +73,61 @@ export default async function PortalPage({
   // `CRM_PORTAL_BASE_URL`, y sin ella `/portal/login` no puede componer el
   // `redirect_uri`. Comprobar sólo la mitad deja el botón activo y manda a la
   // persona a un error de Logto, que es la peor forma de enterarse.
+  let organization: OrganizationConfig | undefined;
   let configurationProblem: string | null = null;
   try {
-    const organization = getActiveOrganization();
+    organization = await getRequestOrganization();
     if (organization.portal === undefined) {
-      configurationProblem =
-        'faltan CRM_ORG_<SLUG>_PORTAL_CLIENT_ID y CRM_ORG_<SLUG>_PORTAL_CLIENT_SECRET';
+      configurationProblem = ERROR_MESSAGES['sin-portal'] ?? null;
     } else {
-      getRedirectUri();
+      getRedirectUri(organization);
     }
-  } catch (error) {
-    // `OrganizationConfigError` y el `Error` de `getPortalBaseUrl()` nombran los
-    // dos la variable que falta, así que se enseña el mensaje tal cual. Los dos
-    // son `Error`, y por eso no hay dos ramas: es una comprobación que parecía
-    // más cuidadosa y sólo era la misma escrita dos veces.
-    configurationProblem = error instanceof Error ? error.message : 'configuración incompleta';
+  } catch {
+    // El mensaje del error NO se enseña, y ése es el cambio: nombra la variable
+    // de entorno que falta, y quien lee esta pantalla es un titular. El detalle
+    // técnico sigue estando entero en Diagnóstico, que es donde lo mira quien
+    // puede arreglarlo.
+    configurationProblem =
+      'Este portal no está disponible ahora mismo. Vuelve a intentarlo en un rato o llámanos.';
   }
 
   const session = await getSession();
 
   return (
     <>
-      <h1>Tu cuenta de Banco Demo</h1>
+      {/*
+        El nombre sale de la organización del dominio por el que entró la
+        petición, no está escrito aquí: `seguros.demo-te.com` y
+        `bank.demo-te.com` son el mismo despliegue, y un rótulo fijo le diría al
+        asegurado de Seguros Aurora que ésta es su cuenta del banco.
+
+        Sin organización resuelta se cae a «tu cuenta», que es verdad sin
+        nombrar a nadie: afirmar el nombre del primer partner que hubo sería
+        justo la clase de dato inventado que este proyecto no pone.
+      */}
+      <h1>Tu cuenta{organization === undefined ? '' : ` de ${organization.displayName}`}</h1>
       <p className="muted">
-        Vincula tu cuenta de Banco Demo con tu identidad de TripleEnable. A partir de ese
-        momento podremos avisarte en tu móvil cuando haya que confirmar algo, sin llamarte por
-        teléfono y sin pedirte datos por correo.
+        Vincula tu cuenta con tu identidad de TripleEnable. A partir de ese momento podremos
+        avisarte en tu móvil cuando haya que confirmar algo, sin llamarte por teléfono y sin
+        pedirte datos por correo.
       </p>
 
-      {configurationProblem !== null && (
-        <div className="alert">Portal sin configurar: {configurationProblem}</div>
-      )}
+      {configurationProblem !== null && <div className="alert">{configurationProblem}</div>}
 
       {errorKey !== undefined && (
         <div className="alert">{ERROR_MESSAGES[errorKey] ?? 'Algo no ha salido bien.'}</div>
       )}
 
-      {session === null ? (
+      {/*
+        Sin organización resuelta no se pinta la mitad de «ya estás dentro»: esa
+        mitad lee el padrón, y sin saber de qué organización es la petición no
+        hay padrón que leer. El aviso de arriba ya está puesto, así que la
+        pantalla dice qué pasa en vez de quedarse a medias.
+      */}
+      {session === null || organization === undefined ? (
         <SignedOut disabled={configurationProblem !== null} />
       ) : (
-        <SignedIn session={session} />
+        <SignedIn session={session} organization={organization} />
       )}
     </>
   );
@@ -131,11 +159,20 @@ function SignedOut({ disabled }: { disabled: boolean }) {
   );
 }
 
-async function SignedIn({ session }: { session: PortalSession }) {
+async function SignedIn({
+  session,
+  organization,
+}: {
+  session: PortalSession;
+  // Llega ya resuelta desde arriba y no se vuelve a pedir: si esta mitad de la
+  // pantalla resolviera la organización por su cuenta, dos resoluciones del
+  // mismo «¿de quién es este portal?» podrían discrepar, y entonces el saludo
+  // sería de una organización y la ficha del padrón de otra.
+  organization: OrganizationConfig;
+}) {
   // La ficha se vuelve a leer del padrón en vez de guardarla en la cookie: si
   // el banco corrige un apellido, la pantalla lo enseña corregido sin que el
   // titular tenga que volver a entrar.
-  const organization = getActiveOrganization();
   const customer =
     session.customerExternalId === null
       ? null
@@ -153,7 +190,7 @@ async function SignedIn({ session }: { session: PortalSession }) {
     <>
       <div className={outcome.ok ? 'alert ok' : 'alert'}>
         {outcome.ok
-          ? 'Tu cuenta de Banco Demo está vinculada con tu identidad de TripleEnable.'
+          ? `Tu cuenta de ${organization.displayName} está vinculada con tu identidad de TripleEnable.`
           : (outcome.message ?? 'No hemos podido completar el vínculo.')}
       </div>
 
@@ -200,7 +237,7 @@ async function SignedIn({ session }: { session: PortalSession }) {
           )}
           {customer !== null && (
             <>
-              <dt>Tu ficha en Banco Demo</dt>
+              <dt>Tu ficha en {organization.displayName}</dt>
               <dd>
                 {customer.givenName} {customer.familyName}{' '}
                 <span className="mono">({customer.externalId})</span>
@@ -241,9 +278,9 @@ async function SignedIn({ session }: { session: PortalSession }) {
             )}
           </dl>
           <p className="muted" style={{ marginTop: 16, marginBottom: 0 }}>
-            Banco Demo no sabe qué identidad de TripleEnable hay detrás, y TripleEnable no sabe
-            que eres cliente nuestro: lo único que existe es esta referencia. Puedes retirarla
-            desde tu cartera cuando quieras.
+            {organization.displayName} no sabe qué identidad de TripleEnable hay detrás, y
+            TripleEnable no sabe que eres cliente nuestro: lo único que existe es esta
+            referencia. Puedes retirarla desde tu cartera cuando quieras.
           </p>
         </div>
       )}

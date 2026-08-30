@@ -612,7 +612,7 @@ function PresentationTimeline({
         <summary>Ver el detalle técnico</summary>
         <p>
           Esta pantalla <strong>no habla con TripleEnable</strong>: pregunta cada{' '}
-          {POLL_INTERVAL_MS / 1000} segundos al servidor de este banco (
+          {POLL_INTERVAL_MS / 1000} segundos al servidor de esta organización (
           <span className="mono">GET /api/credentials/present</span>), y es él quien consulta a
           te-api (<span className="mono">GET /v1/b2b/presentations/:id</span>) con el token de la
           organización. Ni el token ni el secreto que lo pide bajan al navegador, y se comprueba
@@ -620,7 +620,7 @@ function PresentationTimeline({
         </p>
         <p>
           La solicitud se abrió en el verificador de TripleEnable, firmada con el DID de esta
-          organización. Este banco no tiene verificador ni clave de verificación.
+          organización. No tiene verificador propio ni clave de verificación.
         </p>
       </details>
     </div>
