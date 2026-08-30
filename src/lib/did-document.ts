@@ -77,6 +77,22 @@ interface PublicJwk {
  */
 const PUBLISHED_KEYS: readonly PublicJwk[] = [
   {
+    // La que firma en producción desde la rotación del 2026-08-30. Es la
+    // primera cuya parte privada NO vive en un fichero de una máquina: entra
+    // por `TE_ISSUER_KEY_D`, así que se puede rotar sin entrar en el servidor.
+    kty: 'EC',
+    crv: 'P-256',
+    x: 'sEITr5UPRGgOT59WfYQlPUVMH93gAYfOHZkLD0zaay0',
+    y: 'GX_vnr3xQnDwImDVuhRWPsEAuSVh3ibGslSL8Ev9X1o',
+    kid: 'jwWSd4C3QPpKhQ76Ab3-bDwfJ3jSX8r5da3N_de8Q-U',
+    alg: 'ES256',
+    use: 'sig',
+  },
+  {
+    // LA ANTERIOR, Y SE QUEDA. Todo lo firmado antes de la rotación lleva este
+    // `kid` en su cabecera, y una cartera que no lo encuentre aquí no puede
+    // verificar esas credenciales. Retirarla las invalidaría a todas de golpe:
+    // sale cuando caduque la última, no antes.
     kty: 'EC',
     crv: 'P-256',
     x: 'ssRLxTmTBJZOVnf3jh3auwkm0zdx-T_pfSdCrDaJxXg',
