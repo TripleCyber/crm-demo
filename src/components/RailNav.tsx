@@ -40,6 +40,12 @@ const LINKS: readonly RailLink[] = [
   // alfabético: Diagnóstico contesta «¿está bien montado?» y esto contesta «¿qué
   // ha llegado?», y la segunda pregunta sólo tiene sentido después de la primera.
   { href: '/events', labelKey: 'nav.events' },
+  // Ajustes va el ÚLTIMO del grupo y no el primero, aunque sea lo primero que se
+  // toca al desplegar. El orden de una barra lateral es el del uso diario, no el
+  // del primer día: quien la mira ocho horas busca clientes y verificaciones, y
+  // los ajustes se abren dos veces en la vida de una instalación. Quien acaba de
+  // publicarla llega igual, porque la consola sin configurar lleva aquí sola.
+  { href: '/settings', labelKey: 'nav.settings' },
 ];
 
 export function RailNav() {

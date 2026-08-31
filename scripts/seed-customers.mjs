@@ -162,35 +162,80 @@ const ROSTER_BY_REFERENCE = {
   supply_point_number: 'LARKFIELDENERGY',
 };
 
-const orgId = process.env.CRM_ORG_ID?.trim();
-if (orgId === undefined || orgId === '') {
-  process.stderr.write('CRM_ORG_ID is missing (see .env.example)\n');
+/**
+ * De quién es el padrón que se va a sembrar, y de qué sector.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  PRIMERO LA BASE, DESPUÉS EL ENTORNO — LA MISMA REGLA QUE LA APLICACIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Estos dos valores salían de `CRM_ORG_ID` y `CRM_REFERENCE_CLAIM`, y con la
+ * configuración viviendo en el entorno era lo único que había. Desde que vive en
+ * la base (`src/lib/tenant-settings.ts`), un despliegue configurado **desde la
+ * pantalla** no tiene esas variables en ninguna parte, y este guion se negaba a
+ * sembrar el padrón de una instalación perfectamente configurada.
+ *
+ * Así que se lee la fila de ajustes y el entorno queda de respaldo, en ese
+ * orden. Es la misma regla de la aplicación —la base manda— y no una segunda:
+ * el entorno sólo entra cuando la base todavía no dice nada.
+ *
+ * `CRM_SEED_ROSTER` sigue mandando sobre las dos, porque es una anulación
+ * explícita de quien ejecuta el guion y no configuración de nadie.
+ */
+const client = new pg.Client({ connectionString });
+await client.connect();
+
+let stored = {};
+try {
+  const { rows: settingsRows } = await client.query(
+    'select org_id, reference_claim from tenant_settings where id = 1',
+  );
+  stored = settingsRows[0] ?? {};
+} catch {
+  // La tabla no existe todavía: una base sin la migración 008. Se sigue con el
+  // entorno, que es exactamente lo que había antes de que existiera.
+}
+
+const orgId = nonEmpty(stored.org_id) ?? nonEmpty(process.env.CRM_ORG_ID);
+if (orgId === undefined) {
+  await client.end();
+  process.stderr.write(
+    'no organization to seed for: configure this installation on the Settings screen, ' +
+      'or set CRM_ORG_ID (see .env.example)\n',
+  );
   process.exit(1);
 }
 
-const forced = process.env.CRM_SEED_ROSTER?.trim().toUpperCase();
-const reference = process.env.CRM_REFERENCE_CLAIM?.trim().toLowerCase();
-const rosterName = forced !== undefined && forced !== '' ? forced : ROSTER_BY_REFERENCE[reference];
+const forced = nonEmpty(process.env.CRM_SEED_ROSTER)?.toUpperCase();
+const reference = (
+  nonEmpty(stored.reference_claim) ?? nonEmpty(process.env.CRM_REFERENCE_CLAIM)
+)?.toLowerCase();
+const rosterName = forced !== undefined ? forced : ROSTER_BY_REFERENCE[reference];
 
 if (rosterName === undefined) {
+  await client.end();
   process.stderr.write(
-    'cannot tell which roster to seed: set CRM_REFERENCE_CLAIM to one of ' +
+    'cannot tell which roster to seed: set the sector reference on the Settings screen to one of ' +
       `${Object.keys(ROSTER_BY_REFERENCE).join(', ')}, or force it with CRM_SEED_ROSTER ` +
       `(${Object.keys(ROSTERS).join(', ')})\n`,
   );
   process.exit(1);
 }
 
+/** Un valor vacío es un valor sin poner. Vale para el entorno y para la fila. */
+function nonEmpty(value) {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+}
+
 const rows = ROSTERS[rosterName];
 if (rows === undefined) {
+  await client.end();
   process.stderr.write(
     `there is no test roster called ${rosterName}. The ones there are: ${Object.keys(ROSTERS).join(', ')}\n`,
   );
   process.exit(1);
 }
-
-const client = new pg.Client({ connectionString });
-await client.connect();
 
 try {
   for (const row of rows) {

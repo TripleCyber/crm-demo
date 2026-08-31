@@ -75,7 +75,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(): Promise<NextResponse> {
   let organization;
   try {
-    organization = getOrganization();
+    organization = await getOrganization();
   } catch (error) {
     // Si la configuración no se puede leer, este documento no se puede componer.
     // Se contesta 500 y **no** un 404: son dos cosas distintas para quien opera

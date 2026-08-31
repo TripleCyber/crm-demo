@@ -33,9 +33,11 @@ export const es: PartialMessages = {
     verifications: 'Verificaciones',
     diagnostics: 'Diagnóstico',
     events: 'Eventos',
+    settings: 'Ajustes',
     consoleFallbackName: 'Consola de agentes',
     unconfigured: 'sin configurar',
-    unconfiguredAgent: 'Consola sin configurar. El detalle está en Diagnóstico.',
+    unconfiguredAgent: 'Consola sin configurar. Se configura en Ajustes.',
+    setUp: 'Configurar esta instalación',
     unidentifiedAgent: 'Sin identificar.',
     agentNumber: 'Agente',
   },
@@ -346,6 +348,176 @@ export const es: PartialMessages = {
    *   añada la comprobación, y a que el de la pantalla y el de la base
    *   discreparan el día que se añada uno.
    */
+  settings: {
+    eyebrow: 'Integración',
+    title: 'Ajustes',
+    subtitle:
+      'Todo lo que esta instalación necesita para hablar con TripleEnable. Se guarda en la base del propio CRM, así que un despliegue recién publicado se configura desde aquí y desde ningún otro sitio.',
+
+    stateConfigured: 'Esta instalación está configurada. Si funciona lo dicen las comprobaciones del final.',
+    stateIncomplete: 'Todavía sin configurar. Falta: {fields}.',
+    missing: {
+      orgId: 'el identificador de organización de Logto',
+      displayName: 'el nombre de la organización',
+      domain: 'el dominio',
+      m2mClientId: 'el identificador de cliente de la aplicación de máquina',
+      m2mSecret: 'el secreto de la aplicación de máquina',
+      referenceClaim: 'la referencia de sector',
+      issuerUrl: 'la dirección de te-api',
+    },
+
+    databaseDown: 'No se han podido leer los ajustes: {reason}',
+    databaseDownNote:
+      'Es el único fallo del que esta pantalla no puede salir sola. Comprueba DATABASE_URL y aplica las migraciones.',
+
+    webhookUrlTitle: 'Esta instalación recibe los webhooks en',
+    webhookUrlNoDomain:
+      'Declara antes el dominio, más abajo. De él sale esta dirección, y también el did:web con el que firma esta organización.',
+    webhookUrlNote:
+      'Se pega en la consola de TripleEnable, en <b>Credentials \u2192 Webhook</b>. Al registrarla, la consola devuelve el secreto de firma, y ésa es la única vez que se enseña entero — va en la casilla de aquí abajo.',
+
+    sourceTitle: 'De dónde salen estos valores',
+    sourceRule: 'La regla',
+    sourceRuleDetail:
+      '<b>La base manda.</b> Lo que se guarda aquí es lo que corre. No hay un segundo sitio donde mirar.',
+    sourceEnv: 'Las variables de entorno',
+    sourceEnvSeeded:
+      'Esta instalación se <b>sembró desde el entorno</b> en su primer arranque, y por eso las casillas venían rellenas. Desde ese momento el entorno ya no se lee: <b>cambiar una variable y volver a desplegar no hace nada.</b>',
+    sourceEnvIgnored:
+      'No se leen. Sólo pueden sembrar una instalación que todavía no tenga fila de ajustes, y ésta ya la tiene.',
+    sourceRequired: 'Lo que sigue siendo obligatorio en el entorno',
+    sourceRequiredDetail:
+      '<code>DATABASE_URL</code>, y nada más. Es donde se guarda todo esto, así que no puede guardarse dentro de ella.',
+
+    noAuthWarning:
+      '<b>Esta consola no tiene login.</b> Quien llegue a esta dirección puede abrir esta pantalla. Los secretos se escriben y no se releen — sólo se enseña su huella —, pero mientras no exista el login de empleado no dejes una instalación con secretos de verdad en una dirección pública sin nada delante.',
+
+    identityTitle: 'Quién es esta instalación',
+    identityNote:
+      'La organización de Logto en cuyo nombre emite y verifica este CRM. La crea su administrador en la consola de TripleEnable.',
+    orgId: 'Identificador de organización de Logto',
+    orgIdNote:
+      'Cambiarlo no migra nada: los clientes, las verificaciones y los eventos que ya hay se quedan atados al anterior.',
+    displayName: 'Nombre de la organización',
+    displayNameExample: 'Northwind Bank',
+    displayNameNote: 'Sólo para esta consola. El nombre legal es el que diga te-api.',
+    domain: 'Dominio',
+    domainNote:
+      'Sin esquema. Es la identidad de esta instalación: de él salen el did:web que publica y la dirección de webhook de arriba.',
+    referenceClaim: 'Referencia de sector',
+    referenceChoose: 'Elige una',
+    referenceNote:
+      'El dato con el que el titular reconoce de qué relación se le habla. Es la única casilla que ofrece el alta de clientes, así que la equivocada le pone delante a un agente la de otro negocio.',
+    officialNumbers: 'Teléfonos oficiales',
+    officialNumbersNote:
+      'Separados por comas. Viajan dentro de la credencial firmada, así que uno equivocado es peor que ninguno.',
+
+    machineTitle: 'Aplicación de máquina',
+    machineNote:
+      'Lo que autentica al servidor de este CRM contra te-api. No es la aplicación del portal, y no puede serlo: ésta autentica a un servidor y aquélla a una persona.',
+    m2mClientId: 'Identificador de cliente',
+    m2mSecret: 'Secreto de cliente',
+    m2mSecretNote:
+      'Se enseña entero una sola vez, cuando la consola lo crea. Su huella se calcula igual allí y aquí, así que se pueden comparar a ojo.',
+
+    webhookSecretTitle: 'Secreto de firma del webhook',
+    webhookSecretIntro:
+      'Lo único que separa un evento de te-api de un POST escrito por cualquiera. Sin él se rechaza toda entrega: no hay modo «aceptar sin comprobar».',
+    webhookSecret: 'Secreto de firma',
+    webhookSecretNote:
+      'Se pega tal y como lo dio la consola, con el prefijo incluido. Es una cadena opaca y no material criptográfico codificado: quitarle el prefijo o descodificar la cola produce otro MAC y se rechazan todas las entregas.',
+
+    brandTitle: 'Marca',
+    brandNote:
+      'Dos colores y un monograma. El acento va sobre blanco; la superficie es la barra lateral y la cabecera del portal. Los colores de estado no son la marca y no se tocan aquí.',
+    brandAccent: 'Acento',
+    brandSurface: 'Superficie',
+    brandMonogram: 'Monograma',
+
+    portalTitle: 'Portal de clientes',
+    portalNote:
+      'Opcional. Sin él, /portal lo dice en pantalla en vez de romperse a mitad de un login.',
+    portalClientId: 'Identificador de cliente',
+    portalClientSecret: 'Secreto de cliente',
+    portalClientSecretNote: 'El canje del código va con client_secret_basic, sólo en el servidor.',
+    portalLinkType: 'Tipo de vínculo',
+    portalLinkTypeNote:
+      'Opcional. Tiene que ser un tipo de credencial del padrón de esta organización en te-api, o el vínculo sale con invalid_request.',
+    portalBaseUrl: 'Dirección del portal',
+    portalBaseUrlNote:
+      'De ella sale el redirect_uri, y Logto lo compara carácter a carácter con el declarado en la aplicación.',
+
+    platformTitle: 'Direcciones de la plataforma',
+    platformNote:
+      'Son iguales en cualquier instalación del producto, así que vienen puestas y casi nunca se tocan. Están aquí para que un Logto de pruebas sea posible sin variables de entorno.',
+    logtoEndpoint: 'Endpoint de Logto',
+    teApiBaseUrl: 'Dirección de te-api',
+    b2bResource: 'Indicador del recurso B2B',
+    b2bResourceNote:
+      'Es el aud que exige te-api. Tiene que ser el mismo texto que el suyo, carácter a carácter: una barra final de más y el token sale para otro recurso.',
+    b2bScope: 'Scopes que se piden',
+    b2bScopeNote:
+      'Separados por espacios. Logto recorta en silencio lo que el rol de organización no tenga concedido, sin error, así que lo que de verdad se consiguió es el scope del token — lo enseña la comprobación de aquí abajo.',
+
+    save: 'Guardar los ajustes',
+    saving: 'Guardando\u2026',
+    saved: 'Guardado. Las comprobaciones de abajo ya usan estos valores.',
+    checkFields: 'Hay casillas que revisar.',
+    required: 'Obligatorio',
+    domainInvalid: 'Un nombre de host a secas, como bank.demo-te.com. Sin ruta y sin parámetros.',
+    referenceInvalid: 'Elige una de: {values}',
+    colourInvalid: 'Un color hexadecimal: #rgb, #rrggbb, o rrggbb sin la almohadilla.',
+    brandPair: 'Los dos colores van juntos o no van. Media marca se lee como una pantalla a medio pintar.',
+    monogramTooLong: 'Uno o dos caracteres. Más que eso es una mancha en un disco de 32 píxeles.',
+    portalPair: 'El identificador y el secreto del portal van juntos, o no va ninguno.',
+    urlInvalid: 'Una dirección absoluta http o https.',
+    secretWhitespace: 'Ese valor lleva un espacio dentro. Vuelve a pegarlo sin espacios delante ni detrás.',
+    secretLooksLikeFingerprint:
+      'Eso parece una huella y no un secreto. La huella es lo que una consola enseña EN LUGAR del secreto; con ella no se puede firmar nada.',
+    secretMissing: 'Sin poner',
+    secretKeep: 'En blanco se queda el que hay',
+    secretPaste: 'Pega aquí el secreto',
+    secretClear: 'Vaciar el secreto guardado al guardar',
+    fingerprintTitle: 'Los 16 primeros caracteres del SHA-256',
+    saveFailed: 'No se han podido guardar los ajustes. El detalle está en el registro del servidor.',
+
+    copy: 'Copiar',
+    copied: 'Copiado',
+
+    checkConnectionTitle: 'Comprobar la conexión con TripleEnable',
+    checkConnectionNote:
+      'Le pide a Logto un token con las credenciales guardadas y con él llama a GET /v1/b2b/organization. Comprueba cuatro cosas de una vez: el secreto, el recurso, los scopes y si esta organización está dada de alta. Prueba lo GUARDADO, no lo que haya escrito arriba.',
+    checkConnection: 'Comprobar la conexión',
+    checking: 'Comprobando\u2026',
+    checkConnectionOk: 'Contestó. La costura está bien montada.',
+    checkConnectionOpaque:
+      'te-api contesta el mismo 404 a todas ellas a propósito: un token malo, un aud que no cuadra, un scope que falta, una organización sin dar de alta y una suspendida. El requestId es lo que su operador puede buscar.',
+    checkScopes: 'Scopes del token',
+    checkTypes: 'Tipos emitibles',
+
+    checkWebhookTitle: 'Pedirle a TripleEnable que llame a este CRM',
+    checkWebhookNote:
+      'Es la única dirección que no se puede comprobar desde dentro, así que hay que pedirla. te-api encola un webhook.test, lo firma con el secreto de esta organización y lo entrega en la dirección que tiene registrada. Es además la única entrega que sale mientras un destino está en probation, y un 2xx es lo que lo asciende.',
+    checkWebhook: 'Mandar un evento de prueba',
+    sending: 'Mandando\u2026',
+    checkWebhookSent:
+      'Mandado. Tiene que aparecer en la pantalla de Eventos en unos segundos — empujado por te-api, no preguntado por este CRM.',
+    checkWebhookMismatch:
+      'Mandado, pero la dirección registrada no es la de esta instalación. La entrega va a otro sitio, así que aquí no va a llegar nada.',
+    checkWebhookNotRegistered:
+      'Esta organización todavía no tiene ningún destino de webhook registrado, así que no hay nada que probar.',
+    checkWebhookRegisterHint:
+      'Registra esta dirección en la consola de TripleEnable, en Credentials \u2192 Webhook:',
+    checkWebhookRegistered: 'Dirección registrada',
+    checkWebhookExpected: 'Esta instalación',
+    checkWebhookStatus: 'Estado del destino',
+    checkWebhookEventId: 'Id del evento',
+    checkWebhookDelivery: 'Entrega',
+    checkWebhookNotQueued:
+      'te-api registró el evento pero no encoló ninguna entrega: en ese despliegue el envío está apagado.',
+    checkWebhookSeeEvents: 'Abrir la pantalla de eventos',
+  },
+
   events: {
     eyebrow: 'Integración',
     title: 'Eventos recibidos',
@@ -356,7 +528,8 @@ export const es: PartialMessages = {
     endpointUrl: 'Dirección del webhook',
     endpointSecret: 'Secreto de firma',
     endpointSecretSet: 'Declarado. Cada entrega se comprueba contra él.',
-    endpointSecretMissing: 'Sin declarar, así que se rechaza toda entrega. Falta',
+    endpointSecretWhere: 'Se pone en Ajustes',
+    endpointSecretMissing: 'Sin declarar, así que se rechaza toda entrega.',
     endpointNote:
       'La dirección se registra en la consola de TripleEnable, en Credentials → Webhook. Al registrarla devuelve el secreto de firma, y ésa es la única vez que se enseña entero.',
     emptyTitle: 'Todavía no ha llegado nada',
@@ -546,29 +719,30 @@ export const es: PartialMessages = {
     didPublished: 'did:web publicado',
     didNone: 'todavía ninguno · te-api no tiene clave de esta organización, así que /.well-known/did.json contesta 404',
     officialNumbers: 'Números oficiales',
-    officialNumbersNone: 'ninguno declarado · ',
+    officialNumbersNone: 'ninguno declarado ·',
     issuerBase: 'te-api (emisión)',
     verifierBase: 'te-api (verificación)',
     customerPortal: 'Portal del cliente',
-    portalUndeclared: 'sin aplicación declarada · ',
+    portalUndeclared: 'sin aplicación declarada ·',
     brand: 'Marca',
-    brandNone: 'la paleta por defecto · se declara con ',
+    brandNone: 'la paleta por defecto ·',
+    setInSettings: 'se pone en Ajustes',
     orgChoiceTitle: 'Una instalación, una organización',
     whoChooses: 'De dónde sale',
     whoChoosesDetail:
-      'Del entorno de este proceso — <code>CRM_ORG_ID</code> y las variables planas de al lado. La petición no puede cambiarlo: la cabecera <code>Host</code> aquí no decide nada, que es lo que hace que la respuesta a «¿de quién es esta pantalla?» sea la misma en todas las peticiones.',
+      'De la fila de ajustes de esta instalación, escrita en la pantalla de <b>Ajustes</b>. La petición no puede cambiarlo: la cabecera <code>Host</code> aquí no decide nada, que es lo que hace que la respuesta a «¿de quién es esta pantalla?» sea la misma en todas las peticiones.',
     twoTenants: 'Para servir a una segunda empresa',
     twoTenantsDetail:
       'Se publica la aplicación otra vez con otra configuración. Es la misma imagen: lo que cambia es el entorno, su dominio y su base. No se comparte nada, así que nada de lo que haga una empresa puede llegar a la otra.',
     didNoFallback: 'El documento DID',
     didNoFallbackDetail:
-      '<code>/.well-known/did.json</code> se compone siempre con <code>CRM_ORG_DOMAIN</code>, así que su <code>id</code> es el mismo DID diga lo que diga la petición. Responde <b>404</b> mientras te-api no tenga clave: una organización que no ha encendido su emisión no tiene identidad de emisor que publicar.',
+      '<code>/.well-known/did.json</code> se compone siempre con el dominio declarado, así que su <code>id</code> es el mismo DID diga lo que diga la petición. Responde <b>404</b> mientras te-api no tenga clave: una organización que no ha encendido su emisión no tiene identidad de emisor que publicar.',
     webhookTitle: 'Los eventos que llegan a este CRM',
     webhookUrl: 'Dirección del webhook',
     webhookUrlNote: 'Se registra en la consola, en Credentials → Webhook.',
     webhookSecret: 'Secreto de firma',
     webhookSecretSet: 'declarado · cada entrega se comprueba contra él',
-    webhookSecretMissing: 'sin declarar, así que se rechaza toda entrega · ',
+    webhookSecretMissing: 'sin declarar, así que se rechaza toda entrega ·',
     webhookReceived: 'Recibidos',
     webhookTally: '{total} en total, {rejected} rechazados',
     webhookNever: 'todavía ninguno',
@@ -647,7 +821,7 @@ export const es: PartialMessages = {
 
   errors: {
     misconfigured:
-      'Esta consola está a medio configurar y no puede mostrar los datos de la organización. Avisa a quien lleva la integración: el detalle está en Diagnóstico.',
+      'Esta consola todavía no está configurada y no puede mostrar los datos de la organización. Quien lleva la integración la configura en la pantalla de Ajustes, que dice exactamente qué falta.',
     generic:
       'No hemos podido cargar los datos ahora mismo. Vuelve a intentarlo en un momento; si sigue igual, avisa a quien lleva la integración — el detalle está en Diagnóstico.',
     shortRetry: 'vuelve a intentarlo en un momento, y si sigue igual mira Diagnóstico.',

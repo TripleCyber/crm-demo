@@ -46,7 +46,7 @@ export default async function NewCustomerPage() {
     referencias, porque sin saber de qué empresa era la pantalla esconder tres
     campos habría sido esconderlos a ciegas.
 
-    Ahora no hay tal cosa: `CRM_REFERENCE_CLAIM` es obligatoria y sin ella el
+    Ahora no hay tal cosa: la referencia de sector es obligatoria y sin ella el
     proceso no llega hasta aquí con una configuración a medias. Lo único que
     puede fallar es que esté mal escrita, y entonces **no hay referencia que
     ofrecer**: un alta sin la casilla del dato con el que el titular reconoce su
@@ -59,7 +59,7 @@ export default async function NewCustomerPage() {
   let organization: OrganizationConfig | undefined;
   let failure: string | undefined;
   try {
-    organization = getOrganization();
+    organization = await getOrganization();
   } catch (error) {
     failure = describeConsoleFailure(t, error, 'el alta de cliente no pudo leer su configuración');
   }

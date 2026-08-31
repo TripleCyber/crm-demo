@@ -22,7 +22,7 @@ export default async function PortalLayout({ children }: { children: React.React
     // portales —banco, aseguradora, clínica y comercializadora— son el mismo
     // despliegue, y la cabecera es lo primero que el titular lee para saber que
     // está en el sitio correcto.
-    const organization = getOrganization();
+    const organization = await getOrganization();
     bankName = organization.displayName;
     monogram = monogramOf(organization);
   } catch {

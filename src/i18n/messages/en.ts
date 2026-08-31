@@ -40,9 +40,11 @@ export const en = {
     verifications: 'Verifications',
     diagnostics: 'Diagnostics',
     events: 'Events',
+    settings: 'Settings',
     consoleFallbackName: 'Agent console',
     unconfigured: 'not configured',
-    unconfiguredAgent: 'Console not configured. The detail is in Diagnostics.',
+    unconfiguredAgent: 'Console not configured. Set it up in Settings.',
+    setUp: 'Set this installation up',
     unidentifiedAgent: 'Not identified.',
     agentNumber: 'Agent',
   },
@@ -382,6 +384,185 @@ export const en = {
    *   añada la comprobación, y a que el de la pantalla y el de la base
    *   discreparan el día que se añada uno.
    */
+  /**
+   * La pantalla de ajustes: lo que antes era el `.env`.
+   *
+   * Es texto de quien despliega, no de mostrador, así que se permite nombrar
+   * mecanismos —`did:web`, scopes, el `aud`— que en las pantallas de atención
+   * estarían fuera de sitio. Lo que NO lleva son nombres de variables de
+   * entorno: ya no se leen, y decirlos aquí mandaría a alguien a cambiar algo
+   * que no hace nada.
+   */
+  settings: {
+    eyebrow: 'Integration',
+    title: 'Settings',
+    subtitle:
+      'Everything this installation needs to talk to TripleEnable. It is stored in this CRM\u2019s own database, so a freshly published deployment is configured from here and nowhere else.',
+
+    stateConfigured: 'This installation is configured. The checks at the bottom say whether it works.',
+    stateIncomplete: 'Not configured yet. Still missing: {fields}.',
+    missing: {
+      orgId: 'Logto organization ID',
+      displayName: 'organization name',
+      domain: 'domain',
+      m2mClientId: 'machine-to-machine client ID',
+      m2mSecret: 'machine-to-machine client secret',
+      referenceClaim: 'sector reference',
+      issuerUrl: 'te-api base URL',
+    },
+
+    databaseDown: 'The settings could not be read: {reason}',
+    databaseDownNote:
+      'This is the one failure this screen cannot fix by itself. Check DATABASE_URL and run the migrations.',
+
+    webhookUrlTitle: 'This installation receives webhooks at',
+    webhookUrlNoDomain:
+      'Set the domain below first. The webhook address is built from it, and so is the did:web this organization signs with.',
+    webhookUrlNote:
+      'Paste it in the TripleEnable console, under <b>Credentials \u2192 Webhook</b>. Registering it hands back the signing secret, and that is the only time it is shown in full \u2014 it goes in the field below.',
+
+    sourceTitle: 'Where these values come from',
+    sourceRule: 'The rule',
+    sourceRuleDetail:
+      '<b>The database is the source of truth.</b> What is saved here is what runs. There is no second place to look.',
+    sourceEnv: 'Environment variables',
+    sourceEnvSeeded:
+      'This installation was <b>seeded from the environment</b> on its first boot, which is why the fields came filled in. From that moment the environment is no longer read: <b>changing a variable and redeploying does nothing.</b>',
+    sourceEnvIgnored:
+      'Not read. They can only seed an installation whose settings row does not exist yet \u2014 this one already has one.',
+    sourceRequired: 'Still required in the environment',
+    sourceRequiredDetail:
+      '<code>DATABASE_URL</code>, and nothing else. It is where all of this is stored, so it cannot be stored inside it.',
+
+    noAuthWarning:
+      '<b>This console has no login.</b> Anyone who can reach this address can open this screen. Secrets are write-only \u2014 they are never shown again, only their fingerprint \u2014 but until employee sign-in exists, do not leave an installation holding real secrets on a public address without something in front of it.',
+
+    identityTitle: 'Who this installation is',
+    identityNote:
+      'The organization in Logto that this CRM issues and verifies on behalf of. Its administrator creates it in the TripleEnable console.',
+    orgId: 'Logto organization ID',
+    orgIdNote:
+      'Changing it does not migrate anything: the existing customers, verifications and events stay attached to the old one.',
+    displayName: 'Organization name',
+    displayNameExample: 'Northwind Bank',
+    displayNameNote: 'For this console only. The legal name is whatever te-api states.',
+    domain: 'Domain',
+    domainNote:
+      'No scheme. This is the installation\u2019s identity: the did:web it publishes and the webhook address above are both built from it.',
+    referenceClaim: 'Sector reference',
+    referenceChoose: 'Choose one',
+    referenceNote:
+      'The field the holder recognises the relationship by. It is the only one the new-customer form offers, so the wrong one puts another trade\u2019s box in front of an agent.',
+    officialNumbers: 'Official phone numbers',
+    officialNumbersNote:
+      'Comma separated. They travel inside the signed credential, so a wrong one is worse than none.',
+
+    machineTitle: 'Machine-to-machine application',
+    machineNote:
+      'What authenticates this CRM server against te-api. It is not the portal application, and it cannot be: this one authenticates a server, that one authenticates a person.',
+    m2mClientId: 'Client ID',
+    m2mSecret: 'Client secret',
+    m2mSecretNote:
+      'Shown in full only once, when the console creates it. Its fingerprint is computed the same way there and here, so the two can be compared by eye.',
+
+    webhookSecretTitle: 'Webhook signing secret',
+    webhookSecretIntro:
+      'What separates an event from te-api from a POST written by anybody. Without it every delivery is refused \u2014 there is no accept-without-checking mode.',
+    webhookSecret: 'Signing secret',
+    webhookSecretNote:
+      'Paste it exactly as the console handed it over, prefix included. It is an opaque string, not encoded key material: stripping the prefix or decoding the tail produces a different MAC and every delivery is refused.',
+
+    brandTitle: 'Brand',
+    brandNote:
+      'Two colours and a monogram. The accent goes on white; the surface is the sidebar and the portal header. Status colours are not brand and are not set here.',
+    brandAccent: 'Accent',
+    brandSurface: 'Surface',
+    brandMonogram: 'Monogram',
+
+    portalTitle: 'Customer portal',
+    portalNote:
+      'Optional. Without it /portal says so on screen instead of breaking halfway through a login.',
+    portalClientId: 'Client ID',
+    portalClientSecret: 'Client secret',
+    portalClientSecretNote: 'The code exchange goes with client_secret_basic, server side only.',
+    portalLinkType: 'Link type',
+    portalLinkTypeNote:
+      'Optional. It has to be a credential type from this organization\u2019s roster in te-api, or linking fails with invalid_request.',
+    portalBaseUrl: 'Portal address',
+    portalBaseUrlNote:
+      'The redirect_uri is built from it, and Logto compares it character by character with the one declared in the application.',
+
+    platformTitle: 'Platform addresses',
+    platformNote:
+      'The same for every installation of the product, so they come pre-filled and are rarely touched. They are here so a test Logto is possible without an environment variable.',
+    logtoEndpoint: 'Logto endpoint',
+    teApiBaseUrl: 'te-api base URL',
+    b2bResource: 'B2B resource indicator',
+    b2bResourceNote:
+      'The aud te-api demands. It must match te-api\u2019s own value character by character \u2014 one trailing slash and the token is for another resource.',
+    b2bScope: 'Scopes requested',
+    b2bScopeNote:
+      'Space separated. Logto silently trims whatever the organization role does not grant, with no error, so what was actually obtained is the scope on the token \u2014 the connection check below shows it.',
+
+    save: 'Save settings',
+    saving: 'Saving\u2026',
+    saved: 'Saved. The checks below now run against these values.',
+    checkFields: 'Some fields need looking at.',
+    required: 'Required',
+    domainInvalid: 'A bare host name, like bank.demo-te.com. No path, no query.',
+    referenceInvalid: 'Choose one of: {values}',
+    colourInvalid: 'A hex colour: #rgb, #rrggbb, or rrggbb without the hash.',
+    brandPair: 'Both colours together, or neither. Half a brand reads as a half-painted screen.',
+    monogramTooLong: 'One or two characters. More than that is a smudge at 32 pixels.',
+    portalPair: 'The portal client ID and secret go together, or neither.',
+    urlInvalid: 'An absolute http or https address.',
+    secretWhitespace: 'That value has a space in it. Paste it again without leading or trailing space.',
+    secretLooksLikeFingerprint:
+      'That looks like a fingerprint, not a secret. The fingerprint is what a console shows instead of the secret; it cannot be used to sign anything.',
+    secretMissing: 'Not set',
+    secretKeep: 'Leave blank to keep the current one',
+    secretPaste: 'Paste the secret',
+    secretClear: 'Clear the stored secret when saving',
+    fingerprintTitle: 'First 16 characters of the SHA-256 digest',
+    saveFailed: 'The settings could not be saved. The detail is in the server log.',
+
+    copy: 'Copy',
+    copied: 'Copied',
+
+    checkConnectionTitle: 'Check the connection to TripleEnable',
+    checkConnectionNote:
+      'Asks Logto for a token with the saved credentials and calls GET /v1/b2b/organization with it. It checks four things at once: the secret, the resource, the scopes, and whether this organization is enrolled. It tests what is saved, not what is typed above.',
+    checkConnection: 'Check the connection',
+    checking: 'Checking\u2026',
+    checkConnectionOk: 'It answered. The integration is wired correctly.',
+    checkConnectionOpaque:
+      'te-api answers the same 404 to all of them on purpose: a bad token, an aud that does not match, a missing scope, an organization that is not enrolled, and a suspended one. The requestId is what its operator can look up.',
+    checkScopes: 'Scopes on the token',
+    checkTypes: 'Issuable types',
+
+    checkWebhookTitle: 'Ask TripleEnable to call this CRM',
+    checkWebhookNote:
+      'The only direction that cannot be checked from in here, so it has to be asked for. te-api queues a webhook.test, signs it with this organization\u2019s secret and delivers it to the address it has registered. It is also the only delivery that goes out while a destination is on probation, and a 2xx is what promotes it.',
+    checkWebhook: 'Send a test event',
+    sending: 'Sending\u2026',
+    checkWebhookSent:
+      'Sent. It should land on the Events screen within a few seconds \u2014 pushed by te-api, not fetched by this CRM.',
+    checkWebhookMismatch:
+      'Sent, but the registered address is not this installation. The delivery is going somewhere else, so nothing will arrive here.',
+    checkWebhookNotRegistered:
+      'No webhook destination is registered for this organization yet, so there is nothing to test.',
+    checkWebhookRegisterHint:
+      'Register this address in the TripleEnable console, under Credentials \u2192 Webhook:',
+    checkWebhookRegistered: 'Registered address',
+    checkWebhookExpected: 'This installation',
+    checkWebhookStatus: 'Destination status',
+    checkWebhookEventId: 'Event id',
+    checkWebhookDelivery: 'Delivery',
+    checkWebhookNotQueued:
+      'te-api recorded the event but queued no delivery: sending is switched off on that deployment.',
+    checkWebhookSeeEvents: 'Open the events screen',
+  },
+
   events: {
     eyebrow: 'Integration',
     title: 'Events received',
@@ -392,7 +573,8 @@ export const en = {
     endpointUrl: 'Webhook URL',
     endpointSecret: 'Signing secret',
     endpointSecretSet: 'Declared. Every delivery is checked against it.',
-    endpointSecretMissing: 'Not declared, so every delivery is refused. Set',
+    endpointSecretMissing: 'Not declared, so every delivery is refused.',
+    endpointSecretWhere: 'Set it in Settings',
     endpointNote:
       'Register the URL in the TripleEnable console, under Credentials → Webhook. It hands back the signing secret at that moment, and that is the only time it is shown in full.',
     emptyTitle: 'Nothing has arrived yet',
@@ -587,29 +769,30 @@ export const en = {
     didPublished: 'did:web published',
     didNone: 'none yet · te-api holds no key for this organisation, so /.well-known/did.json answers 404',
     officialNumbers: 'Official numbers',
-    officialNumbersNone: 'none declared · ',
+    officialNumbersNone: 'none declared ·',
     issuerBase: 'te-api (issuing)',
     verifierBase: 'te-api (verification)',
     customerPortal: 'Customer portal',
-    portalUndeclared: 'no application declared · ',
+    portalUndeclared: 'no application declared ·',
     brand: 'Brand',
-    brandNone: 'the default palette · declare ',
+    brandNone: 'the default palette ·',
+    setInSettings: 'set it in Settings',
     orgChoiceTitle: 'One installation, one organisation',
     whoChooses: 'Where it comes from',
     whoChoosesDetail:
-      'From this process’s own environment — <code>CRM_ORG_ID</code> and the flat variables beside it. The request cannot change it: the <code>Host</code> header decides nothing here, which is what makes the answer to “whose screen is this?” the same on every request.',
+      'From this installation’s own settings row, written on the <b>Settings</b> screen. The request cannot change it: the <code>Host</code> header decides nothing here, which is what makes the answer to “whose screen is this?” the same on every request.',
     twoTenants: 'To serve a second company',
     twoTenantsDetail:
       'Publish the application a second time with a different configuration. It is the same image: what changes is the environment, its domain and its database. Nothing is shared, so nothing one company does can reach the other.',
     didNoFallback: 'The DID document',
     didNoFallbackDetail:
-      '<code>/.well-known/did.json</code> is always composed with <code>CRM_ORG_DOMAIN</code>, so its <code>id</code> is the same DID whatever the request says. It answers <b>404</b> while te-api holds no key: an organisation that has not switched on issuing has no issuer identity to publish.',
+      '<code>/.well-known/did.json</code> is always composed with the declared domain, so its <code>id</code> is the same DID whatever the request says. It answers <b>404</b> while te-api holds no key: an organisation that has not switched on issuing has no issuer identity to publish.',
     webhookTitle: 'Events pushed to this CRM',
     webhookUrl: 'Webhook URL',
     webhookUrlNote: 'Register it in the console, under Credentials → Webhook.',
     webhookSecret: 'Signing secret',
     webhookSecretSet: 'declared · every delivery is checked against it',
-    webhookSecretMissing: 'not declared, so every delivery is refused · ',
+    webhookSecretMissing: 'not declared, so every delivery is refused ·',
     webhookReceived: 'Received',
     webhookTally: '{total} in total, {rejected} refused',
     webhookNever: 'none yet',
@@ -691,7 +874,7 @@ export const en = {
   /** Lo que se le dice a un agente cuando algo no ha cargado. */
   errors: {
     misconfigured:
-      'This console is only half configured and cannot show the organisation’s data. Let whoever runs the integration know: the detail is in Diagnostics.',
+      'This console is not configured yet and cannot show the organisation’s data. Whoever runs the integration sets it up on the Settings screen, which says exactly what is missing.',
     generic:
       'We could not load the data right now. Try again in a moment; if it stays the same, let whoever runs the integration know — the detail is in Diagnostics.',
     shortRetry: 'try again in a moment, and if it stays the same look at Diagnostics.',

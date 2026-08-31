@@ -21,7 +21,7 @@ import './globals.css';
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslator();
   try {
-    const organization = getOrganization();
+    const organization = await getOrganization();
     return {
       title: organization.displayName,
       description: t('app.description', { organization: organization.displayName }),
@@ -69,7 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // antes de que existiera esto.
   let brandStyle;
   try {
-    brandStyle = brandStyleOf(getOrganization());
+    brandStyle = brandStyleOf(await getOrganization());
   } catch {
     brandStyle = undefined;
   }

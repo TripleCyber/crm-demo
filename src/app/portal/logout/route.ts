@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { buildEndSessionUrl } from '@/lib/portal-oidc';
 import { clearSession } from '@/lib/portal-session';
-import { getOrganization } from '@/lib/organization';
+import { requireOrganization } from '@/lib/portal-guard';
 
 /**
  * `GET /portal/logout` — cierra la sesión del portal **y la de Logto**.
@@ -23,5 +23,10 @@ export async function GET(): Promise<NextResponse> {
   // La organización sale del dominio por el que se entró, igual que en el
   // login: el `post_logout_redirect_uri` tiene que devolver al titular al
   // portal DE SU organización, no al del primero que hubiera declarado.
-  return NextResponse.redirect(buildEndSessionUrl(getOrganization()));
+  // La cookie de aquí ya se ha borrado arriba, así que salir por 503 deja al
+  // titular con la sesión local cerrada aunque no se pueda cerrar la de Logto.
+  // Es el orden correcto de los dos: lo que se puede hacer, hecho.
+  const resolved = await requireOrganization();
+  if (!resolved.ok) return resolved.response;
+  return NextResponse.redirect(await buildEndSessionUrl(resolved.organization));
 }

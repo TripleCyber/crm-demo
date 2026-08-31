@@ -69,9 +69,16 @@ export interface AuthorizationRequest {
 
 const ALGORITHMS = ['ES384', 'ES256', 'RS256', 'PS256', 'EdDSA'] as const;
 
-/** `https://auth.idp.tripleenable.com/oidc` — el `iss` que firma Logto. */
-function issuer(): string {
-  return `${getLogtoConfig().endpoint}/oidc`;
+/**
+ * `https://auth.idp.tripleenable.com/oidc` — el `iss` que firma Logto.
+ *
+ * Es asíncrono desde que la configuración vive en la base y no en el entorno
+ * (`./tenant-settings.ts`). Se propagó hacia arriba en vez de cachear el valor
+ * en el módulo: una caché de proceso haría que cambiar el endpoint desde la
+ * pantalla de ajustes surtiera efecto en un trabajador y no en los otros.
+ */
+async function issuer(): Promise<string> {
+  return `${(await getLogtoConfig()).endpoint}/oidc`;
 }
 
 /**
@@ -83,8 +90,8 @@ function issuer(): string {
  */
 let jwksCache: ReturnType<typeof createRemoteJWKSet> | undefined;
 
-function getJwks(): ReturnType<typeof createRemoteJWKSet> {
-  jwksCache ??= createRemoteJWKSet(new URL(`${issuer()}/jwks`), {
+async function getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {
+  jwksCache ??= createRemoteJWKSet(new URL(`${await issuer()}/jwks`), {
     cooldownDuration: 30_000,
     cacheMaxAge: 600_000,
     timeoutDuration: 3_000,
@@ -146,13 +153,13 @@ export function newAuthorizationRequest(): AuthorizationRequest {
  * `redirect_uri` sale de ella, y el que se manda aquí tiene que ser el mismo que
  * el declarado en Logto y el mismo que se manda al canjear el código.
  */
-export function buildAuthorizationUrl(
+export async function buildAuthorizationUrl(
   organization: OrganizationConfig,
   portal: PortalAppConfig,
   request: AuthorizationRequest,
-): string {
+): Promise<string> {
   const challenge = base64url(createHash('sha256').update(request.codeVerifier).digest());
-  const url = new URL(`${issuer()}/auth`);
+  const url = new URL(`${await issuer()}/auth`);
   url.searchParams.set('client_id', portal.clientId);
   url.searchParams.set('redirect_uri', getRedirectUri(organization));
   url.searchParams.set('response_type', 'code');
@@ -168,11 +175,11 @@ export function buildAuthorizationUrl(
 }
 
 /** El portal cierra la sesión también en Logto, no sólo su propia cookie. */
-export function buildEndSessionUrl(
+export async function buildEndSessionUrl(
   organization: OrganizationConfig,
   idTokenHint?: string,
-): string {
-  const url = new URL(`${issuer()}/session/end`);
+): Promise<string> {
+  const url = new URL(`${await issuer()}/session/end`);
   url.searchParams.set('post_logout_redirect_uri', `${getPortalBaseUrl(organization)}/portal`);
   if (idTokenHint !== undefined) url.searchParams.set('id_token_hint', idTokenHint);
   return url.toString();
@@ -205,7 +212,7 @@ export async function exchangeCode(
     `${encodeURIComponent(portal.clientId)}:${encodeURIComponent(portal.clientSecret)}`,
   ).toString('base64');
 
-  const response = await fetch(`${issuer()}/token`, {
+  const response = await fetch(`${await issuer()}/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -245,8 +252,8 @@ export async function exchangeCode(
 
   let claims: JWTPayload;
   try {
-    const result = await jwtVerify(payload.id_token, getJwks(), {
-      issuer: issuer(),
+    const result = await jwtVerify(payload.id_token, await getJwks(), {
+      issuer: await issuer(),
       audience: portal.clientId,
       algorithms: [...ALGORITHMS],
       clockTolerance: 30,
@@ -286,7 +293,7 @@ export async function exchangeCode(
 
 async function fetchEmailFromUserinfo(accessToken: string): Promise<string | null> {
   try {
-    const response = await fetch(`${issuer()}/me`, {
+    const response = await fetch(`${await issuer()}/me`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: 'no-store',
     });

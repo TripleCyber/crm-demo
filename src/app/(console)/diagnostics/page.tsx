@@ -24,18 +24,22 @@ import { countWebhookEvents, type WebhookEventTally } from '@/lib/webhook-events
  * dice si la costura funciona, no con qué credencial.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  Y AQUÍ ES DONDE VIVEN LOS NOMBRES DE LAS VARIABLES DE ENTORNO
+ *  ESTA PANTALLA MIRA. LA DE AJUSTES ESCRIBE
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Estaban repartidos por las pantallas de atención al cliente —la de emisión
- * decía «se declaran en `CRM_OFFICIAL_NUMBERS`»— y ahí no sirven
- * para nada: quien las lee tiene un cliente al teléfono y no puede tocar la
- * configuración del despliegue. Aquí sí sirven, porque esta pantalla la mira
- * quien puede ponerlas.
+ * Aquí se decían los nombres de las variables de entorno, y era el sitio
+ * correcto mientras la configuración viviera en el entorno: las demás pantallas
+ * las mira quien tiene un cliente al teléfono y no puede tocar el despliegue.
  *
- * La regla, para el siguiente que añada una pantalla: **el nombre de una
- * variable de entorno se dice en Diagnóstico y en ningún otro sitio.** En las
- * demás se dice qué falta y a quién pedírselo.
+ * Desde el 2026-08-31 la configuración se escribe desde la consola
+ * (`../settings`), así que **aquí ya no se nombra ninguna variable**: nombrarlas
+ * mandaría a alguien a cambiar algo que ya no se lee. Lo que falte se dice y se
+ * enlaza a la casilla donde se pone.
+ *
+ * La división que queda es la que vale la pena: **Ajustes escribe, Diagnóstico
+ * mira**. Lo que esta pantalla enseña y aquélla no es lo que contesta te-api —el
+ * padrón, el DID, los scopes que trae el token— y el recuento de webhooks, que
+ * no son configuración sino su resultado.
  */
 
 export const dynamic = 'force-dynamic';
@@ -150,8 +154,8 @@ export default async function DiagnosticsPage() {
           <dd>
             {session.organization.officialNumbers.length === 0 ? (
               <span className="warn">
-                {t('diagnostics.officialNumbersNone')}
-                <span className="mono">CRM_OFFICIAL_NUMBERS</span>
+                {t('diagnostics.officialNumbersNone')}{' '}
+                <Link href="/settings">{t('diagnostics.setInSettings')}</Link>
               </span>
             ) : (
               <span className="mono">{session.organization.officialNumbers.join(' · ')}</span>
@@ -170,9 +174,8 @@ export default async function DiagnosticsPage() {
           <dd>
             {session.organization.brand === undefined ? (
               <span className="warn">
-                {t('diagnostics.brandNone')}
-                <span className="mono">CRM_BRAND_COLOR</span> y{' '}
-                <span className="mono">CRM_BRAND_SURFACE</span>
+                {t('diagnostics.brandNone')}{' '}
+                <Link href="/settings">{t('diagnostics.setInSettings')}</Link>
               </span>
             ) : (
               <span className="mono">
@@ -191,9 +194,8 @@ export default async function DiagnosticsPage() {
           <dd>
             {session.organization.portal === undefined ? (
               <span className="warn">
-                {t('diagnostics.portalUndeclared')}
-                <span className="mono">CRM_PORTAL_CLIENT_ID</span> y{' '}
-                <span className="mono">CRM_PORTAL_CLIENT_SECRET</span>
+                {t('diagnostics.portalUndeclared')}{' '}
+                <Link href="/settings">{t('diagnostics.setInSettings')}</Link>
               </span>
             ) : (
               // El `client_id` del portal sí se enseña, y el M2M no. No es una
@@ -251,17 +253,15 @@ export default async function DiagnosticsPage() {
         <dl className="facts">
           <dt>{t('diagnostics.webhookUrl')}</dt>
           <dd>
-            <span className="mono">
-              https://{session.organization.domain}/api/webhooks/te-api
-            </span>
+            <span className="mono">{session.organization.webhookUrl}</span>
             <span className="sub">{t('diagnostics.webhookUrlNote')}</span>
           </dd>
           <dt>{t('diagnostics.webhookSecret')}</dt>
           <dd>
             {session.organization.webhookSecret === undefined ? (
               <span className="warn">
-                {t('diagnostics.webhookSecretMissing')}
-                <span className="mono">CRM_WEBHOOK_SECRET</span>
+                {t('diagnostics.webhookSecretMissing')}{' '}
+                <Link href="/settings">{t('diagnostics.setInSettings')}</Link>
               </span>
             ) : (
               // Que LO HAY, nunca cuál. Esta pantalla acaba en capturas.

@@ -433,7 +433,7 @@ export function IssueCredentialForm({
                  AQUÍ PONÍA EL NOMBRE DE UNA VARIABLE DE ENTORNO, Y ESTABA MAL
                 ═══════════════════════════════════════════════════════════════
 
-                Decía «Se declaran en CRM_OFFICIAL_NUMBERS». Quien lee
+                Decía «Se declaran en una variable de entorno». Quien lee
                 esto es un agente de atención al cliente con un teléfono en la
                 mano: ese nombre no le dice qué hacer, le dice que la
                 herramienta que está usando está a medio montar. Y además no lo

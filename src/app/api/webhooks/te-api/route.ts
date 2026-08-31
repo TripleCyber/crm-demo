@@ -98,7 +98,7 @@ interface WebhookEnvelope {
 export async function POST(request: Request): Promise<NextResponse> {
   let organization;
   try {
-    organization = getOrganization();
+    organization = await getOrganization();
   } catch (error) {
     // Sin configuración no se sabe ni de quién es este CRM ni con qué secreto
     // comprobar. 500 para que te-api reintente: es un fallo de este lado y se

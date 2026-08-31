@@ -6,6 +6,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { MessageKey, MessageValues } from '@/i18n/translate';
 
 import type { AuthorizationRequest } from './portal-oidc';
+import { loadTenantSettings } from './tenant-settings';
 
 /**
  * Las dos cookies del portal del cliente, y **lo que deliberadamente no
@@ -55,11 +56,31 @@ const AUTH_TTL_SECONDS = 600;
 /** Ocho horas de sesión del portal. Es una pantalla de consulta, no un banco. */
 const SESSION_TTL_SECONDS = 8 * 3600;
 
-function secret(): Uint8Array {
-  const raw = process.env.CRM_PORTAL_COOKIE_SECRET?.trim();
+/**
+ * La clave con la que se firma la cookie.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  YA NO LA ESCRIBE NADIE: SE GENERA AL SEMBRAR LA CONFIGURACIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Salía de `CRM_PORTAL_COOKIE_SECRET`, y era una de las variables que había que
+ * inventar a mano para levantar una instalación. Pedirle a quien despliega que
+ * teclee 32 caracteres aleatorios es pedirle que ponga `changeme`, y una sesión
+ * de portal firmada con `changeme` la escribe cualquiera.
+ *
+ * Ahora vive en la fila de configuración y **se genera con `randomBytes(32)` la
+ * primera vez** (`./tenant-settings.ts`). La variable sigue valiendo como
+ * semilla, así que un despliegue que ya la tenía conserva la suya y sus sesiones
+ * abiertas siguen valiendo.
+ *
+ * Sigue lanzando cuando no hay: sin clave no se puede firmar, y firmar con una
+ * cadena vacía es no firmar. Lo que ya no puede pasar es que falte por descuido.
+ */
+async function secret(): Promise<Uint8Array> {
+  const raw = (await loadTenantSettings()).portalCookieSecret;
   if (raw === undefined || raw.length < 32) {
     throw new Error(
-      'CRM_PORTAL_COOKIE_SECRET is missing (32 characters or more): without it the portal ' +
+      'the portal cookie signing key is missing (32 characters or more): without it the portal ' +
         'session cannot be signed, and an unsigned session can be written by anybody',
     );
   }
@@ -110,13 +131,13 @@ async function sign(payload: Record<string, unknown>, ttlSeconds: number): Promi
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(`${ttlSeconds}s`)
-    .sign(secret());
+    .sign(await secret());
 }
 
 async function read<T>(token: string | undefined): Promise<T | null> {
   if (token === undefined || token === '') return null;
   try {
-    const { payload } = await jwtVerify(token, secret(), { algorithms: ['HS256'] });
+    const { payload } = await jwtVerify(token, await secret(), { algorithms: ['HS256'] });
     return payload as T;
   } catch {
     // Caducada, manipulada o firmada con otro secreto: las tres son «no hay

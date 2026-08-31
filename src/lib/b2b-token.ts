@@ -101,7 +101,7 @@ export function invalidateB2bToken(orgId: string): void {
 }
 
 async function requestToken(organization: OrganizationConfig): Promise<string> {
-  const logto = getLogtoConfig();
+  const logto = await getLogtoConfig();
 
   // `client_secret_basic`: las credenciales van en la cabecera y no en el
   // cuerpo, que es lo que evita que aparezcan en un volcado del cuerpo si

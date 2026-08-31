@@ -6,7 +6,7 @@ import {
   newAuthorizationRequest,
 } from '@/lib/portal-oidc';
 import { saveAuthorizationRequest } from '@/lib/portal-session';
-import { getOrganization } from '@/lib/organization';
+import { requireOrganization } from '@/lib/portal-guard';
 
 /**
  * `GET /portal/login` — arranca el login OIDC contra Logto.
@@ -22,7 +22,12 @@ import { getOrganization } from '@/lib/organization';
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
-  const organization = getOrganization();
+  // Sin configuración no hay ni portal ni dirección a la que devolver a nadie.
+  // Ver `lib/portal-guard.ts`: es un estado nuevo desde que la configuración se
+  // escribe desde la consola en vez de venir del entorno.
+  const resolved = await requireOrganization();
+  if (!resolved.ok) return resolved.response;
+  const { organization } = resolved;
 
   if (organization.portal === undefined) {
     // Sin aplicación de portal declarada no hay login que empezar. Se manda a
@@ -43,6 +48,6 @@ export async function GET(): Promise<NextResponse> {
   await saveAuthorizationRequest(authorizationRequest);
 
   return NextResponse.redirect(
-    buildAuthorizationUrl(organization, organization.portal, authorizationRequest),
+    await buildAuthorizationUrl(organization, organization.portal, authorizationRequest),
   );
 }

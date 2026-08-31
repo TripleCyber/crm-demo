@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { LocaleSwitch } from '@/components/LocaleSwitch';
 import { RailNav } from '@/components/RailNav';
 import { getTranslator } from '@/i18n/server';
@@ -36,8 +38,9 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
 
   // La organización se lee aquí sólo para rotularla. Si la configuración está a
   // medias, la barra lo dice y las pantallas siguen cargando: enterarse de que
-  // falta una variable de entorno con una pantalla en blanco es la peor forma
-  // de enterarse.
+  // falta configuración con una pantalla en blanco es la peor forma de
+  // enterarse — y desde que la configuración se escribe desde la propia consola,
+  // una pantalla en blanco dejaría sin arreglo a quien podría arreglarlo.
   // El nombre del banco sale de la organización activa y no está escrito aquí:
   // la consola de un segundo partner llevaría el rótulo del primero, que es la
   // clase de detalle que nadie mira hasta que lo ve un cliente.
@@ -57,11 +60,11 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
     agent = session.agent;
     monogram = monogramOf(session.organization);
   } catch {
-    // El mensaje del error **no se pinta aquí**, y es a propósito: nombra la
-    // variable de entorno que falta, y quien tiene esta barra delante es un
-    // agente con un cliente al teléfono. Se le dice que la consola está a
-    // medio configurar y dónde está el detalle; el mensaje entero, con el
-    // nombre de la variable, sigue estando en Diagnóstico.
+    // El mensaje del error **no se pinta aquí**, y es a propósito: lista los
+    // campos que faltan, y quien tiene esta barra delante es un agente con un
+    // cliente al teléfono. Se le dice que la consola está sin configurar y
+    // dónde se arregla; la lista entera está en Ajustes, que es la pantalla que
+    // la puede arreglar.
     misconfigured = true;
   }
 
@@ -84,7 +87,13 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
           )}
           <strong>{bankName}</strong>
           {orgId === undefined ? (
-            <span className="rail-org warn">{t('nav.unconfigured')}</span>
+            // Un enlace y no un rótulo: es lo único accionable de una consola
+            // sin configurar, y quien la abre recién publicada llega aquí antes
+            // que a ninguna otra cosa. Decir «sin configurar» y no decir dónde
+            // se arregla es la mitad del mensaje.
+            <Link className="rail-org warn" href="/settings">
+              {t('nav.unconfigured')}
+            </Link>
           ) : (
             <span className="rail-org mono">{orgId}</span>
           )}

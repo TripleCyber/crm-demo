@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { isReferenceClaim, REFERENCE_CLAIMS, type ReferenceClaim } from './reference-claims';
+import { loadTenantSettings, type TenantSettings } from './tenant-settings';
 
 /**
  * La configuración de **la** organización de este despliegue.
@@ -19,37 +20,37 @@ import { isReferenceClaim, REFERENCE_CLAIMS, type ReferenceClaim } from './refer
  * encaminamiento, los alias de desarrollo, la organización activa de respaldo—
  * que existía sólo para sostener esa forma.
  *
- * Lo que hay ahora es plano: **cada variable declara una cosa y no hay que
- * elegir nada en tiempo de petición**. Para servir a dos empresas se publica la
- * aplicación dos veces con dos configuraciones, que es lo que un cliente
- * entiende, lo que se factura por separado y lo que se puede apagar por
- * separado.
+ * Lo que hay ahora es plano: **cada valor declara una cosa y no hay que elegir
+ * nada en tiempo de petición**. Para servir a dos empresas se publica la
+ * aplicación dos veces con dos bases, que es lo que un cliente entiende, lo que
+ * se factura por separado y lo que se puede apagar por separado.
  *
- * ## Lo que se ganó, dicho para quien busque el mapa y no lo encuentre
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  DE DÓNDE SALE ESTO: DE LA BASE, NO DEL ENTORNO
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- *  · **El `Host` ya no decide nada.** Era el único sitio del proyecto donde algo
- *    que escribe quien llama elegía qué padrón se enseñaba. Ahora la respuesta a
- *    «¿de quién es esta pantalla?» está en el entorno del proceso y no puede
- *    cambiar entre dos peticiones.
- *  · **La salud del proceso ya no depende de nadie más.** Un secreto M2M mal
- *    puesto tumbaba la demostración de las otras tres empresas, que no tenían
- *    nada que ver (ver la nota de `api/health/route.ts`).
- *  · **El `did.json` deja de ser un problema.** Se compone con `CRM_ORG_DOMAIN`
- *    y siempre dice lo mismo, así que no hay forma de publicar la identidad de
- *    una empresa en el dominio de otra.
+ * El 2026-08-31, y ésta es la segunda mitad del mismo cambio: la configuración
+ * dejó de vivir en `process.env` y pasó a vivir en `tenant_settings`, que se
+ * escribe desde la pantalla de ajustes de la propia consola.
  *
- * ## Cómo se declara
+ * **La regla entera está escrita en `./tenant-settings.ts`** y es una sola: la
+ * base manda, el entorno siembra la primera vez y nunca más, y `DATABASE_URL` es
+ * la única variable que sigue siendo obligatoria. Si estás leyendo esto porque
+ * cambiaste una variable y no pasó nada, es eso: ya no se lee.
  *
- *     CRM_ORG_ID=ww51qgtvpc9h
- *     CRM_ORG_NAME=Banco Demo, S.A.
- *     CRM_ORG_DOMAIN=bank.demo-te.com
- *     CRM_M2M_CLIENT_ID=<app M2M de esa organización>
- *     CRM_M2M_SECRET=<su secreto>
+ * ── Lo que cambió de comportamiento, dicho claro ──────────────────────────
  *
- * Y nada más es obligatorio: el resto tiene respaldo o es opcional de verdad.
- * Lo que falte **revienta al arrancar nombrando la variable**, que es la regla
- * de esta casa y la que hace que un despliegue mal configurado se note en el
- * primer arranque y no en la cartera de un titular tres semanas después.
+ * Este fichero decía «lo que falte **revienta al arrancar** nombrando la
+ * variable». Ya no, y no es un descuido: una instalación recién publicada **no
+ * tiene configuración todavía**, porque el recorrido que se quiere es levantarla
+ * y configurarla desde su propia pantalla. Un proceso que se niega a arrancar no
+ * puede enseñar el formulario que lo arreglaría.
+ *
+ * Lo que se conserva es lo que de verdad importaba de aquella regla: **nada
+ * funciona a medias en silencio**. Lo que falte sigue lanzando
+ * `OrganizationConfigError`, con la lista de campos que faltan; la diferencia es
+ * que ahora lo recoge la consola y lleva a la pantalla de ajustes en vez de
+ * dejar el contenedor en un bucle de reinicio.
  *
  * ## `issuerUrl` y `verifierUrl` son de te-api. NUNCA de walt.id
  *
@@ -61,7 +62,7 @@ import { isReferenceClaim, REFERENCE_CLAIMS, type ReferenceClaim } from './refer
  *
  * Están separados porque son dos capacidades distintas y no tienen por qué vivir
  * en el mismo despliegue el día que haya una región aparte; hoy las dos caen en
- * `TE_API_BASE_URL`.
+ * el mismo valor.
  *
  * ## Este fichero no puede acabar en el navegador
  *
@@ -81,14 +82,9 @@ export interface OrganizationConfig {
    *
    * Es **su identidad y no una dirección más**: de aquí sale el
    * `did:web:<dominio>` que publica en `/.well-known/did.json`, que es lo que la
-   * cartera resuelve para comprobar quién firmó una credencial. Cambiarlo deja
-   * huérfana cada credencial ya emitida.
-   *
-   * **Obligatorio**, y eso es nuevo. Cuando un despliegue servía cuatro
-   * organizaciones, una podía no tener dominio y llegarse a ella por otra vía;
-   * aquí no hay otra vía, y una instalación que emite credenciales sin saber su
-   * propio dominio publicaría un `did:web` que no resuelve. Se prefiere no
-   * arrancar.
+   * cartera resuelve para comprobar quién firmó una credencial, y de aquí sale
+   * también la dirección de su webhook. Cambiarlo deja huérfana cada credencial
+   * ya emitida.
    */
   readonly domain: string;
   /** La aplicación M2M de esta organización. Sólo servidor. */
@@ -99,6 +95,17 @@ export interface OrganizationConfig {
   readonly issuerUrl: string;
   /** Base de te-api para verificar (F4c). Ver arriba: te-api, no walt.id. */
   readonly verifierUrl: string;
+  /**
+   * **La dirección de su webhook, entera y lista para pegar.**
+   *
+   * Se compone aquí y no en cada pantalla porque tiene que ser **el mismo texto**
+   * en tres sitios —la pantalla de ajustes, la de eventos y Diagnóstico— y sobre
+   * todo porque tiene que ser exactamente lo que se registra en tenant-admin. Se
+   * compone del dominio declarado y **nunca de la cabecera `Host`**: componerla
+   * con la petición le enseñaría `localhost` a quien abra la consola por un túnel
+   * y registraría una dirección que te-api no puede llamar.
+   */
+  readonly webhookUrl: string;
   /**
    * Los teléfonos desde los que esta organización llama de verdad.
    *
@@ -135,7 +142,7 @@ export interface OrganizationConfig {
    */
   readonly portal: PortalAppConfig | undefined;
   /**
-   * La dirección pública del portal (`CRM_PORTAL_BASE_URL`).
+   * La dirección pública del portal.
    *
    * De aquí sale el `redirect_uri`, y Logto lo compara carácter a carácter con
    * el declarado en la aplicación. No se compone a partir de `domain` —que sería
@@ -146,12 +153,19 @@ export interface OrganizationConfig {
    */
   readonly portalBaseUrl: string | undefined;
   /**
+   * La clave con la que se firma la cookie de sesión del portal.
+   *
+   * No la escribe nadie: se genera al sembrar la fila de configuración. Ver
+   * `./tenant-settings.ts`.
+   */
+  readonly portalCookieSecret: string | undefined;
+  /**
    * Su marca: el color con el que se pinta su consola y su portal.
    *
    * `undefined` = no declara marca y se queda con el azul de la hoja
    * (`globals.css`). Sigue siendo legítimo y no es una rama muerta: es el
    * aspecto por defecto, y una instalación que no tenga color propio todavía
-   * arranca igual.
+   * funciona igual.
    */
   readonly brand: BrandConfig | undefined;
   /**
@@ -166,12 +180,8 @@ export interface OrganizationConfig {
    * (`./reference-claims.ts`): el dato con el que el titular reconoce **de qué
    * relación se le está hablando**.
    *
-   * Era opcional —sin declarar se ofrecían todas— porque las organizaciones
-   * anteriores no la declaraban y su alta no podía cambiar. Ya no hay
-   * organizaciones anteriores: **una instalación sabe de qué sector es**, y
-   * dejarla sin declarar sólo puede producir un formulario que ofrece la casilla
-   * de otro negocio. Sin ella el proceso no arranca, y el mensaje lista los
-   * valores válidos.
+   * Una empresa sabe de qué sector es, y dejarlo sin declarar sólo puede
+   * producir un formulario que ofrece la casilla de otro negocio.
    */
   readonly referenceClaim: ReferenceClaim;
   /**
@@ -213,8 +223,8 @@ export interface BrandConfig {
    *
    * Va sobre blanco y lo lee gente ocho horas seguidas, así que tiene que
    * contrastar de verdad. No se comprueba aquí —haría falta convertir a
-   * luminancia y la validación de un `.env` no es el sitio—, pero el que se
-   * elija se mira antes: el violeta de Larkfield da 7,9:1 sobre blanco.
+   * luminancia—, pero el que se elija se mira antes: el violeta de Larkfield da
+   * 7,9:1 sobre blanco.
    */
   readonly accent: string;
   /**
@@ -271,36 +281,57 @@ export interface LogtoConfig {
 }
 
 /**
- * Falta una variable o está vacía. El mensaje nombra la variable, nunca el valor.
+ * Los campos de la configuración que pueden faltar, con el nombre que llevan en
+ * la pantalla de ajustes.
+ *
+ * Se nombran **como en el formulario** y no como la vieja variable de entorno,
+ * porque el sitio donde se arreglan es el formulario. Quien tenga un despliegue
+ * antiguo y busque `CRM_M2M_SECRET` lo encuentra en `.env.example`, que explica
+ * la equivalencia y la regla.
+ */
+export type MissingSetting =
+  | 'orgId'
+  | 'displayName'
+  | 'domain'
+  | 'm2mClientId'
+  | 'm2mSecret'
+  | 'referenceClaim'
+  | 'issuerUrl';
+
+const MISSING_LABELS: Record<MissingSetting, string> = {
+  orgId: 'Logto organization ID',
+  displayName: 'organization name',
+  domain: 'domain',
+  m2mClientId: 'machine-to-machine client ID',
+  m2mSecret: 'machine-to-machine client secret',
+  referenceClaim: `sector reference (one of: ${REFERENCE_CLAIMS.join(', ')})`,
+  issuerUrl: 'te-api base URL',
+};
+
+/**
+ * Falta configuración, o algo de lo que hay no encaja.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  *  ESTOS MENSAJES VAN EN INGLÉS Y **NO** PASAN POR EL CATÁLOGO
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * No son texto de pantalla de atención al cliente: sólo salen en Diagnóstico y
- * en la respuesta de una ruta de API, y sólo los lee quien despliega. Están en
- * el mismo registro que `relation "customer" does not exist`, que Postgres
- * escribe en inglés y que esa misma pantalla enseña dos filas más abajo — y en
- * el mismo idioma que la variable que nombran.
+ * No son texto de pantalla de atención al cliente: salen en Diagnóstico y en la
+ * respuesta de una ruta de API, y sólo los lee quien despliega. Están en el
+ * mismo registro que `relation "customer" does not exist`, que Postgres escribe
+ * en inglés y que esa misma pantalla enseña dos filas más abajo.
+ *
+ * `missing` va aparte del mensaje para que la pantalla de ajustes pueda señalar
+ * las casillas concretas **en el idioma del catálogo**, sin partir la frase.
  */
 export class OrganizationConfigError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** Los campos que faltan, cuando el fallo es que faltan. */
+    readonly missing: readonly MissingSetting[] = [],
+  ) {
     super(message);
     this.name = 'OrganizationConfigError';
   }
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value.trim() === '') {
-    throw new OrganizationConfigError(`missing environment variable ${name}`);
-  }
-  return value.trim();
-}
-
-function emptyToUndefined(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
 }
 
 /**
@@ -326,41 +357,34 @@ function emptyToUndefined(value: string | undefined): string | undefined {
  * era el peor posible: la consola salía azul, sin ningún error, y la variable
  * estaba escrita correctamente en el fichero.
  *
- * De ahí las dos defensas, que son distintas y hacen falta las dos:
+ * Sigue valiendo `5b3ea6` sin almohadilla, y se le pone al normalizar: es la
+ * forma que no puede salir mal en ningún sitio — ni en un `.env`, ni en un
+ * `docker-compose`, ni en la caja de texto de Coolify.
  *
- *  1. **`5b3ea6` sin almohadilla vale igual**, y se le pone al normalizar. Es la
- *     forma que no puede salir mal en ningún sitio — ni en un `.env`, ni en un
- *     `docker-compose`, ni en la caja de texto de Coolify.
- *  2. **Una variable presente y vacía revienta**, y el mensaje nombra la trampa.
- *     Vacía sólo puede significar dos cosas —o se dejó a medias, o se la comió
- *     la almohadilla— y las dos son un error de configuración que hay que ver al
- *     arrancar, no una instalación sin marca.
- *
- * Ausente y vacía **no** son lo mismo, y esa distinción es toda la defensa 2:
- * ausente es «esta instalación no declara marca», que es legítimo.
+ * Lo que ya no hace falta es la segunda defensa de entonces —reventar cuando la
+ * variable está presente y vacía—, y conviene decir por qué se retiró: **la
+ * trampa vive en el formato `.env`, y el `.env` ya sólo siembra**. Un color que
+ * se coma la almohadilla no llega a la base, y entonces la pantalla de ajustes
+ * enseña la casilla del color vacía, que es exactamente el síntoma que hacía
+ * falta y en la pantalla que existe para verlo. La siembra además lo avisa por
+ * el registro (`tenant-settings.ts`).
  */
 const BRAND_COLOR_PATTERN = /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
-function readBrandColor(name: string): string | undefined {
-  const raw = process.env[name];
-  // Ausente: esta instalación no declara marca. Legítimo.
-  if (raw === undefined) return undefined;
-
-  const value = raw.trim();
-  if (value === '') {
-    throw new OrganizationConfigError(
-      `${name} is declared but empty. In a .env file a value starting with '#' is a comment: ` +
-        `write it without the '#' (5b3ea6) or in quotes ("#5b3ea6")`,
-    );
-  }
-  if (!BRAND_COLOR_PATTERN.test(value)) {
-    // El mensaje NO lleva el valor: sale en Diagnóstico y en la respuesta de una
-    // ruta, y la regla de esta casa es nombrar la variable y nunca lo que hay
-    // dentro.
-    throw new OrganizationConfigError(`${name} must be a hex colour (#rgb, #rrggbb or rrggbb)`);
-  }
+/**
+ * Normaliza un color de marca, o `null` si no encaja.
+ *
+ * Devuelve `null` en vez de lanzar porque lo usan dos sitios con necesidades
+ * distintas: la lectura de la configuración —que no puede tumbar una pantalla
+ * por un color— y la validación del formulario, que sí tiene que decir «esto no
+ * es un color» junto a la casilla.
+ */
+export function normalizeBrandColor(raw: string | undefined): string | null {
+  const value = raw?.trim();
+  if (value === undefined || value === '') return null;
+  if (!BRAND_COLOR_PATTERN.test(value)) return null;
   // Se normaliza CON almohadilla porque es lo que entiende CSS, que es donde
-  // acaba: aceptarla opcional es cosa de quien escribe el `.env`, no de la hoja.
+  // acaba: aceptarla opcional es cosa de quien escribe el valor, no de la hoja.
   return value.startsWith('#') ? value.toLowerCase() : `#${value.toLowerCase()}`;
 }
 
@@ -372,62 +396,25 @@ function readBrandColor(name: string): string | undefined {
  * azules de la hoja no se lee como «otra empresa», se lee como una pantalla a
  * medio pintar, y encima el que la ve no tiene forma de saber cuál de los dos
  * colores es el que sobra.
+ *
+ * Media marca guardada **no tumba la consola**: se ignora entera y la pantalla
+ * de ajustes lo dice. Es la diferencia con la versión de entorno, y es
+ * deliberada — el formulario ya impide guardarla a medias, así que llegar aquí
+ * a medias sólo puede venir de una siembra vieja, y por eso no vale la pena
+ * dejar sin consola a quien podría arreglarlo desde la consola.
  */
-function readBrand(): BrandConfig | undefined {
-  const accent = readBrandColor('CRM_BRAND_COLOR');
-  const surface = readBrandColor('CRM_BRAND_SURFACE');
+function readBrand(settings: TenantSettings): BrandConfig | undefined {
+  const accent = normalizeBrandColor(settings.brandAccent);
+  const surface = normalizeBrandColor(settings.brandSurface);
+  if (accent === null || surface === null) return undefined;
 
-  if (accent === undefined && surface === undefined) return undefined;
-  if (accent === undefined || surface === undefined) {
-    throw new OrganizationConfigError('CRM_BRAND_COLOR y CRM_BRAND_SURFACE van juntas o no van');
-  }
-
-  const monogram = emptyToUndefined(process.env['CRM_BRAND_MONOGRAM']);
+  const monogram = settings.brandMonogram;
   // Dos caracteres como mucho. Se cuenta con el iterador de cadena y no con
   // `.length`, que cuenta unidades UTF-16: una «Ñ» compuesta o un emoji dan 2 y
-  // 4 y quedarían fuera por un motivo que nadie adivina leyendo el `.env`.
-  if (monogram !== undefined && [...monogram].length > 2) {
-    throw new OrganizationConfigError('CRM_BRAND_MONOGRAM must be one or two characters');
-  }
+  // 4 y quedarían fuera por un motivo que nadie adivina.
+  const trimmed = monogram !== undefined && [...monogram].length > 2 ? undefined : monogram;
 
-  return { accent, surface, monogram };
-}
-
-/**
- * La referencia de sector de esta instalación. **Obligatoria.**
- *
- * ═══════════════════════════════════════════════════════════════════════════
- *  LO QUE NO ENCAJA REVIENTA AL ARRANCAR, Y AUSENTE TAMPOCO VALE
- * ═══════════════════════════════════════════════════════════════════════════
- *
- * Cuando un despliegue servía a cuatro empresas, ausente significaba «esta no lo
- * declara, se ofrecen todas» y era legítimo porque las tres primeras se habían
- * creado así. Con una instalación por empresa eso ya no significa nada: **una
- * empresa sabe de qué sector es**, y un formulario de alta que ofrece a la vez
- * los cuatro últimos de la cuenta y el punto de suministro sólo puede llevar a
- * que el agente rellene el que no toca — que después sale mal en el listado, en
- * la ficha y dentro de una credencial firmada.
- *
- * El mensaje nombra la variable y **lista los valores válidos**, que es lo que
- * hace falta para arreglarlo sin abrir el código. Lo que no lleva es el valor
- * recibido: la regla de esta casa es nombrar la variable y nunca lo que hay
- * dentro (ver `OrganizationConfigError`).
- */
-function readReferenceClaim(): ReferenceClaim {
-  const raw = process.env['CRM_REFERENCE_CLAIM'];
-  const value = raw?.trim().toLowerCase();
-
-  if (value === undefined || value === '') {
-    throw new OrganizationConfigError(
-      `missing environment variable CRM_REFERENCE_CLAIM. Set one of: ${REFERENCE_CLAIMS.join(', ')}`,
-    );
-  }
-  if (!isReferenceClaim(value)) {
-    throw new OrganizationConfigError(
-      `CRM_REFERENCE_CLAIM must be one of: ${REFERENCE_CLAIMS.join(', ')}`,
-    );
-  }
-  return value;
+  return { accent, surface, monogram: trimmed };
 }
 
 /**
@@ -440,124 +427,130 @@ function readReferenceClaim(): ReferenceClaim {
  *    `did:web:Bank.Demo-TE.com` no es el mismo DID.
  *  · **El puerto** — es de la máquina, no de la empresa.
  *  · **El punto final** — `bank.demo-te.com.` es la forma absoluta y válida.
- *  · **Los espacios** — de la variable de entorno, no del protocolo.
+ *  · **Los espacios** — de quien lo escribió, no del protocolo.
  *
  * Lo que **no** se acepta es un dominio con barras o interrogantes: eso no es un
- * host, y un `did:web` compuesto con él no lo resuelve ninguna cartera.
+ * host, y un `did:web` compuesto con él no lo resuelve ninguna cartera. Se
+ * acepta pegar `https://bank.demo-te.com` —es lo que copia cualquiera de la
+ * barra del navegador— y se le quita el esquema.
+ *
+ * `null` = no encaja. El formulario lo dice junto a la casilla y la lectura de
+ * la configuración lo cuenta como «falta el dominio».
  */
-function readDomain(): string {
-  const raw = requireEnv('CRM_ORG_DOMAIN');
-  const withoutPort = raw.toLowerCase().replace(/:\d+$/, '');
+export function normalizeDomain(raw: string | undefined): string | null {
+  const value = raw?.trim();
+  if (value === undefined || value === '') return null;
+
+  const withoutScheme = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  const withoutTrailingSlash = withoutScheme.replace(/\/+$/, '');
+  const withoutPort = withoutTrailingSlash.toLowerCase().replace(/:\d+$/, '');
   const domain = withoutPort.replace(/\.$/, '');
-  if (domain === '' || /[/\\?#\s]/.test(domain)) {
-    throw new OrganizationConfigError(
-      'CRM_ORG_DOMAIN must be a bare host name like bank.demo-te.com (no scheme, no path)',
-    );
-  }
+
+  if (domain === '' || /[/\\?#\s]/.test(domain)) return null;
   return domain;
 }
 
-/**
- * Los números oficiales, separados por comas.
- *
- * Se separa por **comas y sólo comas** aunque el resto de listas de este
- * proyecto acepten también espacios: un teléfono se escribe con espacios
- * (`+34 918 40 22 47`) y partirlo por ellos convertiría un número en cinco.
- *
- * Lo que sí se hace es normalizar los espacios interiores a uno, porque el valor
- * acaba dentro de una credencial firmada y dos emisiones que el operador
- * escribió igual no pueden diferir en un espacio de más.
- */
-function readOfficialNumbers(): readonly string[] {
-  return (process.env['CRM_OFFICIAL_NUMBERS'] ?? '')
-    .split(',')
-    .map((entry) => entry.trim().replace(/\s+/g, ' '))
-    .filter((entry) => entry !== '');
+/** Sin barra final: las URLs se componen con plantillas y `…//v1/b2b` es un 404. */
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
 }
 
 /**
- * La configuración se lee una vez por proceso.
+ * La configuración de esta instalación, ya validada.
  *
- * En Next.js el módulo se evalúa en cada trabajador, así que memorizarlo no crea
- * estado compartido: es sólo no releer `process.env` en cada petición. Cambiar
- * una variable exige reiniciar, que es justo lo que se quiere de una credencial.
+ * Lanza `OrganizationConfigError` con la lista de lo que falta. Quien la recoge
+ * —la consola, el receptor de webhooks, el `did.json`— decide qué hacer con
+ * ella; lo que ninguno hace es continuar a medias.
  */
-let organizationCache: OrganizationConfig | undefined;
+export async function getOrganization(): Promise<OrganizationConfig> {
+  const settings = await loadTenantSettings();
+  const missing: MissingSetting[] = [];
 
-export function getOrganization(): OrganizationConfig {
-  if (organizationCache !== undefined) return organizationCache;
+  const domain = normalizeDomain(settings.domain);
+  const referenceClaim = settings.referenceClaim?.toLowerCase();
+  const issuerBase = trimTrailingSlash(settings.teApiBaseUrl);
 
-  const orgId = requireEnv('CRM_ORG_ID');
-
-  // La base de te-api es la misma para las dos capacidades en el despliegue de
-  // hoy, así que `TE_API_BASE_URL` sirve de respaldo y declararlas por separado
-  // sólo hace falta el día que emisor y verificador se separen de verdad.
-  const fallbackBase = process.env['TE_API_BASE_URL']?.trim();
-  const issuerUrl = emptyToUndefined(process.env['CRM_ISSUER_URL']) ?? fallbackBase;
-  const verifierUrl = emptyToUndefined(process.env['CRM_VERIFIER_URL']) ?? fallbackBase;
-
-  if (issuerUrl === undefined || issuerUrl === '') {
-    throw new OrganizationConfigError('missing CRM_ISSUER_URL (or TE_API_BASE_URL)');
+  if (settings.orgId === undefined) missing.push('orgId');
+  if (domain === null) missing.push('domain');
+  if (settings.m2mClientId === undefined) missing.push('m2mClientId');
+  if (settings.m2mSecret === undefined) missing.push('m2mSecret');
+  if (referenceClaim === undefined || !isReferenceClaim(referenceClaim)) {
+    missing.push('referenceClaim');
   }
-  if (verifierUrl === undefined || verifierUrl === '') {
-    throw new OrganizationConfigError('missing CRM_VERIFIER_URL (or TE_API_BASE_URL)');
-  }
+  if (issuerBase === '') missing.push('issuerUrl');
 
-  // El portal es opcional, pero **a medias no**: con el `client_id` y sin el
-  // secreto, el login llegaría hasta el canje del código y moriría allí, con la
-  // persona ya autenticada y un error que parece de Logto. Declarar uno obliga a
-  // declarar el otro, y se ve al arrancar.
-  const portalClientId = emptyToUndefined(process.env['CRM_PORTAL_CLIENT_ID']);
-  const portalClientSecret = emptyToUndefined(process.env['CRM_PORTAL_CLIENT_SECRET']);
-  if ((portalClientId === undefined) !== (portalClientSecret === undefined)) {
+  if (missing.length > 0) {
     throw new OrganizationConfigError(
-      'CRM_PORTAL_CLIENT_ID y CRM_PORTAL_CLIENT_SECRET van juntas o no van',
+      `this installation is not configured yet: ${missing
+        .map((field) => MISSING_LABELS[field])
+        .join(', ')}. Set it on the Settings screen.`,
+      missing,
     );
   }
 
-  organizationCache = {
+  // Las cuatro aserciones son las cinco comprobaciones de arriba: si alguna
+  // hubiera fallado no se llega aquí. TypeScript no puede seguir el rastro a
+  // través del array, y repetir los `if` con `throw` dentro haría el mensaje
+  // peor —diría sólo el primero que falta, cuando lo útil es la lista entera.
+  const orgId = settings.orgId as string;
+  const m2mClientId = settings.m2mClientId as string;
+  const m2mSecret = settings.m2mSecret as string;
+  const resolvedDomain = domain as string;
+  const resolvedReference = referenceClaim as ReferenceClaim;
+
+  // El portal es opcional, pero **a medias no**: con el `client_id` y sin el
+  // secreto, el login llegaría hasta el canje del código y moriría allí, con la
+  // persona ya autenticada y un error que parece de Logto. Sin los dos, `/portal`
+  // dice en pantalla que esta instalación no lo tiene declarado.
+  const portalClientId = settings.portalClientId;
+  const portalClientSecret = settings.portalClientSecret;
+  const portal =
+    portalClientId === undefined || portalClientSecret === undefined
+      ? undefined
+      : {
+          clientId: portalClientId,
+          clientSecret: portalClientSecret,
+          linkType: settings.portalLinkType,
+        };
+
+  return {
     orgId,
-    displayName: emptyToUndefined(process.env['CRM_ORG_NAME']) ?? orgId,
-    domain: readDomain(),
-    m2mClientId: requireEnv('CRM_M2M_CLIENT_ID'),
-    m2mSecret: requireEnv('CRM_M2M_SECRET'),
-    // Sin barra final: las URLs se componen con plantillas, y `…/v1/b2b` sobre
-    // una base con barra doble es un 404 que cuesta ver.
-    issuerUrl: issuerUrl.replace(/\/+$/, ''),
-    verifierUrl: verifierUrl.replace(/\/+$/, ''),
-    officialNumbers: readOfficialNumbers(),
-    brand: readBrand(),
-    referenceClaim: readReferenceClaim(),
-    portalBaseUrl: emptyToUndefined(process.env['CRM_PORTAL_BASE_URL'])?.replace(/\/+$/, ''),
-    portal:
-      portalClientId === undefined || portalClientSecret === undefined
-        ? undefined
-        : {
-            clientId: portalClientId,
-            clientSecret: portalClientSecret,
-            linkType: emptyToUndefined(process.env['CRM_PORTAL_LINK_TYPE']),
-          },
-    webhookSecret: emptyToUndefined(process.env['CRM_WEBHOOK_SECRET']),
+    displayName: settings.displayName ?? orgId,
+    domain: resolvedDomain,
+    m2mClientId,
+    m2mSecret,
+    issuerUrl: issuerBase,
+    verifierUrl: issuerBase,
+    webhookUrl: webhookUrlFor(resolvedDomain),
+    officialNumbers: settings.officialNumbers,
+    brand: readBrand(settings),
+    referenceClaim: resolvedReference,
+    portalBaseUrl:
+      settings.portalBaseUrl === undefined ? undefined : trimTrailingSlash(settings.portalBaseUrl),
+    portalCookieSecret: settings.portalCookieSecret,
+    portal,
+    webhookSecret: settings.webhookSecret,
   };
-  return organizationCache;
 }
 
-let logtoCache: LogtoConfig | undefined;
+/**
+ * La ruta del receptor. Está en una constante porque la escriben dos ficheros
+ * —esto y la propia ruta— y tienen que decir lo mismo: una barra de diferencia
+ * entre lo que se registra en tenant-admin y lo que sirve este proceso es un 404
+ * que sólo se ve en el registro de entregas de te-api.
+ */
+export const WEBHOOK_PATH = '/api/webhooks/te-api';
 
-export function getLogtoConfig(): LogtoConfig {
-  if (logtoCache !== undefined) return logtoCache;
-  logtoCache = {
-    endpoint: requireEnv('LOGTO_ENDPOINT').replace(/\/+$/, ''),
-    b2bResource: requireEnv('TE_B2B_RESOURCE'),
-    // Los dos que existen hoy en el recurso B2B. `verifications:request` se creó
-    // el 2026-08-29 para que una integración que sólo verifica por teléfono no
-    // necesite permiso para EMITIR credenciales, que es lo que pasaba antes.
-    //
-    // Van los dos porque este CRM hace las dos cosas. Un partner que sólo
-    // verifique se da de alta con un rol propio, sin `credentials:issue`: es lo
-    // que hace que «sólo las organizaciones autorizadas emiten» se cumpla en la
-    // consola y no sólo en el comentario.
-    b2bScope: process.env['TE_B2B_SCOPE']?.trim() ?? 'credentials:issue verifications:request',
+/** La dirección entera del webhook de un dominio. Sin componer nada más. */
+export function webhookUrlFor(domain: string): string {
+  return `https://${domain}${WEBHOOK_PATH}`;
+}
+
+export async function getLogtoConfig(): Promise<LogtoConfig> {
+  const settings = await loadTenantSettings();
+  return {
+    endpoint: trimTrailingSlash(settings.logtoEndpoint),
+    b2bResource: settings.b2bResource,
+    b2bScope: settings.b2bScope,
   };
-  return logtoCache;
 }

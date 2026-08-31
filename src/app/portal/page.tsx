@@ -75,7 +75,7 @@ export default async function PortalPage({
   let organization: OrganizationConfig | undefined;
   let configurationProblem: string | null = null;
   try {
-    organization = getOrganization();
+    organization = await getOrganization();
     if (organization.portal === undefined) {
       configurationProblem = t('portal.errorNoPortal');
     } else {

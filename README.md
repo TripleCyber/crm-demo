@@ -10,10 +10,10 @@ emisión son los de producción.
 > nunca, igual que no leemos el núcleo bancario de un banco de verdad.
 
 > **UNA INSTALACIÓN, UN INQUILINO.**
-> Toda la identidad de la empresa sale del entorno del proceso —`CRM_ORG_ID`,
-> `CRM_ORG_DOMAIN`, `CRM_M2M_*`— y **la cabecera `Host` no decide nada**. Para
-> servir a una segunda empresa se publica la misma imagen otra vez con otro
-> entorno, otro dominio y otra base.
+> Toda la identidad de la empresa sale de **su propia base** —de la fila de
+> `tenant_settings`, escrita desde la pantalla de ajustes— y **la cabecera `Host`
+> no decide nada**. Para servir a una segunda empresa se publica la misma imagen
+> otra vez con otro dominio y otra base.
 >
 > Hasta el 2026-08-31 esto era al revés: un despliegue servía a cuatro empresas y
 > el `Host` de la petición elegía de cuál era cada pantalla. Se retiró entero por
@@ -27,6 +27,21 @@ emisión son los de producción.
 > (`bank.demo-te.com`) y **Larkfield Energy** (`energy.demo-te.com`). Los dos
 > bloques de variables, completos y listos para pegar en Coolify, están en
 > [`.env.example`](.env.example).
+
+> **LA CONFIGURACIÓN SE ESCRIBE DESDE LA CONSOLA, NO DESDE EL ENTORNO.**
+> Desde el 2026-08-31 una instalación se levanta con **`DATABASE_URL` y nada
+> más**, y se configura desde `/settings`: su organización de Logto, su
+> aplicación de máquina y su secreto, su marca, sus teléfonos, su portal y el
+> secreto de firma del webhook. Esa pantalla enseña además, arriba del todo y
+> con botón de copiar, **su propia dirección de webhook**, que es el único dato
+> que hay que llevarse a tenant-admin.
+>
+> La regla, que es una sola y está escrita en
+> [`src/lib/tenant-settings.ts`](src/lib/tenant-settings.ts): **la base manda; el
+> entorno siembra la fila la primera vez y después no se vuelve a leer.** Un
+> despliegue que ya tenía su `.env` entero sigue arrancando igual —la primera
+> petición siembra con lo que había— y desde entonces se cambia en la pantalla.
+> `DATABASE_URL` es la única variable que sigue siendo obligatoria.
 
 ## Lo que hay hoy y lo que no
 
@@ -127,7 +142,8 @@ formulario largo donde lo que se leía era el desplegable.
 | `/verifications/<presentationId>` | **Seguir** una comprobación: el estado en grande —con el titular, su número de cliente y el plazo corriendo—, el QR o el enlace, la línea de tiempo y el recibo | C2 · C3 |
 | `/verifications` | El registro de comprobaciones de la organización | — |
 | `/customers/new` | Alta de cliente | — |
-| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, marca, portal, **webhook**), de dónde sale el idioma, y una comprobación real de la base. **Es el único sitio donde se dice el nombre de una variable de entorno** | — |
+| `/settings` | **La configuración de esta instalación**, guardada en su propia base: su organización de Logto, su aplicación de máquina y su secreto, su marca, su referencia de sector, sus teléfonos, su portal y el secreto de firma del webhook. Arriba del todo enseña **su propia dirección de webhook**, entera y con botón de copiar, que es el único dato que hay que llevarse a tenant-admin. Abajo, dos botones que prueban la integración **en los dos sentidos**: pedir un token a Logto y llamar a `GET /v1/b2b/organization`, y pedirle a te-api que mande un `webhook.test` a esta instalación. Los tres secretos **se escriben y no se releen**: sólo se enseña su huella | — |
+| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, marca, portal, **webhook**), de dónde sale el idioma, y una comprobación real de la base. **Ajustes escribe; Diagnóstico mira** — lo que enseña aquí y no allí es lo que contesta te-api y el recuento de entregas | — |
 | `/events` | Los **eventos recibidos por webhook**: cuándo, de qué tipo, a qué cliente afectan y si la firma cuadró. Es la única parte de la integración que ocurre sin que nadie esté mirando, y por eso tiene pantalla | — |
 
 Que el seguimiento tenga dirección propia es lo que arregla tres cosas de golpe:
@@ -578,16 +594,27 @@ Hace falta Node ≥ 20.12 (por `process.loadEnvFile`) y un Postgres.
 
 ```bash
 npm install
-cp .env.example .env.local          # y rellenarlo, ver la tabla de abajo
-npm run db:migrate                  # crea la tabla `customer`
-npm run db:seed                     # opcional: el padrón de prueba
-npm run dev                         # http://localhost:3000
+echo 'DATABASE_URL=postgres://…' > .env.local   # la ÚNICA obligatoria
+npm run db:migrate                              # crea las tablas
+npm run dev                                     # http://localhost:3000
 ```
 
-`db:seed` siembra el padrón de **esta** instalación, con su `CRM_ORG_ID`. Cuál de
-los dos padrones toca lo deduce de `CRM_REFERENCE_CLAIM` —`account_last4` trae los
+Y después **se configura en el navegador**, en `/settings`. Una instalación sin
+configurar no falla ni sale en blanco: la consola lleva sola a esa pantalla y
+lista qué falta. El recorrido completo —dar de alta las aplicaciones en
+tenant-admin y pegarlas aquí— es exactamente el que se quiere poder enseñar.
+
+Si prefieres sembrarla desde un `.env` —o ya tenías uno—, `cp .env.example
+.env.local` y rellenarlo sigue funcionando: la primera petición copia esos
+valores a la fila de configuración. **A partir de ahí el entorno ya no se lee**,
+y la pantalla de ajustes lo dice con esas palabras.
+
+`npm run db:seed` (opcional) siembra el padrón de prueba de **esta** instalación,
+con el `org_id` que diga la fila de configuración —y con `CRM_ORG_ID` de respaldo
+si todavía no hay ninguna. Cuál de los dos padrones toca lo deduce de la
+referencia de sector —`account_last4` trae los
 13 clientes de Banco Demo, `supply_point_number` los 10 de Larkfield Energy— y no
-de una variable más: el padrón tiene que rellenar la columna que esta instalación
+de un ajuste más: el padrón tiene que rellenar la columna que esta instalación
 usa, y esa columna ya está declarada. `CRM_SEED_ROSTER=<NOMBRE>` lo fuerza a mano.
 Es idempotente.
 
@@ -691,29 +718,45 @@ Lo primero que hay que mirar es **`/diagnostics`**: llama a
 emites y qué tipos tienes en el padrón. Si eso responde, la integración está
 bien y no ha hecho falta emitirle una credencial a nadie para saberlo.
 
-## Variables de entorno
+## Variables de entorno · **hoy son la semilla, no la configuración**
+
+⚠ **La lista de abajo describe lo que se puede SEMBRAR, no dónde se configura.**
+Desde el 2026-08-31 la configuración vive en la fila de `tenant_settings` y se
+escribe en `/settings`. El entorno sólo crea esa fila la primera vez, y después
+**no se vuelve a leer**: cambiar una variable y volver a desplegar no hace nada.
+La regla entera está en [`src/lib/tenant-settings.ts`](src/lib/tenant-settings.ts).
 
 Ninguna es `NEXT_PUBLIC_*`. Los módulos que las leen son `server-only`, así que
 importarlos desde un componente de cliente **no compila**.
 
-**Son planas: ni prefijos, ni slugs.** Una instalación es de una empresa, así que
-no hay nada que distinguir. Lo que falte o esté mal escrito **revienta al
-arrancar nombrando la variable**, en vez de degradarse en silencio.
-
 Los dos bloques completos, listos para pegar en Coolify —Banco Demo y Larkfield
 Energy—, están en [`.env.example`](.env.example).
 
-### Comunes a cualquier instalación
+### La única de verdad obligatoria
 
 | Variable | Qué es |
 |---|---|
-| `DATABASE_URL` | La base del CRM. Sólo del CRM, y **una por instalación** |
+| `DATABASE_URL` | La base del CRM. Sólo del CRM, y **una por instalación**. Es donde se guarda todo lo demás, así que no puede guardarse dentro de ella |
+
+### Las de plataforma · **ya tienen valor por defecto en el código**
+
+`PLATFORM_DEFAULTS` en `src/lib/tenant-settings.ts` apunta a los dos backends del
+producto, así que sólo se declaran para un Logto de pruebas — y para eso está
+también la sección plegada de la pantalla de ajustes.
+
+| Variable | Qué es |
+|---|---|
 | `LOGTO_ENDPOINT` | `https://auth.idp.tripleenable.com` — de donde sale el token M2M |
 | `TE_B2B_RESOURCE` | El indicador del recurso B2B. **Idéntico** al `TE_B2B_RESOURCE` de te-api, carácter a carácter |
-| `TE_B2B_SCOPE` | `credentials:issue verifications:request` por defecto |
+| `TE_B2B_SCOPE` | `credentials:issue verifications:request webhooks:manage` por defecto |
 | `TE_API_BASE_URL` | Base de te-api; respaldo de `CRM_ISSUER_URL` y `CRM_VERIFIER_URL` |
 
-### La organización de esta instalación
+### La organización de esta instalación · **hoy se rellena en `/settings`**
+
+Cada una de las de esta tabla tiene su casilla en la pantalla de ajustes. Lo que
+sigue diciendo la tabla es **qué significa cada valor**, que no ha cambiado; lo
+que ya no es cierto es que se declaren aquí. «Obligatoria» quiere decir que sin
+ella la instalación no está configurada, y la pantalla la nombra.
 
 | Variable | Qué es |
 |---|---|
@@ -726,7 +769,7 @@ Energy—, están en [`.env.example`](.env.example).
 | `CRM_VERIFIER_URL` | Base de te-api para verificar. Opcional; cae en `TE_API_BASE_URL` |
 | `CRM_OFFICIAL_NUMBERS` | Los teléfonos desde los que llama de verdad, separados **por comas**. No son adorno: van firmados dentro de la credencial como `official_numbers` |
 | `CRM_REFERENCE_CLAIM` | Qué dato de relación ofrece su **alta de cliente**: `account_last4` o `supply_point_number`. **Obligatoria** desde el 2026-08-31 — antes, sin ella se ofrecían todas las casillas a la vez, y a un agente de una eléctrica le aparecía una de «número de historia clínica» |
-| `CRM_BRAND_COLOR` | El acento de su marca sobre papel blanco: enlaces, foco, el filo de la tarjeta de oferta. Sólo hexadecimal (`#rgb`/`#rrggbb`, o **sin almohadilla**, que es lo recomendado en un `.env`); un valor que no encaje **revienta al arrancar** |
+| `CRM_BRAND_COLOR` | El acento de su marca sobre papel blanco: enlaces, foco, el filo de la tarjeta de oferta. Sólo hexadecimal (`#rgb`/`#rrggbb`, o **sin almohadilla**, que es lo obligado en un `.env` — la almohadilla abre un comentario y el valor se pierde entero). Desde la pantalla, un valor que no encaje se rechaza junto a la casilla |
 | `CRM_BRAND_SURFACE` | La superficie oscura de su marca: la barra de la consola y la cabecera del portal. Va **junta** con la anterior — media marca se lee como una pantalla a medio pintar |
 | `CRM_BRAND_MONOGRAM` | Una o dos letras para el disco. Sin él, las iniciales de las dos primeras palabras del nombre |
 
@@ -749,9 +792,15 @@ uno, porque te-api no lo sabe (ver más arriba).
 
 | Variable | Qué es |
 |---|---|
-| `CRM_WEBHOOK_SECRET` | El secreto de firma que devuelve la consola al registrar el endpoint. Se pega **tal cual, con el `whsec_` incluido**: es una cadena opaca, no material codificado. Sin él el receptor **rechaza toda entrega** |
+| `CRM_WEBHOOK_SECRET` | El secreto de firma que devuelve la consola al registrar el endpoint. Se pega **tal cual, con el `whsec_` incluido**: es una cadena opaca, no material codificado. Sin él el receptor **rechaza toda entrega**. Su casilla está en `/settings`, justo debajo de la dirección que hay que registrar |
 
 ### El empleado y el portal
+
+Las tres de `CRM_AGENT_*` **se siguen leyendo del entorno siempre**, y no son una
+excepción a la regla: no están en la pantalla de ajustes ni deben estarlo. Son el
+sustituto provisional del login de empleado (F4a) — son de la persona, no de la
+empresa, y desaparecerán cuando ese login exista. Las tres del portal sí están en
+la pantalla.
 
 | Variable | Qué es |
 |---|---|
@@ -759,10 +808,10 @@ uno, porque te-api no lo sabe (ver más arriba).
 | `CRM_AGENT_ID` | El número de agente que ve el **titular** en su móvil cuando suena el timbre. te-api **no lo verifica**: es atribución |
 | `CRM_AGENT_NAME` | El nombre del agente, igual. Sin estas dos al titular le sale «Agente de \<la organización\>», compuesto con su nombre — no se inventa un nombre de persona |
 | `CRM_PORTAL_CLIENT_ID` | La aplicación **Traditional Web** del portal. Es además el `portal_client_id` que te-api tiene en su padrón |
-| `CRM_PORTAL_CLIENT_SECRET` | Su secreto. **Sólo en el servidor.** Va junta con la de arriba: una sin la otra es un error de configuración y se ve al arrancar |
+| `CRM_PORTAL_CLIENT_SECRET` | Su secreto. **Sólo en el servidor.** Va junta con la de arriba: una sin la otra es un error de configuración y el formulario no la deja guardar |
 | `CRM_PORTAL_LINK_TYPE` | El `type` que el portal declara al vincular (`cliente`). Opcional |
 | `CRM_PORTAL_BASE_URL` | La dirección pública del portal. De aquí sale su `redirect_uri`, que Logto compara carácter a carácter con el declarado en su aplicación. **Nunca sale de la cabecera `Host`** |
-| `CRM_PORTAL_COOKIE_SECRET` | Firma la cookie de sesión del portal (HS256). 32 caracteres o más, y **una distinta por instalación** |
+| `CRM_PORTAL_COOKIE_SECRET` | Firma la cookie de sesión del portal (HS256). **Ya no hay que inventarla**: si no se siembra, se genera con `randomBytes(32)` al crear la fila de configuración, y por tanto es distinta en cada base. Sembrarla sigue valiendo para conservar las sesiones abiertas de un despliegue que ya existía |
 
 ### Sólo para la siembra
 
@@ -853,18 +902,20 @@ servía a cuatro.
 
 Lo que no se puede olvidar:
 
-- **`CRM_ORG_DOMAIN`** — sin ella el proceso no arranca. Es mejor que lo de
-  antes, que era arrancar y no publicar documento DID: aquel síntoma llegaba al
-  teléfono del titular como «no podemos verificar quién emite esto», que no se
-  parece a «falta una variable».
-- **`CRM_REFERENCE_CLAIM`** — tampoco arranca sin ella, por lo mismo: antes se
-  degradaba a «ofrecerlas todas» y una comercializadora de luz acababa enseñando
-  la casilla de otro sector.
-- **Su propia `DATABASE_URL` y su propio `CRM_PORTAL_COOKIE_SECRET`.** Compartir
-  la primera ata dos empresas al mismo Postgres para siempre; compartir el
-  segundo hace que una cookie emitida por una valga en la otra.
-- **Su propio `CRM_WEBHOOK_SECRET`**, que le da su propia consola al registrar su
-  endpoint.
+- **Su dominio** — sin él la instalación no está configurada, y la pantalla de
+  ajustes lo nombra. Es mejor que lo de antes, que era arrancar y no publicar
+  documento DID: aquel síntoma llegaba al teléfono del titular como «no podemos
+  verificar quién emite esto», que no se parece a «falta un ajuste».
+- **Su referencia de sector** — igual, por lo mismo: antes se degradaba a
+  «ofrecerlas todas» y una comercializadora de luz acababa enseñando la casilla
+  de otro sector.
+- **Su propia `DATABASE_URL`.** Compartirla ata dos empresas al mismo Postgres
+  para siempre — y desde que la configuración vive dentro, compartirla es además
+  compartir la configuración: **dos instalaciones sobre la misma base son la
+  misma instalación**. La clave de la cookie del portal ya no hay que inventarla:
+  se genera al sembrar la fila, y por tanto es distinta en cada base.
+- **Su propio secreto de webhook**, que le da su propia consola al registrar su
+  endpoint. Se pega en `/settings`, no en el entorno.
 
 ### Lo que hay que crear FUERA de este repositorio, en orden
 
@@ -880,10 +931,11 @@ segunda instalación; para otra empresa se cambian el nombre y el subdominio.
 | 4 | **te-api** | La organización en su padrón, con el `portal_client_id` del paso 3: `TE_PARTNER_PORTAL_CLIENT_ID=<ese client_id> npm run seed:partner` | Quien despliega |
 | 5 | **DNS** | `energy.demo-te.com` apuntando al servidor | Quien despliega |
 | 6 | **Coolify** | **Una aplicación NUEVA** a partir de la misma imagen, con `https://energy.demo-te.com` como su dominio. Esto cambió el 2026-08-31: antes era añadir un dominio más a la aplicación que ya existía, porque un despliegue servía a las cuatro | Quien despliega |
-| 7 | **Coolify** | Pegar el bloque **§B** del `.env.example` en las variables de **esa nueva aplicación**, con los valores de los pasos 2 y 3, y desplegar. Su `DATABASE_URL` y su `CRM_PORTAL_COOKIE_SECRET` son **suyos**, no los del banco | Quien despliega |
-| 8 | **La base** | `npm run db:migrate` y `npm run db:seed` desde dentro del contenedor. El padrón lo elige `CRM_REFERENCE_CLAIM` | Quien despliega |
+| 7 | **Coolify** | Poner **`DATABASE_URL`** en las variables de esa nueva aplicación —**suya, no la del banco**— y desplegar. El resto ya no va aquí | Quien despliega |
+| 8 | **La base** | `npm run db:migrate` desde dentro del contenedor | Quien despliega |
+| 8b | **`/settings` de la nueva instalación** | Pegar los valores de los pasos 2 y 3, elegir su referencia de sector y su marca, y guardar. Después `npm run db:seed`, que ya sabe de quién es el padrón | Quien despliega |
 | 9 | **La consola de la organización** | Elegir sus **tipos de credencial** del catálogo compartido y **encender su emisión**, que es lo que crea sus claves en te-api | **Su administrador** |
-| 10 | **La consola de la organización** | Registrar su webhook: `https://energy.demo-te.com/api/webhooks/te-api`. Devuelve el secreto de firma → `CRM_WEBHOOK_SECRET` y redesplegar | **Su administrador** |
+| 10 | **La consola de la organización** | Registrar su webhook. **La dirección exacta la enseña `/settings` con botón de copiar** — es `https://energy.demo-te.com/api/webhooks/te-api`. Devuelve el secreto de firma, que se pega en esa misma pantalla; **no hay que redesplegar**. El botón «mandar un evento de prueba» comprueba las dos mitades de una vez | **Su administrador** |
 
 Los pasos 1, 9 y 10 son de la organización y no nuestros, y ésa es la prueba que
 esto viene a hacer: **el alta es autoservicio**. Nosotros no creamos su

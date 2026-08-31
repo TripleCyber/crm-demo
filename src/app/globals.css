@@ -2395,3 +2395,148 @@ main.narrow {
   margin: 12px 0 0;
   font-size: 13px;
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  LA PANTALLA DE AJUSTES
+ *
+ *  Cinco piezas y ninguna decorativa. Las cuatro primeras existen porque un
+ *  secreto que se escribe y no se relee necesita decir tres cosas a la vez
+ *  —que hay uno, cuál es sin enseñarlo, y que dejar el campo en blanco no lo
+ *  borra— y esas tres no caben en un `<input>`. La quinta es la dirección del
+ *  webhook, que es el único valor de la consola que hay que llevarse a otra
+ *  pantalla.
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+/* Las tarjetas del formulario van pegadas entre sí como las de cualquier otra
+   pantalla; lo único que hace falta es que el botón de guardar no quede pegado
+   a la última. */
+.settings-form > button[type='submit'] {
+  margin-top: 4px;
+}
+
+/*
+ * El estado de un secreto guardado: los puntos, la huella y la pista.
+ *
+ * Es la misma forma que usa tenant-admin —`••••••••` y el digest en tipografía
+ * de código— y eso no es imitación: la huella del secreto M2M se calcula igual
+ * en las dos consolas, así que se comparan a ojo. Verlas distintas tiene que ser
+ * cuestión de mirar, no de contar caracteres.
+ */
+.secret-state {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.secret-state.warn {
+  color: var(--warn);
+}
+
+.secret-dots {
+  /* Separadas, porque ocho puntos juntos se leen como un carácter raro y no
+     como «aquí hay algo escondido». */
+  letter-spacing: 2px;
+  color: var(--ink-3);
+}
+
+.secret-fingerprint {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--canvas);
+  border-radius: 4px;
+  padding: 1px 6px;
+  /* Ayuda visual: el `title` explica qué es, pero el subrayado punteado es lo
+     que dice que hay algo que leer al pasar por encima. */
+  border-bottom: 1px dotted var(--rule);
+  cursor: help;
+}
+
+.secret-hint {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/*
+ * La casilla de vaciar un secreto.
+ *
+ * Va DEBAJO del campo y en pequeño, a propósito: es la acción destructiva de
+ * esta pantalla y no puede competir por el ojo con la de pegar uno nuevo, que es
+ * lo que se viene a hacer. Y la casilla recupera su tamaño propio, porque la
+ * regla de arriba pone todo `input` al 100 % del ancho y una casilla de
+ * verificación estirada a 600 píxeles es una franja que no parece una casilla.
+ */
+.secret-clear {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.secret-clear input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
+
+/*
+ * Un valor con su botón de copiar. Hoy sólo lo usa la dirección del webhook.
+ *
+ * `word-break: break-all` y no `ellipsis`: quien no pueda copiar tiene que poder
+ * leerlo entero, y unos puntos suspensivos esconden justo la cola de la URL, que
+ * es donde está la ruta.
+ */
+.copy-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: var(--canvas);
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  margin-bottom: 10px;
+}
+
+.copy-value .mono {
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+}
+
+.copy-value-button {
+  padding: 5px 12px;
+  font-size: 13px;
+  background: var(--paper);
+  color: var(--navy);
+  border-color: var(--rule);
+  flex: none;
+}
+
+.copy-value-button:hover:not([disabled]) {
+  background: var(--navy-tint);
+  border-color: var(--navy);
+}
+
+/* El `<select>` de la referencia de sector y el resto de campos del formulario
+   comparten el hueco de `.field`; lo único que se ajusta es que una fila de tres
+   —los dos colores y el monograma— no deje el monograma tan ancho como un color
+   hexadecimal, que necesita el doble. */
+.settings-form .row > label:last-child:nth-child(3) {
+  flex: 0 0 110px;
+}
+
+/* La barra sin configurar es un enlace, así que hay que quitarle el subrayado
+   del enlace normal y dejarle el aspecto del rótulo que sustituye. */
+a.rail-org {
+  text-decoration: none;
+}
+
+a.rail-org:hover {
+  text-decoration: underline;
+}

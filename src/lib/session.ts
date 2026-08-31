@@ -114,7 +114,7 @@ export async function getEmployeeSession(): Promise<EmployeeSession> {
   // portal del cliente: dos copias del mismo «cuál es mi empresa» acaban
   // discrepando, y entonces la consola emite para una organización y el portal
   // vincula contra otra.
-  const organization = getOrganization();
+  const organization = await getOrganization();
   const fallback = unidentifiedAgent(await getTranslator(), organization);
 
   return {

@@ -76,11 +76,11 @@ export default async function EventsPage() {
 
   try {
     const session = await getEmployeeSession();
-    // La dirección se compone del dominio declarado y no del `Host`: es lo que
-    // hay que pegar en la consola, y tiene que ser la misma que te-api va a
-    // llamar. Componerla con la petición enseñaría `localhost` a quien abra esto
-    // por un túnel.
-    webhookUrl = `https://${session.organization.domain}/api/webhooks/te-api`;
+    // La dirección la compone la configuración y no esta pantalla: tiene que
+    // ser **el mismo texto** aquí, en Ajustes y en Diagnóstico, y sobre todo el
+    // mismo que se registra en tenant-admin. Sale del dominio declarado y nunca
+    // del `Host`, que enseñaría `localhost` a quien abra esto por un túnel.
+    webhookUrl = session.organization.webhookUrl;
     secretDeclared = session.organization.webhookSecret !== undefined;
     events = await listWebhookEvents(session.organization.orgId);
   } catch (error) {
@@ -114,9 +114,12 @@ export default async function EventsPage() {
                 // quien opera, pero un secreto pintado acaba en una captura.
                 t('events.endpointSecretSet')
               ) : (
+                // Ya no se nombra ninguna variable de entorno: no se leen.
+                // Lo que hace falta decir es dónde se pone, que es la pantalla
+                // de al lado.
                 <span className="warn">
                   {t('events.endpointSecretMissing')}{' '}
-                  <span className="mono">CRM_WEBHOOK_SECRET</span>
+                  <Link href="/settings">{t('events.endpointSecretWhere')}</Link>
                 </span>
               )}
             </dd>

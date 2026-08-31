@@ -220,6 +220,97 @@ export async function fetchB2bOrganization(
 }
 
 /**
+ * El destino de webhook que **tiene registrado te-api** para esta organización.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ES LA ÚNICA FORMA DE SABER SI LA DIRECCIÓN PEGADA EN LA CONSOLA ES ÉSTA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * La pantalla de ajustes enseña la dirección que **debería** estar registrada
+ * (`organization.webhookUrl`), pero eso es una afirmación de este lado: quien la
+ * pegó en tenant-admin pudo escribirla mal, dejar una barra de más o registrar
+ * la de la otra instalación. Con esto se comparan las dos, y entonces la
+ * pantalla puede decir «la registrada no es ésta» en vez de dejar a alguien
+ * mirando una bandeja de eventos vacía sin saber por qué.
+ *
+ * `endpoint: null` = no hay ninguno registrado, que es el estado de una
+ * organización recién dada de alta y no un error.
+ *
+ * Necesita `webhooks:manage`, con `credentials:issue` de puente en te-api. Si el
+ * rol de la organización no tiene ninguno de los dos, la puerta B2B devuelve el
+ * mismo 404 opaco que a un intruso — ver `describeTeApiError`.
+ */
+export interface B2bWebhookEndpoint {
+  readonly url: string;
+  /** Vacío = todos los tipos, incluidos los que se inventen mañana. */
+  readonly events: readonly string[];
+  /** `probation` | `active` | `paused` | `suspended`. */
+  readonly status: string;
+  /**
+   * La huella del secreto **según te-api**, que la calcula sobre el texto
+   * cifrado que guarda. No cuadra con la que enseña esta consola y no tiene por
+   * qué: ver `src/lib/secret-fingerprint.ts`.
+   */
+  readonly secretFingerprint?: string;
+  readonly consecutiveFailures?: number;
+  readonly lastSuccessAt?: string | null;
+  readonly lastFailureAt?: string | null;
+  readonly lastFailureReason?: string | null;
+}
+
+export async function fetchB2bWebhook(
+  organization: OrganizationConfig,
+): Promise<{ endpoint: B2bWebhookEndpoint | null }> {
+  return callB2b<{ endpoint: B2bWebhookEndpoint | null }>(
+    organization,
+    organization.issuerUrl,
+    '/v1/b2b/webhook',
+    { method: 'GET' },
+  );
+}
+
+/**
+ * `POST /v1/b2b/webhook/test` — **pide a te-api que llame a este CRM**.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ES LA ÚNICA PRUEBA QUE RECORRE EL CAMINO ENTERO, Y POR ESO ESTÁ AQUÍ
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Todo lo demás que comprueba la pantalla de ajustes son llamadas que **sale**
+ * el CRM. El webhook es la única dirección en la que TripleEnable llama al CRM,
+ * y por tanto la única que no se puede comprobar desde dentro: hace falta que
+ * alguien de fuera marque el número.
+ *
+ * Esto lo pide. te-api encola un `webhook.test`, lo firma con el secreto de esta
+ * organización y lo entrega en la dirección que tiene registrada. Lo que prueba,
+ * y ninguna de las tres cosas la prueba nada más:
+ *
+ *  1. Que la dirección registrada **llega hasta este proceso** (DNS, proxy, TLS).
+ *  2. Que el secreto guardado aquí es **el mismo** con el que firma te-api: si
+ *     no lo fuera, la fila aparecería en la pantalla de eventos en rojo con
+ *     `bad_signature`, que es exactamente el síntoma que hay que poder ver.
+ *  3. Que el receptor archiva y contesta 2xx.
+ *
+ * Y tiene un efecto de más que conviene saber: **es la única entrega que sale
+ * mientras el destino está en `probation`**, y un 2xx es lo que lo asciende a
+ * `active`. O sea que este botón no sólo prueba la integración: la termina de
+ * dar de alta.
+ *
+ * `deliveryId: null` = te-api registró el evento pero no encoló nada, que es lo
+ * que pasa cuando la entrega está apagada en ese despliegue.
+ */
+export async function sendB2bWebhookTest(
+  organization: OrganizationConfig,
+): Promise<{ eventId: string; deliveryId: string | null }> {
+  return callB2b<{ eventId: string; deliveryId: string | null }>(
+    organization,
+    organization.issuerUrl,
+    '/v1/b2b/webhook/test',
+    { method: 'POST', body: {} },
+  );
+}
+
+/**
  * El padrón de la organización, cacheado un minuto.
  *
  * ## Por qué hay caché, y por qué es corta
