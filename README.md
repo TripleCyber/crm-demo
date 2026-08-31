@@ -669,6 +669,7 @@ importarlos desde un componente de cliente **no compila**.
 | `CRM_ORG_<SLUG>_DOMAIN` | **Su dominio, que es su identidad.** De aquí salen el `did:web:<dominio>` que publica y qué padrón enseña la consola en ese dominio. Sin él no publica documento DID (la ruta da 404) y sólo se llega por `CRM_ACTIVE_ORG_ID` |
 | `CRM_ORG_<SLUG>_DEV_HOSTS` | Hosts que **además** encaminan aquí, sin ser su identidad. Sólo desarrollo (`seguros.localhost`). **No entra en ningún documento DID** |
 | `CRM_ORG_<SLUG>_OFFICIAL_NUMBERS` | Los teléfonos desde los que llama de verdad, separados **por comas**. No son adorno: van firmados dentro de la credencial como `official_numbers` |
+| `CRM_ORG_<SLUG>_REFERENCE_CLAIM` | Cuál de los cuatro datos de relación ofrece su **alta de cliente**: `account_last4`, `policy_number`, `medical_record_number` o `supply_point_number`. Sin él se ofrecen los cuatro, que es lo que tienen las tres primeras. Un valor que no sea uno de ésos **revienta al arrancar** en vez de caer en silencio a «los cuatro» |
 | `CRM_ORG_<SLUG>_BRAND_COLOR` | El acento de su marca sobre papel blanco: enlaces, foco, el filo de la tarjeta de oferta. Sólo hexadecimal (`#rgb`/`#rrggbb`); un valor que no encaje **revienta al arrancar** |
 | `CRM_ORG_<SLUG>_BRAND_SURFACE` | La superficie oscura de su marca: la barra de la consola y la cabecera del portal. Va **junta** con la anterior — media marca se lee como una pantalla a medio pintar |
 | `CRM_ORG_<SLUG>_BRAND_MONOGRAM` | Una o dos letras para el disco. Sin él, las iniciales de las dos primeras palabras del nombre |
@@ -710,6 +711,13 @@ síntoma en el teléfono es «no podemos verificar quién emite esto», que no s
 parece a «te falta una variable», y por eso Diagnóstico lo dice en una fila. Si
 además tiene portal, su `CRM_ORG_<SLUG>_PORTAL_BASE_URL`; y si quiere que su
 consola no sea la del banco repintada, sus dos `CRM_ORG_<SLUG>_BRAND_…`.
+
+La otra que conviene no dejarse es **`CRM_ORG_<SLUG>_REFERENCE_CLAIM`**, y ésta
+no da ningún síntoma: sin ella el alta de clientes ofrece **las cuatro**
+referencias de sector, así que una comercializadora de luz enseña una casilla de
+«número de historia clínica» y una clínica enseña una de «punto de suministro».
+No rompe nada —son opcionales— pero en una demostración es de lo primero que se
+ve, y además invita a escribir el dato en la casilla que no toca.
 
 ### Lo que hay que crear FUERA de este repositorio, en orden
 

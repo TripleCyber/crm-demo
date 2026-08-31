@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { isReferenceClaim, REFERENCE_CLAIMS, type ReferenceClaim } from './reference-claims';
+
 /**
  * El mapa `orgId → { domain, m2mClientId, m2mSecret, issuerUrl, verifierUrl }`.
  *
@@ -182,6 +184,31 @@ export interface OrganizationConfig {
    * pantalla no cambia ni un píxel** al entrar esto.
    */
   readonly brand: BrandConfig | undefined;
+  /**
+   * Cuál de las cuatro referencias de sector es la SUYA.
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   *  ESTO ARREGLA UN FORMULARIO QUE LE OFRECÍA A UNA ELÉCTRICA UNA CASILLA
+   *  DE «NÚMERO DE HISTORIA CLÍNICA»
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * La cuenta, la póliza, la historia y el punto de suministro son la misma
+   * cosa en cuatro sectores (`./reference-claims.ts`). El alta las enseñaba
+   * **las cuatro**, con el argumento de que un formulario de cliente no sabe
+   * de qué organización es la pantalla. Es cierto que no lo sabe él; lo sabe
+   * su padre, que es un componente de servidor, y le basta con pasárselo.
+   *
+   * Y no era cosmético: es el dato con el que el titular reconoce de qué
+   * relación se le habla, y ofrecer los de otros tres sectores invita a
+   * rellenar el que no toca — una ficha de Larkfield Energy con el punto de
+   * suministro escrito en `medical_record_number` sale mal en el listado, en
+   * la ficha y dentro de la credencial.
+   *
+   * `undefined` = esta organización no lo declara y se enseñan los cuatro,
+   * que es exactamente lo que había antes. Las tres primeras no lo declaran,
+   * así que **su alta no cambia ni un píxel** — igual que con `brand`.
+   */
+  readonly referenceClaim: ReferenceClaim | undefined;
 }
 
 /**
@@ -352,6 +379,7 @@ function readSlug(slug: string): OrganizationConfig {
     verifierUrl: verifierUrl.replace(/\/+$/, ''),
     officialNumbers: readOfficialNumbers(`${prefix}_OFFICIAL_NUMBERS`),
     brand: readBrand(prefix),
+    referenceClaim: readReferenceClaim(`${prefix}_REFERENCE_CLAIM`),
     portalBaseUrl: emptyToUndefined(process.env[`${prefix}_PORTAL_BASE_URL`])?.replace(/\/+$/, ''),
     portal:
       portalClientId === undefined || portalClientId === '' || portalClientSecret === undefined
@@ -462,6 +490,55 @@ function readBrand(prefix: string): BrandConfig | undefined {
   }
 
   return { accent, surface, monogram };
+}
+
+/**
+ * La referencia de sector de una organización, o `undefined` si no declara una.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LO QUE NO ENCAJA REVIENTA AL ARRANCAR. NO CAE A «LOS CUATRO»
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Es la misma regla que los colores de marca, y por el mismo motivo: **ausente
+ * y mal escrita no son lo mismo**.
+ *
+ *  · **Ausente** = esta organización no declara referencia, se enseñan las
+ *    cuatro, y es legítimo — es lo que tienen las tres primeras.
+ *  · **Presente con cualquier otra cosa** = alguien quiso declararla y no lo
+ *    consiguió. Descartarla en silencio dejaría al agente de Larkfield con la
+ *    casilla de historia clínica delante y a quien desplegó convencido de
+ *    haberla quitado: el peor de los dos mundos, porque no hay síntoma que
+ *    lleve hasta la variable.
+ *
+ * El mensaje nombra la variable y **lista los cuatro valores**, que es lo que
+ * hace falta para arreglarlo sin abrir el código. Lo que no lleva es el valor
+ * recibido: la regla de esta casa es nombrar la variable y nunca lo que hay
+ * dentro (ver `OrganizationConfigError`).
+ *
+ * Aquí no hace falta la defensa de la almohadilla que sí necesitan los colores:
+ * los cuatro valores son minúsculas y guiones bajos, y en un `.env` no hay forma
+ * de que un comentario se coma ninguno. Aun así una variable presente y vacía
+ * revienta igual, porque vacía tampoco es «no declara»: es un descuido.
+ */
+function readReferenceClaim(name: string): ReferenceClaim | undefined {
+  const raw = process.env[name];
+  // Ausente: esta organización no declara referencia. Legítimo.
+  if (raw === undefined) return undefined;
+
+  // Se normaliza a minúsculas porque las variables de entorno se teclean en
+  // cajas de texto y `SUPPLY_POINT_NUMBER` es la misma intención escrita en
+  // mayúsculas, no otro valor.
+  const value = raw.trim().toLowerCase();
+  if (value === '') {
+    throw new OrganizationConfigError(
+      `${name} is declared but empty. Remove it to offer every sector reference, ` +
+        `or set one of: ${REFERENCE_CLAIMS.join(', ')}`,
+    );
+  }
+  if (!isReferenceClaim(value)) {
+    throw new OrganizationConfigError(`${name} must be one of: ${REFERENCE_CLAIMS.join(', ')}`);
+  }
+  return value;
 }
 
 /**

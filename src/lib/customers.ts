@@ -3,6 +3,7 @@ import 'server-only';
 import type { MessageKey, Translator } from '@/i18n/translate';
 
 import { query } from './db';
+import { REFERENCE_CLAIMS } from './reference-claims';
 import type { VerificationStatus } from './verification-status';
 
 /**
@@ -680,18 +681,21 @@ export function buildCredentialClaims(
  * asegurado, si mira por encima del hombro del agente, que esto es software de
  * un banco.
  *
- * La resolución es **por los datos y no por configuración**, y es deliberado:
- * la organización que rellena pólizas es la que tiene pólizas. Una variable de
- * entorno más sería una variable que se puede poner mal, para decir algo que
- * el padrón ya dice.
+ * Aquí —en lo que se LEE de una ficha— la resolución es **por los datos y no
+ * por configuración**, y sigue siendo deliberado: la organización que rellena
+ * pólizas es la que tiene pólizas, y una variable más sería una variable que se
+ * puede poner mal para decir algo que el padrón ya dice.
+ *
+ * ⚠ **En el ALTA no hay datos de los que resolver, y por eso allí sí hay una
+ * variable.** Un formulario vacío no ha rellenado ninguna de las cuatro
+ * columnas, así que no puede deducir el sector de nadie: enseñaba las cuatro, y
+ * a un agente de una eléctrica le aparecía una casilla de «número de historia
+ * clínica». Eso lo decide `CRM_ORG_<SLUG>_REFERENCE_CLAIM`
+ * (`./reference-claims.ts`), que es de dónde sale el juego cerrado de abajo. Las
+ * dos preguntas son distintas y por eso tienen respuestas distintas: «cuál
+ * rellenó esta ficha» la contestan los datos, «cuál va a rellenar esta consola»
+ * sólo la puede contestar quien declara la organización.
  */
-const REFERENCE_CLAIMS = [
-  'account_last4',
-  'policy_number',
-  'medical_record_number',
-  'supply_point_number',
-] as const;
-
 const REFERENCE_ATTRIBUTES: readonly CustomerAttribute[] = CUSTOMER_ATTRIBUTES.filter(
   (attribute) => (REFERENCE_CLAIMS as readonly string[]).includes(attribute.claim),
 );
