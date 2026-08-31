@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { VerificationPill } from '@/components/VerificationPill';
+import { getTranslator } from '@/i18n/server';
 import { deliveryPhrase } from '@/lib/delivery';
 import { formatCalendarDate, formatTimestamp } from '@/lib/format';
 import { searchCustomers, type CustomerListEntry } from '@/lib/customers';
@@ -45,6 +46,7 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<{ q?: string | string[] }>;
 }) {
+  const t = await getTranslator();
   const params = await searchParams;
   const rawQuery = params.q;
   const term = (Array.isArray(rawQuery) ? rawQuery[0] : rawQuery) ?? '';
@@ -60,7 +62,7 @@ export default async function CustomersPage({
     // crudo nombra la variable o la tabla que falta —cierto y sin secretos—,
     // pero eso es lenguaje para quien despliega, no para quien atiende. Se
     // traduce, y el original va al registro y a Diagnóstico.
-    failure = describeConsoleFailure(error, 'el listado de clientes no cargó');
+    failure = describeConsoleFailure(t, error, 'el listado de clientes no cargó');
   }
 
   const searching = term.trim() !== '';
@@ -76,8 +78,8 @@ export default async function CustomersPage({
     <>
       <header className="page-head">
         <div>
-          <p className="eyebrow">Atención al cliente</p>
-          <h1>Clientes</h1>
+          <p className="eyebrow">{t('customers.eyebrow')}</p>
+          <h1>{t('customers.title')}</h1>
           {/*
             La idea —**los datos del banco no salen del banco**— es de las
             mejores que tiene este producto y se queda tal cual. Lo que sobraba
@@ -93,19 +95,18 @@ export default async function CustomersPage({
             aseguradora y el de la clínica. La idea —los datos no salen de aquí—
             es la misma para los tres y es de las mejores que tiene el producto.
           */}
-          <p className="page-sub">
-            El padrón es de esta organización y no sale de aquí. Ningún sistema de TripleEnable
-            lo lee.
-          </p>
+          <p className="page-sub">{t('customers.subtitle')}</p>
         </div>
         <div className="page-actions">
           <Link className="button-link secondary" href="/customers/new">
-            Dar de alta un cliente
+            {t('customers.newCustomer')}
           </Link>
         </div>
       </header>
 
-      {failure !== undefined && <p className="alert">No se ha podido leer el padrón: {failure}</p>}
+      {failure !== undefined && (
+        <p className="alert">{t('customers.loadFailed', { reason: failure })}</p>
+      )}
 
       {failure === undefined && (
         <>
@@ -116,30 +117,34 @@ export default async function CustomersPage({
           */}
           <form className="toolbar" method="get" action="/customers">
             <label className="search">
-              <span className="visually-hidden">Buscar clientes</span>
+              <span className="visually-hidden">{t('customers.searchLabel')}</span>
               <input
                 type="search"
                 name="q"
                 defaultValue={term}
                 placeholder={
                   reference === undefined
-                    ? 'Nombre, identificador o correo'
-                    : `Nombre, identificador, correo o ${reference.label.toLowerCase()}`
+                    ? t('customers.searchPlaceholder')
+                    : t('customers.searchPlaceholderWithReference', {
+                        reference: t(reference.labelKey).toLowerCase(),
+                      })
                 }
                 autoComplete="off"
               />
             </label>
             <button type="submit" className="secondary">
-              Buscar
+              {t('customers.search')}
             </button>
             {searching && (
               <Link className="toolbar-clear" href="/customers">
-                Quitar el filtro
+                {t('customers.clearFilter')}
               </Link>
             )}
             <p className="toolbar-count">
-              {customers.length} {customers.length === 1 ? 'ficha' : 'fichas'}
-              {searching ? ` de «${term.trim()}»` : ''}
+              {t(customers.length === 1 ? 'customers.countOne' : 'customers.countMany', {
+                count: customers.length,
+              })}
+              {searching ? t('customers.countForTerm', { term: term.trim() }) : ''}
             </p>
           </form>
 
@@ -147,25 +152,18 @@ export default async function CustomersPage({
             <div className="empty">
               {searching ? (
                 <>
-                  <h2>Ninguna ficha coincide</h2>
-                  <p>
-                    La búsqueda mira el nombre completo, el identificador, el correo y la
-                    referencia de la ficha — y sólo dentro de esta organización. No hay ningún
-                    directorio global que consultar.
-                  </p>
+                  <h2>{t('customers.emptySearchTitle')}</h2>
+                  <p>{t('customers.emptySearchBody')}</p>
                   <Link className="button-link secondary" href="/customers">
-                    Ver todas las fichas
+                    {t('customers.emptySearchAction')}
                   </Link>
                 </>
               ) : (
                 <>
-                  <h2>Todavía no hay clientes</h2>
-                  <p>
-                    El alta crea la ficha a cuyo nombre se emite después la credencial. Sin ella no
-                    hay a quién emitir.
-                  </p>
+                  <h2>{t('customers.emptyTitle')}</h2>
+                  <p>{t('customers.emptyBody')}</p>
                   <Link className="button-link" href="/customers/new">
-                    Dar de alta un cliente
+                    {t('customers.newCustomer')}
                   </Link>
                 </>
               )}
@@ -175,12 +173,12 @@ export default async function CustomersPage({
               <table className="data customers">
                 <thead>
                   <tr>
-                    <th>Cliente</th>
-                    <th>Contacto</th>
-                    {reference !== undefined && <th>{columnLabelOf(reference)}</th>}
-                    <th>Alta</th>
-                    <th>Credencial</th>
-                    <th>Última verificación</th>
+                    <th>{t('customers.columnCustomer')}</th>
+                    <th>{t('customers.columnContact')}</th>
+                    {reference !== undefined && <th>{columnLabelOf(t, reference)}</th>}
+                    <th>{t('customers.columnSince')}</th>
+                    <th>{t('customers.columnCredential')}</th>
+                    <th>{t('customers.columnLastVerification')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -196,7 +194,7 @@ export default async function CustomersPage({
                         <span className="mono sub">{customer.externalId}</span>
                       </td>
                       <td>
-                        {customer.email ?? <span className="none">sin correo</span>}
+                        {customer.email ?? <span className="none">{t('common.noEmail')}</span>}
                         {customer.phone !== null && <span className="mono sub">{customer.phone}</span>}
                       </td>
                       {reference !== undefined && (
@@ -208,7 +206,7 @@ export default async function CustomersPage({
                         {customer.customerSince === null ? (
                           <span className="none">—</span>
                         ) : (
-                          formatCalendarDate(customer.customerSince)
+                          formatCalendarDate(customer.customerSince, t.locale)
                         )}
                       </td>
                       {/*
@@ -219,15 +217,15 @@ export default async function CustomersPage({
                       */}
                       <td>
                         {customer.lastOfferAt === null ? (
-                          <span className="none">sin ofrecer</span>
+                          <span className="none">{t('customers.notOffered')}</span>
                         ) : (
                           <>
-                            Ofrecida
+                            {t('customers.offered')}
                             <span className="sub">
-                              {formatTimestamp(customer.lastOfferAt)}
+                              {formatTimestamp(customer.lastOfferAt, t.locale)}
                               {customer.lastOfferDelivery === null
                                 ? ''
-                                : ` · ${deliveryPhrase(customer.lastOfferDelivery)}`}
+                                : ` · ${deliveryPhrase(t, customer.lastOfferDelivery)}`}
                             </span>
                           </>
                         )}
@@ -235,7 +233,7 @@ export default async function CustomersPage({
                       <td>
                         {customer.lastVerificationStatus === null ||
                         customer.lastVerificationExpiresAt === null ? (
-                          <span className="none">nunca</span>
+                          <span className="none">{t('common.never')}</span>
                         ) : (
                           <Link
                             className="cell-link"
@@ -248,7 +246,7 @@ export default async function CustomersPage({
                             <span className="sub">
                               {customer.lastVerificationAt === null
                                 ? ''
-                                : formatTimestamp(customer.lastVerificationAt)}
+                                : formatTimestamp(customer.lastVerificationAt, t.locale)}
                             </span>
                           </Link>
                         )}

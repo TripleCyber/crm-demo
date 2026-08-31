@@ -3,6 +3,8 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 
+import type { MessageKey, MessageValues } from '@/i18n/translate';
+
 import type { AuthorizationRequest } from './portal-oidc';
 
 /**
@@ -57,22 +59,36 @@ function secret(): Uint8Array {
   const raw = process.env.CRM_PORTAL_COOKIE_SECRET?.trim();
   if (raw === undefined || raw.length < 32) {
     throw new Error(
-      'falta CRM_PORTAL_COOKIE_SECRET (32 caracteres o más): sin ella la sesión del portal ' +
-        'no se puede firmar, y una sesión sin firmar la escribe cualquiera',
+      'CRM_PORTAL_COOKIE_SECRET is missing (32 characters or more): without it the portal ' +
+        'session cannot be signed, and an unsigned session can be written by anybody',
     );
   }
   return new TextEncoder().encode(raw);
 }
 
-/** El resultado del vínculo, tal y como lo enseña la pantalla del portal. */
+/**
+ * El resultado del vínculo, tal y como lo enseña la pantalla del portal.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL FALLO SE GUARDA COMO CLAVE, NO COMO FRASE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Esto vive dentro de la cookie de sesión y se pinta en la petición siguiente,
+ * o en la de mañana. Una frase ya escrita se quedaría en el idioma que hubiera
+ * activo en el instante del fallo: el titular cambia a inglés, la pantalla
+ * entera cambia, y el único aviso que importa sigue en castellano. Se guarda
+ * qué pasó —`messageKey` y sus valores— y se escribe al pintarlo.
+ */
 export interface LinkOutcome {
   readonly ok: boolean;
   /** El `linkId` que devolvió te-api. Sólo cuando `ok`. */
   readonly linkId?: string;
   /** `true` si este vínculo sustituyó a otro que había. */
   readonly replaced?: boolean;
-  /** Qué falló, en lenguaje de persona. Sólo cuando `!ok`. */
-  readonly message?: string;
+  /** Qué falló, como clave del catálogo. Sólo cuando `!ok`. */
+  readonly messageKey?: MessageKey;
+  /** Los huecos de esa clave, si los lleva. */
+  readonly messageValues?: MessageValues;
   /** El `requestId` de te-api, si lo dio. Es la llave para leer el motivo real. */
   readonly requestId?: string;
 }

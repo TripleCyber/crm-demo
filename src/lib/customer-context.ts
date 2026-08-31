@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { getTranslator } from '@/i18n/server';
+import type { Translator } from '@/i18n/translate';
+
 import { logConsoleFailure } from './console-failures';
 import { resolveCredentialTypes, type CredentialTypeView } from './credential-profiles';
 import { findCustomer, type Customer } from './customers';
@@ -57,12 +60,14 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
     };
   }
 
+  const t = await getTranslator();
+
   try {
     const organization = await fetchB2bOrganizationCached(session.organization);
     return {
       session,
       customer,
-      credentialTypes: resolveCredentialTypes(organization.credentialTypes, customer),
+      credentialTypes: resolveCredentialTypes(t, organization.credentialTypes, customer),
       issuerDid: organization.did,
       teApiWarning: undefined,
     };
@@ -79,9 +84,7 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
       // nuestra y un identificador de Logto en la pantalla de quien está
       // atendiendo. El detalle sigue entero en el registro y en Diagnóstico.
       teApiWarning:
-        error instanceof TeApiError
-          ? describeTeApiError(error)
-          : shortFailure(error),
+        error instanceof TeApiError ? describeTeApiError(t, error) : shortFailure(t, error),
     };
   }
 }
@@ -94,7 +97,7 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
  * (401)», que nombra una pieza nuestra y un identificador de Logto delante de
  * quien está atendiendo— va al registro y a Diagnóstico.
  */
-function shortFailure(error: unknown): string {
+function shortFailure(t: Translator, error: unknown): string {
   logConsoleFailure(error, 'no se pudo consultar el padrón de te-api');
-  return 'vuelve a intentarlo en un momento, y si sigue igual mira Diagnóstico.';
+  return t('errors.shortRetry');
 }

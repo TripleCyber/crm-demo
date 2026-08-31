@@ -39,6 +39,10 @@ export const es: PartialMessages = {
     agentNumber: 'Agente',
   },
 
+  session: {
+    unidentifiedAgentName: 'Agente de {organization}',
+  },
+
   locale: {
     legend: 'Idioma',
     switchTo: 'Cambiar a {language}',
@@ -156,6 +160,9 @@ export const es: PartialMessages = {
     customerSince: 'Cliente desde',
     policyNumber: 'Número de póliza',
     medicalRecordNumber: 'Número de historia',
+    givenNameExample: 'Juan',
+    familyNameExample: 'Pérez Molina',
+    emailExample: 'juan@example.com',
     submit: 'Dar de alta',
     submitting: 'Guardando…',
     checkFields: 'Revisa los campos marcados.',
@@ -522,6 +529,8 @@ export const es: PartialMessages = {
     connectionUnknownError: 'la base no responde',
     customerCount: 'Clientes de esta organización',
     teApiTitle: 'Lo que dice te-api',
+    teApiScopes: 'scopes del token',
+    teApiIssuableTypes: 'tipos que puede emitir',
     teApiTypes: '{type} (máx. {days} d)',
     localeTitle: 'Idioma de la interfaz',
     localeChosenBy: 'Quién elige',
@@ -596,6 +605,15 @@ export const es: PartialMessages = {
     missingFields: 'faltan externalId o type',
     badDelivery: 'delivery tiene que ser uno de: {channels}',
     unknownType: '«{type}» no es un tipo de credencial de esta organización',
+    bodyNotJson: 'el cuerpo no es JSON',
+    badChannel: 'channel tiene que ser qr o phone',
+    noClaimsRequested: 'hay que pedir al menos un atributo',
+    claimsNotCarried:
+      'la credencial «{label}» de este cliente no lleva {claims}, así que no se puede pedir',
+    missingPresentationId: 'falta presentationId',
+    issueFailed: 'no se ha podido emitir la credencial; mira el log del servidor',
+    presentFailed: 'no se ha podido lanzar la petición; mira el log del servidor',
+    statusFailed: 'no se ha podido leer el estado de la verificación; mira el log del servidor',
     teApiNotFound:
       'te-api ha rechazado la llamada. La puerta B2B contesta lo mismo para ocho motivos distintos (token, recurso, organización, padrón o scope), así que el motivo real está en el registro de te-api{reference}.',
     teApiNoVct:

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { getTranslator } from '@/i18n/server';
 import { getEmployeeSession } from '@/lib/session';
 import { describeTeApiError, fetchB2bOrganization, TeApiError } from '@/lib/te-api';
 
@@ -24,6 +25,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
+  const t = await getTranslator();
+
   try {
     const session = await getEmployeeSession();
     const organization = await fetchB2bOrganization(session.organization);
@@ -31,7 +34,7 @@ export async function GET(): Promise<NextResponse> {
   } catch (error) {
     if (error instanceof TeApiError) {
       return NextResponse.json(
-        { error: describeTeApiError(error), requestId: error.requestId },
+        { error: describeTeApiError(t, error), requestId: error.requestId },
         { status: error.status === 404 ? 502 : error.status },
       );
     }
@@ -39,7 +42,7 @@ export async function GET(): Promise<NextResponse> {
     // de Logto (`B2bTokenError`). Su mensaje SÍ se enseña: nombra la variable
     // que falta y nunca lleva el secreto dentro.
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'fallo desconocido' },
+      { error: error instanceof Error ? error.message : t('common.unknownFailure') },
       { status: 500 },
     );
   }

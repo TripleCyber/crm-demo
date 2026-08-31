@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { getTranslator } from '@/i18n/server';
+import type { Translator } from '@/i18n/translate';
 import { findDeclaredType, resolveCredentialType } from '@/lib/credential-profiles';
 import { findCustomer } from '@/lib/customers';
 import { renderQrSvg } from '@/lib/qr';
@@ -86,11 +88,15 @@ interface PresentBody {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  // El idioma de quien tiene la consola delante: lo que devuelve esta ruta se
+  // pinta tal cual en su pantalla.
+  const t = await getTranslator();
+
   let body: PresentBody;
   try {
     body = (await request.json()) as PresentBody;
   } catch {
-    return NextResponse.json({ error: 'el cuerpo no es JSON' }, { status: 400 });
+    return NextResponse.json({ error: t('errors.bodyNotJson') }, { status: 400 });
   }
 
   const externalId = typeof body.externalId === 'string' ? body.externalId.trim() : '';
@@ -105,16 +111,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     body.channel === 'qr' || body.channel === 'phone' ? body.channel : undefined;
 
   if (externalId === '' || type === '') {
-    return NextResponse.json({ error: 'faltan externalId o type' }, { status: 400 });
+    return NextResponse.json({ error: t('errors.missingFields') }, { status: 400 });
   }
   if (channel === undefined) {
-    return NextResponse.json({ error: 'channel tiene que ser qr o phone' }, { status: 400 });
+    return NextResponse.json({ error: t('errors.badChannel') }, { status: 400 });
   }
   // Antes de tocar la base y te-api: una petición sin atributos no se puede
   // satisfacer mire lo que mire, y te-api tampoco la aceptaría (`claims` es
   // `.min(1)` en su esquema). No hay que gastar una llamada para saberlo.
   if (requested.length === 0) {
-    return NextResponse.json({ error: 'hay que pedir al menos un atributo' }, { status: 400 });
+    return NextResponse.json({ error: t('errors.noClaimsRequested') }, { status: 400 });
   }
 
   try {
@@ -127,7 +133,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // de un tercero.
     const customer = await findCustomer(session.organization.orgId, externalId);
     if (customer === null) {
-      return NextResponse.json({ error: 'ese cliente no está en el padrón' }, { status: 404 });
+      return NextResponse.json({ error: t('errors.customerNotFound') }, { status: 404 });
     }
 
     // ── El tipo: contra el padrón de te-api ────────────────────────────────
@@ -141,7 +147,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const declared = findDeclaredType(organization.credentialTypes, type);
     if (declared === undefined) {
       return NextResponse.json(
-        { error: `«${type}» no es un tipo de credencial de esta organización` },
+        { error: t('errors.unknownType', { type }) },
         { status: 400 },
       );
     }
@@ -155,7 +161,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // tenga que estar también aquí: es aquí donde se sabe qué lleva la
     // credencial de este cliente, porque los claims los puso este CRM al emitir
     // y te-api nunca los ve.
-    const profile = resolveCredentialType(declared, customer);
+    const profile = resolveCredentialType(t, declared, customer);
     const requestable = new Set(profile.claims.map((claim) => claim.name));
 
     // Se RECHAZA, no se recorta. La misma decisión que `src/b2b/claims.ts` de
@@ -167,9 +173,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (unavailable.length > 0) {
       return NextResponse.json(
         {
-          error:
-            `la credencial «${profile.label}» de este cliente no lleva ` +
-            `${unavailable.join(', ')}, así que no se puede pedir`,
+          error: t('errors.claimsNotCarried', {
+            label: profile.label,
+            claims: unavailable.join(', '),
+          }),
         },
         { status: 400 },
       );
@@ -240,7 +247,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         // Se prefiere eso a devolver un 200 con un aviso pequeño: el agente está
         // al teléfono diciéndole al cliente que mire el móvil, y un timbre que
         // no ha salido tiene que parar la ceremonia, no adornarla.
-        return errorResponse(error, 'tocando el timbre');
+        return errorResponse(t, error, 'tocando el timbre');
       }
     }
 
@@ -302,14 +309,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       type: declared.type,
     });
   } catch (error) {
-    return errorResponse(error, 'pidiendo la presentación');
+    return errorResponse(t, error, 'pidiendo la presentación');
   }
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
+  const t = await getTranslator();
   const presentationId = new URL(request.url).searchParams.get('presentationId') ?? '';
   if (presentationId === '') {
-    return NextResponse.json({ error: 'falta presentationId' }, { status: 400 });
+    return NextResponse.json({ error: t('errors.missingPresentationId') }, { status: 400 });
   }
 
   try {
@@ -347,7 +355,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     return NextResponse.json(status);
   } catch (error) {
-    return errorResponse(error, 'consultando la presentación');
+    return errorResponse(t, error, 'consultando la presentación');
   }
 }
 
@@ -359,6 +367,7 @@ export async function GET(request: Request): Promise<NextResponse> {
  * significa en el vínculo. Ver `TeApiOperation`.
  */
 function errorResponse(
+  t: Translator,
   error: unknown,
   doing: string,
   operation: TeApiOperation = 'presentation',
@@ -370,7 +379,7 @@ function errorResponse(
       requestId: error.requestId,
     });
     return NextResponse.json(
-      { error: describeTeApiError(error, operation), requestId: error.requestId },
+      { error: describeTeApiError(t, error, operation), requestId: error.requestId },
       { status: error.status === 404 ? 502 : error.status },
     );
   }
@@ -388,7 +397,7 @@ function errorResponse(
     {
       error: isConfigurationFailure
         ? (error as Error).message
-        : 'no se ha podido completar; mira el log del servidor',
+        : t('errors.presentFailed'),
     },
     { status: 500 },
   );

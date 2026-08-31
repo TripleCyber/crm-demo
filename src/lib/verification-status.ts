@@ -1,3 +1,5 @@
+import type { MessageKey, Translator } from '@/i18n/translate';
+
 /**
  * El vocabulario de los cinco desenlaces, **en un solo sitio**.
  *
@@ -39,6 +41,23 @@ export interface VerificationVerdict {
 }
 
 /**
+ * El tono y las claves de cada desenlace.
+ *
+ * ⚠ **El tono se queda escrito aquí, en código, y no en el catálogo.** Es una
+ *   propiedad de seguridad —el rojo es sólo del fraude— y un catálogo es un
+ *   fichero que se edita para traducir: quien traduce cambia palabras, no
+ *   decide de qué color se pinta un aviso de suplantación. Lo que sí es
+ *   traducible son las palabras, y ahí la regla es que `rejected` y `expired`
+ *   no se pueden acercar: con uno se corta la llamada y con el otro se
+ *   reintenta.
+ */
+interface VerdictShape {
+  readonly tone: VerificationTone;
+  readonly labelKey: MessageKey;
+  readonly detailKey: MessageKey;
+}
+
+/**
  * Cómo se lee una comprobación, con su plazo tenido en cuenta.
  *
  * `expiresAt` importa porque una fila que se quedó en `pending` —nadie tenía la
@@ -48,47 +67,79 @@ export interface VerificationVerdict {
  * Se pinta como lo que es, sin respuesta y en ámbar, y no se afirma que te-api
  * la haya dado por caducada: eso lo dirá él cuando alguien abra la pantalla de
  * seguimiento, que vuelve a preguntar al cargar y reconcilia la fila.
+ *
+ * El traductor entra por parámetro y no se resuelve aquí: este módulo lo
+ * importan también los componentes de navegador, que reciben el idioma por
+ * contexto, y no puede tocar cookies.
  */
 export function describeVerification(
+  t: Translator,
   status: VerificationStatus,
   expiresAt: string,
   now: number = Date.now(),
 ): VerificationVerdict {
+  const shape = shapeOf(status, expiresAt, now);
+  return { tone: shape.tone, label: t(shape.labelKey), detail: t(shape.detailKey) };
+}
+
+/**
+ * El tono a secas, sin traducir nada.
+ *
+ * Para quien sólo necesita el color —la clase CSS de un hito de la línea de
+ * tiempo, el aspecto del escenario— y ya tiene el texto por otro lado.
+ */
+export function verificationTone(
+  status: VerificationStatus,
+  expiresAt: string,
+  now: number = Date.now(),
+): VerificationTone {
+  return shapeOf(status, expiresAt, now).tone;
+}
+
+function shapeOf(
+  status: VerificationStatus,
+  expiresAt: string,
+  now: number,
+): VerdictShape {
   if (status === 'pending') {
     const deadline = new Date(expiresAt).getTime();
     if (!Number.isNaN(deadline) && deadline <= now) {
       return {
         tone: 'caution',
-        label: 'Sin respuesta',
-        detail: 'El plazo se agotó y nadie llegó a contestar.',
+        labelKey: 'verdict.noAnswerLabel',
+        detailKey: 'verdict.noAnswerDetail',
       };
     }
-    return { tone: 'waiting', label: 'En curso', detail: 'Esperando a que el titular conteste.' };
+    return {
+      tone: 'waiting',
+      labelKey: 'verdict.pendingLabel',
+      detailKey: 'verdict.pendingDetail',
+    };
   }
 
   return VERDICTS[status];
 }
 
-const VERDICTS: Record<Exclude<VerificationStatus, 'pending'>, VerificationVerdict> = {
+const VERDICTS: Record<Exclude<VerificationStatus, 'pending'>, VerdictShape> = {
   verified: {
     tone: 'ok',
-    label: 'Verificada',
-    detail: 'Presentó su credencial y la comprobación salió bien.',
+    labelKey: 'verdict.verifiedLabel',
+    detailKey: 'verdict.verifiedDetail',
   },
   // El único rojo. Ver la cabecera.
   rejected: {
     tone: 'alarm',
-    label: 'Rechazada por el titular',
-    detail: 'Dijo desde su cartera que no ha sido él. Es un aviso de fraude.',
+    labelKey: 'verdict.rejectedLabel',
+    detailKey: 'verdict.rejectedDetail',
   },
   failed: {
     tone: 'caution',
-    label: 'Credencial no válida',
-    detail: 'No es un «no soy yo»: la credencial no valió. Se puede reintentar.',
+    labelKey: 'verdict.failedLabel',
+    detailKey: 'verdict.failedDetail',
   },
   expired: {
     tone: 'caution',
-    label: 'Sin respuesta',
-    detail: 'Nadie contestó dentro del plazo.',
+    labelKey: 'verdict.expiredLabel',
+    detailKey: 'verdict.expiredDetail',
   },
 };

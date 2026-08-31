@@ -110,8 +110,8 @@ export function getPortalBaseUrl(organization: OrganizationConfig): string {
   const raw = organization.portalBaseUrl ?? process.env.CRM_PORTAL_BASE_URL?.trim();
   if (raw === undefined || raw === '') {
     throw new Error(
-      'el portal no sabe cuál es su propia dirección: falta CRM_ORG_<SLUG>_PORTAL_BASE_URL ' +
-        '(o CRM_PORTAL_BASE_URL para todas)',
+      'the portal does not know its own address: CRM_ORG_<SLUG>_PORTAL_BASE_URL is missing ' +
+        '(or CRM_PORTAL_BASE_URL for all of them)',
     );
   }
   return raw.replace(/\/+$/, '');
@@ -235,7 +235,7 @@ export async function exchangeCode(
       body: body.slice(0, 300),
     });
     throw new PortalLoginError(
-      `Logto ha rechazado el canje del código (${response.status}); el motivo está en el log.`,
+      `Logto rejected the code exchange (${response.status}); the reason is in the log.`,
     );
   }
 
@@ -245,7 +245,7 @@ export async function exchangeCode(
   };
 
   if (typeof payload.id_token !== 'string' || payload.id_token === '') {
-    throw new PortalLoginError('Logto no devolvió ID token: revisa el scope `openid`');
+    throw new PortalLoginError('Logto returned no ID token: check the `openid` scope');
   }
 
   let claims: JWTPayload;
@@ -266,7 +266,7 @@ export async function exchangeCode(
   // El `nonce` ata este ID token a **esta** petición de autorización. Sin él,
   // un ID token robado de otra sesión se podría inyectar en el callback.
   if (claims['nonce'] !== request.nonce) {
-    throw new PortalLoginError('el `nonce` del ID token no es el de esta petición');
+    throw new PortalLoginError('the ID token `nonce` is not the one for this request');
   }
 
   const sub = claims['sub'];

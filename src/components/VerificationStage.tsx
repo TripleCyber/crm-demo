@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { useTranslator } from '@/i18n/client';
+import type { MessageKey, Translator } from '@/i18n/translate';
 import { formatClock, formatCountdown, formatSince } from '@/lib/format';
-import { describeVerification, type VerificationStatus } from '@/lib/verification-status';
+import { verificationTone, type VerificationStatus } from '@/lib/verification-status';
 
 /**
  * **El escenario.** Lo único que hay que mirar de esta pantalla.
@@ -82,9 +84,9 @@ const MARK: Record<Exclude<VerificationStatus, 'pending'>, MarkShape> = {
  * hay que pedirle a la persona que mire el móvil; en la sucursal, que apunte
  * con la cámara a esta pantalla.
  */
-const PENDING_TEXT: Record<Channel, string> = {
-  phone: 'Le hemos avisado a su móvil. Pídale que abra la app y confirme.',
-  qr: 'Enséñele el código. Tiene que escanearlo con su cartera y confirmar ahí.',
+const PENDING_TEXT: Record<Channel, MessageKey> = {
+  phone: 'stage.waitingPhone',
+  qr: 'stage.waitingQr',
 };
 
 interface StageCopy {
@@ -105,46 +107,33 @@ interface StageCopy {
  * es distinto en cada una y sólo tiene sentido con un cliente al teléfono.
  * Lo que sí sale de allí, y no se repite aquí, es el color.
  */
-function stageCopy(status: VerificationStatus, overdue: boolean, channel: Channel): StageCopy {
+function stageCopy(
+  t: Translator,
+  status: VerificationStatus,
+  overdue: boolean,
+  channel: Channel,
+): StageCopy {
   if (status === 'pending') {
     return overdue
-      ? {
-          title: 'Sin respuesta',
-          body: 'El plazo se agotó y nadie contestó. Puede volver a intentarlo desde aquí.',
-        }
-      : { title: 'Esperando al titular', body: PENDING_TEXT[channel] };
+      ? { title: t('stage.overdueTitle'), body: t('stage.overdueBody') }
+      : { title: t('stage.waitingTitle'), body: t(PENDING_TEXT[channel]) };
   }
 
   if (status === 'verified') {
-    return {
-      title: 'Es quien dice ser',
-      body: 'Ha presentado su credencial y la verificación ha salido bien. Puede continuar con la operación.',
-    };
+    return { title: t('stage.verifiedTitle'), body: t('stage.verifiedBody') };
   }
 
   if (status === 'rejected') {
-    return {
-      title: 'El titular dice que no ha sido él',
-      body: (
-        <>
-          Ha <strong>rechazado la petición desde su cartera</strong>. No continúe con la operación y
-          curse el aviso de fraude: si usted está hablando con alguien y el titular dice que no, hay
-          dos personas distintas.
-        </>
-      ),
-    };
+    return { title: t('stage.rejectedTitle'), body: t.rich('stage.rejectedBody') };
   }
 
   if (status === 'failed') {
-    return {
-      title: 'La credencial no ha valido',
-      body: 'No es un «no soy yo»: es la credencial fallando —caducada, revocada o de otro titular—. Se puede volver a intentar.',
-    };
+    return { title: t('stage.failedTitle'), body: t('stage.failedBody') };
   }
 
   return {
-    title: 'Caducó sin respuesta',
-    body: 'Nadie contestó dentro del plazo. Puede volver a intentarlo desde aquí.',
+    title: t('stage.expiredTitle'),
+    body: t('stage.expiredBody'),
     /*
       T9 (`docs/TAREAS.md` §3.2): hoy una denuncia del titular —«no estoy en
       ninguna llamada»— llega a te-api y muere ahí sin tocar la sesión de
@@ -153,12 +142,7 @@ function stageCopy(status: VerificationStatus, overdue: boolean, channel: Channe
       titular no mirara el móvil. Cuando el puente exista, `rejected` llegará
       solo y pintará rojo sin tocar este componente.
     */
-    caveat: (
-      <>
-        Una denuncia del titular —«no estoy en ninguna llamada»— se ve hoy exactamente igual que un
-        plazo agotado. Si sospecha, pregúntele.
-      </>
-    ),
+    caveat: t('stage.expiredCaveat'),
   };
 }
 
@@ -217,8 +201,9 @@ export function VerificationStage({
   /** La pantalla de lanzar, para cuando hay que pedir **otra cosa**. */
   configureHref: string;
 }) {
-  const { tone } = describeVerification(status, expiresAt, now);
-  const { title, body, caveat } = stageCopy(status, overdue, channel);
+  const t = useTranslator();
+  const tone = verificationTone(status, expiresAt, now);
+  const { title, body, caveat } = stageCopy(t, status, overdue, channel);
   const waiting = status === 'pending' && !overdue;
 
   /*
@@ -248,7 +233,7 @@ export function VerificationStage({
       <div className="stage-top">
         <div className="stage-figure">
           {waiting ? (
-            <CountdownRing requestedAt={requestedAt} expiresAt={expiresAt} now={now} />
+            <CountdownRing t={t} requestedAt={requestedAt} expiresAt={expiresAt} now={now} />
           ) : (
             <OutcomeMark shape={status === 'pending' ? 'clock' : MARK[status]} />
           )}
@@ -275,11 +260,11 @@ export function VerificationStage({
                 que es justo lo que hay que ver.
               */}
               <span key={pollTick} className="stage-live-dot" aria-hidden="true" />
-              Comprobando si ha contestado
+              {t('stage.polling')}
               {lastPolledAt !== null && (
                 <>
                   {' · '}
-                  <span className="mono">{formatSince(lastPolledAt, now)}</span>
+                  <span className="mono">{formatSince(t, lastPolledAt, now)}</span>
                 </>
               )}
             </p>
@@ -302,11 +287,11 @@ export function VerificationStage({
       */}
       <dl className="stage-who">
         <div>
-          <dt>Titular</dt>
-          <dd>{holderName ?? <span className="none">la ficha ya no está en el padrón</span>}</dd>
+          <dt>{t('stage.holder')}</dt>
+          <dd>{holderName ?? <span className="none">{t('stage.holderGone')}</span>}</dd>
         </div>
         <div>
-          <dt>Número de cliente</dt>
+          <dt>{t('stage.customerNumber')}</dt>
           <dd className="mono stage-id">{externalId}</dd>
         </div>
         {/*
@@ -317,14 +302,14 @@ export function VerificationStage({
         */}
         {signedAt != null && signedAt !== '' && (
           <div>
-            <dt>Firmó a las</dt>
-            <dd className="mono">{formatClock(signedAt)}</dd>
+            <dt>{t('stage.signedAt')}</dt>
+            <dd className="mono">{formatClock(signedAt, t.locale)}</dd>
           </div>
         )}
         {status !== 'pending' && settledAt !== null && (
           <div>
-            <dt>Lo supimos a las</dt>
-            <dd className="mono">{formatClock(settledAt)}</dd>
+            <dt>{t('stage.knownAt')}</dt>
+            <dd className="mono">{formatClock(settledAt, t.locale)}</dd>
           </div>
         )}
       </dl>
@@ -332,7 +317,7 @@ export function VerificationStage({
       {retryable && (
         <div className="stage-actions">
           <button type="button" onClick={onRetry} disabled={retrying}>
-            {retrying ? 'Lanzando otra…' : 'Volver a intentarlo'}
+            {t(retrying ? 'stage.retrying' : 'stage.retry')}
           </button>
           {/*
             La otra salida: lanzar la misma petición es un botón, pero cambiar
@@ -341,7 +326,7 @@ export function VerificationStage({
             camino desde el listado de clientes.
           */}
           <Link className="button-link secondary" href={configureHref}>
-            Pedir otra cosa
+            {t('stage.askSomethingElse')}
           </Link>
         </div>
       )}
@@ -366,10 +351,12 @@ export function VerificationStage({
  * reloj.
  */
 function CountdownRing({
+  t,
   requestedAt,
   expiresAt,
   now,
 }: {
+  t: Translator;
   requestedAt: string;
   expiresAt: string;
   now: number;
@@ -405,7 +392,7 @@ function CountdownRing({
         {formatCountdown(expiresAt, now)}
       </span>
       <span className="visually-hidden">
-        La solicitud caduca en {formatCountdown(expiresAt, now)}.
+        {t('stage.expiresIn', { countdown: formatCountdown(expiresAt, now) })}
       </span>
     </>
   );

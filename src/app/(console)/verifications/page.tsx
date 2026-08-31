@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
 import { VerificationPill } from '@/components/VerificationPill';
-import { CUSTOMER_ATTRIBUTES } from '@/lib/customers';
+import { getTranslator } from '@/i18n/server';
+import { attributeLabels } from '@/lib/customers';
 import { formatTimestamp } from '@/lib/format';
 import { describeConsoleFailure } from '@/lib/console-failures';
 import { getEmployeeSession } from '@/lib/session';
@@ -33,6 +34,7 @@ import { listRecentVerifications, type VerificationListEntry } from '@/lib/verif
 export const dynamic = 'force-dynamic';
 
 export default async function VerificationsPage() {
+  const t = await getTranslator();
   let verifications: VerificationListEntry[] = [];
   let failure: string | undefined;
 
@@ -40,43 +42,35 @@ export default async function VerificationsPage() {
   // el que se habla: «Nombre, Apellidos» y no «given_name, family_name». El
   // nombre técnico sigue estando en la pantalla de la propia verificación,
   // dentro de su detalle plegado, que es donde hace falta.
-  const labelFor = Object.fromEntries(
-    CUSTOMER_ATTRIBUTES.map((attribute) => [attribute.claim, attribute.label]),
-  );
+  const labelFor = attributeLabels(t);
 
   try {
     const session = await getEmployeeSession();
     verifications = await listRecentVerifications(session.organization.orgId);
   } catch (error) {
-    failure = describeConsoleFailure(error, 'el listado de verificaciones no cargó');
+    failure = describeConsoleFailure(t, error, 'el listado de verificaciones no cargó');
   }
 
   return (
     <>
       <header className="page-head">
         <div>
-          <p className="eyebrow">Atención al cliente</p>
-          <h1>Verificaciones</h1>
-          <p className="page-sub">
-            Cada vez que un agente le pide a un cliente que demuestre quién es, queda una línea
-            aquí. La escribe esta organización; el desenlace lo dice TripleEnable.
-          </p>
+          <p className="eyebrow">{t('verifications.eyebrow')}</p>
+          <h1>{t('verifications.title')}</h1>
+          <p className="page-sub">{t('verifications.subtitle')}</p>
         </div>
       </header>
 
       {failure !== undefined && (
-        <p className="alert">No se ha podido leer el registro: {failure}</p>
+        <p className="alert">{t('verifications.loadFailed', { reason: failure })}</p>
       )}
 
       {failure === undefined && verifications.length === 0 && (
         <div className="empty">
-          <h2>Todavía no se ha comprobado a nadie</h2>
-          <p>
-            La comprobación se lanza desde la ficha del cliente. Necesita que el titular tenga ya
-            su credencial: sin ella no hay nada que presentar.
-          </p>
+          <h2>{t('verifications.emptyTitle')}</h2>
+          <p>{t('verifications.emptyBody')}</p>
           <Link className="button-link secondary" href="/customers">
-            Ir a los clientes
+            {t('verifications.emptyAction')}
           </Link>
         </div>
       )}
@@ -86,12 +80,12 @@ export default async function VerificationsPage() {
           <table className="data verifications">
             <thead>
               <tr>
-                <th>Cliente</th>
-                <th>Resultado</th>
-                <th>Lanzada</th>
-                <th>Canal</th>
-                <th>Agente</th>
-                <th>Se le pidió</th>
+                <th>{t('verifications.columnCustomer')}</th>
+                <th>{t('verifications.columnOutcome')}</th>
+                <th>{t('verifications.columnStarted')}</th>
+                <th>{t('verifications.columnChannel')}</th>
+                <th>{t('verifications.columnAgent')}</th>
+                <th>{t('verifications.columnAsked')}</th>
               </tr>
             </thead>
             <tbody>
@@ -113,7 +107,7 @@ export default async function VerificationsPage() {
                     />
                   </td>
                   <td>
-                    {formatTimestamp(verification.requestedAt)}
+                    {formatTimestamp(verification.requestedAt, t.locale)}
                     {/*
                       «Se supo», no «contestó». Es la hora en la que este banco
                       se enteró del desenlace, y en tres de los cinco finales no
@@ -124,7 +118,9 @@ export default async function VerificationsPage() {
                     */}
                     {verification.settledAt !== null && (
                       <span className="sub">
-                        se supo a las {formatTimestamp(verification.settledAt)}
+                        {t('verifications.settledAt', {
+                          time: formatTimestamp(verification.settledAt, t.locale),
+                        })}
                       </span>
                     )}
                   </td>
@@ -134,9 +130,17 @@ export default async function VerificationsPage() {
                     reconstruir dónde estaba el cliente, no qué transporte se usó.
                   */}
                   <td>
-                    {verification.channel === 'phone' ? 'Al teléfono' : 'En el mostrador'}
+                    {t(
+                      verification.channel === 'phone'
+                        ? 'verifications.channelPhone'
+                        : 'verifications.channelQr',
+                    )}
                     <span className="sub">
-                      {verification.channel === 'phone' ? 'aviso al móvil' : 'QR en pantalla'}
+                      {t(
+                        verification.channel === 'phone'
+                          ? 'verifications.channelPhoneHint'
+                          : 'verifications.channelQrHint',
+                      )}
                     </span>
                   </td>
                   <td>

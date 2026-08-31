@@ -46,6 +46,11 @@ export const en = {
     agentNumber: 'Agent',
   },
 
+  /** La sesión del empleado. */
+  session: {
+    unidentifiedAgentName: 'Agent at {organization}',
+  },
+
   /** El selector de idioma. */
   locale: {
     legend: 'Language',
@@ -186,6 +191,9 @@ export const en = {
     customerSince: 'Customer since',
     policyNumber: 'Policy number',
     medicalRecordNumber: 'Medical record number',
+    givenNameExample: 'Emma',
+    familyNameExample: 'Whitfield',
+    emailExample: 'emma@example.com',
     submit: 'Add customer',
     submitting: 'Saving…',
     checkFields: 'Check the highlighted fields.',
@@ -562,6 +570,8 @@ export const en = {
     connectionUnknownError: 'the database does not answer',
     customerCount: 'Customers of this organisation',
     teApiTitle: 'What te-api says',
+    teApiScopes: 'token scopes',
+    teApiIssuableTypes: 'types it can issue',
     teApiTypes: '{type} (max. {days} d)',
     localeTitle: 'Interface language',
     localeChosenBy: 'Who chooses',
@@ -639,6 +649,15 @@ export const en = {
     missingFields: 'externalId or type is missing',
     badDelivery: 'delivery has to be one of: {channels}',
     unknownType: '“{type}” is not a credential type of this organisation',
+    bodyNotJson: 'the body is not JSON',
+    badChannel: 'channel has to be qr or phone',
+    noClaimsRequested: 'at least one attribute has to be requested',
+    claimsNotCarried:
+      'this customer’s “{label}” credential does not carry {claims}, so it cannot be requested',
+    missingPresentationId: 'presentationId is missing',
+    issueFailed: 'the credential could not be issued; check the server log',
+    presentFailed: 'the request could not be sent; check the server log',
+    statusFailed: 'the verification status could not be read; check the server log',
     teApiNotFound:
       'te-api rejected the call. The B2B gate answers the same for eight different reasons (token, resource, organisation, roster or scope), so the real reason is in te-api’s log{reference}.',
     teApiNoVct:

@@ -21,7 +21,7 @@ declare global {
 function createPool(): Pool {
   const connectionString = process.env.DATABASE_URL;
   if (connectionString === undefined || connectionString.trim() === '') {
-    throw new Error('falta DATABASE_URL: la base del CRM no está configurada');
+    throw new Error('DATABASE_URL is missing: the CRM database is not configured');
   }
 
   return new Pool({

@@ -143,8 +143,8 @@ async function requestToken(organization: OrganizationConfig): Promise<string> {
       body: body.slice(0, 300),
     });
     throw new B2bTokenError(
-      `Logto ha rechazado el token M2M de ${organization.orgId} (${response.status}); ` +
-        'el motivo está en el log del servidor.',
+      `Logto rejected the M2M token for ${organization.orgId} (${response.status}); ` +
+        'the reason is in the server log.',
       response.status,
     );
   }
@@ -156,7 +156,9 @@ async function requestToken(organization: OrganizationConfig): Promise<string> {
   };
 
   if (typeof payload.access_token !== 'string' || payload.access_token === '') {
-    throw new B2bTokenError(`Logto devolvió una respuesta sin access_token para ${organization.orgId}`);
+    throw new B2bTokenError(
+      `Logto returned a response with no access_token for ${organization.orgId}`,
+    );
   }
 
   // Si Logto no dijera cuánto dura, se asume una hora, que es lo que dura hoy.

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { getTranslator } from '@/i18n/server';
+import type { Translator } from '@/i18n/translate';
 import { recordIssuedOffer } from '@/lib/credential-offers';
 import { findDeclaredType, resolveCredentialType } from '@/lib/credential-profiles';
 import { buildCredentialClaims, findCustomer, type Customer } from '@/lib/customers';
@@ -110,12 +112,18 @@ export async function POST(request: Request): Promise<NextResponse> {
   // tiene que ser un 400 y no un `else` que acaba entregando por otro sitio.
   const delivery = isDeliveryChannel(body.delivery) ? body.delivery : undefined;
 
+  // El idioma de quien está mirando la consola. Los errores de esta ruta se
+  // pintan tal cual en su pantalla, así que salen ya escritos: dejarlos en
+  // inglés fijo enseñaría una frase suelta en otro idioma justo en el momento
+  // en el que algo ha ido mal.
+  const t = await getTranslator();
+
   if (externalId === '' || type === '') {
-    return NextResponse.json({ error: 'faltan externalId o type' }, { status: 400 });
+    return NextResponse.json({ error: t('errors.missingFields') }, { status: 400 });
   }
   if (delivery === undefined) {
     return NextResponse.json(
-      { error: `delivery tiene que ser uno de: ${DELIVERY_CHANNELS.join(', ')}` },
+      { error: t('errors.badDelivery', { channels: DELIVERY_CHANNELS.join(', ') }) },
       { status: 400 },
     );
   }
@@ -128,7 +136,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // datos de un tercero.
     const customer = await findCustomer(session.organization.orgId, externalId);
     if (customer === null) {
-      return NextResponse.json({ error: 'ese cliente no está en el padrón' }, { status: 404 });
+      return NextResponse.json({ error: t('errors.customerNotFound') }, { status: 404 });
     }
 
     // Se comprueba ANTES de emitir. Una oferta emitida que no se puede entregar
@@ -137,7 +145,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // peor manera de descubrir que la ficha no tiene correo.
     if (delivery === 'email' && customer.email === null) {
       return NextResponse.json(
-        { error: 'esta ficha no tiene correo: elige otro canal o añádelo al padrón' },
+        { error: t('errors.customerNoEmail') },
         { status: 400 },
       );
     }
@@ -149,11 +157,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     const declared = findDeclaredType(organization.credentialTypes, type);
     if (declared === undefined) {
       return NextResponse.json(
-        { error: `«${type}» no es un tipo de credencial de esta organización` },
+        { error: t('errors.unknownType', { type }) },
         { status: 400 },
       );
     }
-    const profile = resolveCredentialType(declared, customer);
+    const profile = resolveCredentialType(t, declared, customer);
 
     const officialNumbers = session.organization.officialNumbers;
 
@@ -230,7 +238,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       // El borrador de correo, sólo en su canal. Lo compone el servidor porque
       // la regla de qué NO puede ir dentro —el `tx_code`— es una regla de
       // seguridad, y esas no se dejan en el navegador.
-      mail: delivery === 'email' ? composeMailDraft(customer, offer.offerUri) : undefined,
+      mail: delivery === 'email' ? composeMailDraft(t, customer, offer.offerUri) : undefined,
       // Dónde va el titular a recogerla. Sólo en su canal, y es una dirección
       // pública: no lleva la oferta dentro.
       // La dirección es la de ESTA organización: con tres dominios sobre el
@@ -249,7 +257,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         requestId: error.requestId,
       });
       return NextResponse.json(
-        { error: describeTeApiError(error, 'issue'), requestId: error.requestId },
+        { error: describeTeApiError(t, error, 'issue'), requestId: error.requestId },
         { status: error.status === 404 ? 502 : error.status },
       );
     }
@@ -271,7 +279,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       {
         error: isConfigurationFailure
           ? (error as Error).message
-          : 'no se ha podido emitir la credencial; mira el log del servidor',
+          : t('errors.issueFailed'),
       },
       { status: 500 },
     );
@@ -305,27 +313,37 @@ export async function POST(request: Request): Promise<NextResponse> {
  * banco y no de un `noreply@`.
  */
 function composeMailDraft(
+  t: Translator,
   customer: Customer,
   offerUri: string,
 ): { readonly to: string; readonly subject: string; readonly body: string; readonly href: string } {
   // `customer.email` ya se comprobó arriba; el `?? ''` es para el tipo y no
   // debería alcanzarse nunca.
   const to = customer.email ?? '';
-  const subject = 'Tu credencial de cliente';
+  const subject = t('mail.subject');
+  // ═══════════════════════════════════════════════════════════════════════
+  //  EL IDIOMA DE ESTE CORREO ES EL DE LA CONSOLA, NO EL DEL TITULAR
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // Y no hay otra opción hoy: el padrón no guarda el idioma del cliente y
+  // te-api no lo sabe. El borrador lo abre el agente en su propio programa de
+  // correo y lo lee ANTES de mandarlo —ése es el punto del canal `mailto:`—,
+  // así que si el cliente habla otro idioma, quien lo va a notar es la persona
+  // que tiene el borrador delante. Es la mejor aproximación que hay, y es la
+  // misma que había cuando sólo existía un idioma.
   const body = [
-    `${customer.givenName}, aquí tienes tu credencial de cliente.`,
+    t('mail.greeting', { name: customer.givenName }),
     '',
-    'Ábrela desde el móvil en el que tengas la cartera de TripleEnable:',
+    t('mail.open'),
     offerUri,
     '',
     // **Sin decir cuántas cifras tiene.** El largo lo decide te-api al crear la
     // oferta —hoy son seis— y este texto no lo recibe. Un correo que dijera
     // «cuatro» cuando son seis convierte a quien lo lee en alguien que cree que
     // se ha equivocado de código y deja de intentarlo.
-    'Al guardarla te pedirá un código numérico. Ese código NO va en este',
-    'correo: te lo decimos por teléfono o te lo damos en la oficina.',
+    t('mail.codeNotice'),
     '',
-    'Si no has pedido esta credencial, no abras el enlace y avísanos.',
+    t('mail.unexpected'),
   ].join('\n');
 
   // `encodeURIComponent` y no `URLSearchParams`: éste codifica el espacio como

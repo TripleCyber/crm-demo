@@ -35,7 +35,7 @@ export async function GET(): Promise<NextResponse> {
     // petición, pero componer con él una redirección es la forma clásica de
     // acabar con una redirección abierta.
     return NextResponse.redirect(
-      new URL('/portal?error=sin-portal', getPortalBaseUrl(organization)),
+      new URL('/portal?error=no-portal', getPortalBaseUrl(organization)),
     );
   }
 

@@ -1,8 +1,11 @@
+import { getTranslator } from '@/i18n/server';
+import type { MessageKey, Translator } from '@/i18n/translate';
 import { findPendingOffer } from '@/lib/credential-offers';
 import { findCustomer } from '@/lib/customers';
 import type { OrganizationConfig } from '@/lib/organizations';
 import { getRedirectUri } from '@/lib/portal-oidc';
 import { getSession, type PortalSession } from '@/lib/portal-session';
+import { formatDateTime } from '@/lib/format';
 import { getRequestOrganization } from '@/lib/request-organization';
 
 /**
@@ -43,19 +46,15 @@ export const dynamic = 'force-dynamic';
  * funciona y a quién preguntar; el nombre de la variable vive en Diagnóstico,
  * que es la pantalla de quien sí puede ponerla.
  */
-const ERROR_MESSAGES: Record<string, string> = {
-  'sin-portal':
-    'El acceso con TripleEnable todavía no está disponible en este portal. ' +
-    'Si necesitas vincular tu cuenta, llámanos y lo hacemos contigo.',
-  'sesion-perdida':
-    'Se perdió el hilo del login. Suele pasar al volver con el botón «atrás» o si la ' +
-    'pestaña ha estado abierta mucho rato. Vuelve a empezar.',
+const ERROR_MESSAGES: Record<string, MessageKey> = {
+  'no-portal': 'portal.errorNoPortal',
+  'session-lost': 'portal.errorSessionLost',
   // Estos dos los lee un CLIENTE del banco, no un operador: «Logto» ahí es un
   // nombre de una pieza nuestra que no significa nada para él y que además le
   // dice que su banco depende de algo que no sabe qué es.
-  state: 'La respuesta no corresponde a esta petición de acceso. Vuelve a empezar.',
-  logto: 'No hemos podido completar el acceso. Vuelve a intentarlo.',
-  canje: 'No hemos podido completar el login con TripleEnable. Vuelve a intentarlo.',
+  state: 'portal.errorState',
+  provider: 'portal.errorProvider',
+  exchange: 'portal.errorExchange',
 };
 
 export default async function PortalPage({
@@ -63,6 +62,7 @@ export default async function PortalPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = await getTranslator();
   const params = await searchParams;
   const rawError = params.error;
   const errorKey = typeof rawError === 'string' ? rawError : undefined;
@@ -78,7 +78,7 @@ export default async function PortalPage({
   try {
     organization = await getRequestOrganization();
     if (organization.portal === undefined) {
-      configurationProblem = ERROR_MESSAGES['sin-portal'] ?? null;
+      configurationProblem = t('portal.errorNoPortal');
     } else {
       getRedirectUri(organization);
     }
@@ -87,8 +87,7 @@ export default async function PortalPage({
     // de entorno que falta, y quien lee esta pantalla es un titular. El detalle
     // técnico sigue estando entero en Diagnóstico, que es donde lo mira quien
     // puede arreglarlo.
-    configurationProblem =
-      'Este portal no está disponible ahora mismo. Vuelve a intentarlo en un rato o llámanos.';
+    configurationProblem = t('portal.errorUnavailable');
   }
 
   const session = await getSession();
@@ -105,17 +104,24 @@ export default async function PortalPage({
         nombrar a nadie: afirmar el nombre del primer partner que hubo sería
         justo la clase de dato inventado que este proyecto no pone.
       */}
-      <h1>Tu cuenta{organization === undefined ? '' : ` de ${organization.displayName}`}</h1>
-      <p className="muted">
-        Vincula tu cuenta con tu identidad de TripleEnable. A partir de ese momento podremos
-        avisarte en tu móvil cuando haya que confirmar algo, sin llamarte por teléfono y sin
-        pedirte datos por correo.
-      </p>
+      <h1>
+        {organization === undefined
+          ? t('portal.titleGeneric')
+          : t('portal.title', { organization: organization.displayName })}
+      </h1>
+      <p className="muted">{t('portal.intro')}</p>
 
       {configurationProblem !== null && <div className="alert">{configurationProblem}</div>}
 
       {errorKey !== undefined && (
-        <div className="alert">{ERROR_MESSAGES[errorKey] ?? 'Algo no ha salido bien.'}</div>
+        <div className="alert">
+          {/*
+            Un motivo que esta versión no conoce —un enlace viejo, un parámetro
+            a mano— cae en la frase genérica en vez de pintar el propio
+            parámetro, que es texto que escribe quien llama.
+          */}
+          {t(ERROR_MESSAGES[errorKey] ?? 'portal.errorGeneric')}
+        </div>
       )}
 
       {/*
@@ -125,33 +131,28 @@ export default async function PortalPage({
         pantalla dice qué pasa en vez de quedarse a medias.
       */}
       {session === null || organization === undefined ? (
-        <SignedOut disabled={configurationProblem !== null} />
+        <SignedOut t={t} disabled={configurationProblem !== null} />
       ) : (
-        <SignedIn session={session} organization={organization} />
+        <SignedIn t={t} session={session} organization={organization} />
       )}
     </>
   );
 }
 
-function SignedOut({ disabled }: { disabled: boolean }) {
+function SignedOut({ t, disabled }: { t: Translator; disabled: boolean }) {
   return (
     <div className="card">
-      <h2>Entra para vincular</h2>
-      <p className="muted">
-        Te llevamos a TripleEnable para que confirmes que eres tú. Nosotros no vemos tu
-        contraseña en ningún momento.
-      </p>
+      <h2>{t('portal.signInTitle')}</h2>
+      <p className="muted">{t('portal.signInBody')}</p>
       {disabled ? (
-        <p className="muted">
-          El acceso está deshabilitado porque falta configuración. Mira el aviso de arriba.
-        </p>
+        <p className="muted">{t('portal.signInDisabled')}</p>
       ) : (
         // Un enlace y no un formulario: `/portal/login` es idempotente —genera
         // material nuevo y redirige— y así funciona también con JavaScript
         // apagado, que en un portal de banco no es una excentricidad.
         <p>
           <a className="button-link" href="/portal/login">
-            Entrar con TripleEnable
+            {t('portal.signIn')}
           </a>
         </p>
       )}
@@ -160,9 +161,11 @@ function SignedOut({ disabled }: { disabled: boolean }) {
 }
 
 async function SignedIn({
+  t,
   session,
   organization,
 }: {
+  t: Translator;
   session: PortalSession;
   // Llega ya resuelta desde arriba y no se vuelve a pedir: si esta mitad de la
   // pantalla resolviera la organización por su cuenta, dos resoluciones del
@@ -190,54 +193,57 @@ async function SignedIn({
     <>
       <div className={outcome.ok ? 'alert ok' : 'alert'}>
         {outcome.ok
-          ? `Tu cuenta de ${organization.displayName} está vinculada con tu identidad de TripleEnable.`
-          : (outcome.message ?? 'No hemos podido completar el vínculo.')}
+          ? t('portal.linked', { organization: organization.displayName })
+          : t(outcome.messageKey ?? 'portal.linkFailedGeneric', {
+              ...outcome.messageValues,
+              // La referencia del `requestId` se compone aquí por lo mismo que
+              // en `translateTeApiFailure`: la frase la trae el catálogo y el
+              // paréntesis del final es siempre el mismo.
+              reference:
+                outcome.requestId === undefined
+                  ? ''
+                  : t('errors.teApiReference', { requestId: outcome.requestId }),
+            })}
       </div>
 
       {offer !== null && (
         <div className="card offer">
-          <h2>Tienes una credencial esperándote</h2>
-          <p>
-            Te la hemos emitido desde atención al cliente. Ábrela en el móvil donde tengas tu
-            cartera de TripleEnable y guárdala: a partir de ese momento podremos comprobar que
-            eres tú sin preguntarte datos por teléfono.
-          </p>
+          <h2>{t('portal.offerTitle')}</h2>
+          <p>{t('portal.offerBody')}</p>
           <p>
             <a className="button-link" href={offer.offerUri}>
-              Guardar en mi cartera
+              {t('portal.offerSave')}
             </a>
           </p>
           <dl className="facts">
-            <dt>Tipo</dt>
+            <dt>{t('portal.offerType')}</dt>
             <dd className="mono">{offer.typeKey}</dd>
-            <dt>Caduca</dt>
-            <dd>{new Date(offer.expiresAt).toLocaleString('es-ES')}</dd>
+            <dt>{t('portal.offerExpires')}</dt>
+            <dd>{formatDateTime(offer.expiresAt, t.locale)}</dd>
           </dl>
           <p className="muted" style={{ margin: 0 }}>
             {/* Sin decir cuántas cifras: el largo lo elige te-api al crear la
                 oferta y esta pantalla no lo recibe. Ver la nota en
                 `api/credentials/issue`. */}
-            Te pedirá un código numérico. Te lo damos por teléfono o en la oficina, y{' '}
-            <strong>nunca aparece en esta pantalla ni en un correo</strong>: es lo que impide que
-            esta credencial acabe en el móvil de otro.
+            {t.rich('portal.offerPinNote')}
           </p>
         </div>
       )}
 
       <div className="card">
-        <h2>Quién eres</h2>
+        <h2>{t('portal.whoTitle')}</h2>
         <dl className="facts">
-          <dt>Has entrado como</dt>
+          <dt>{t('portal.signedInAs')}</dt>
           <dd>{session.displayName ?? session.email ?? session.logtoUserId}</dd>
           {session.email !== null && (
             <>
-              <dt>Correo verificado</dt>
+              <dt>{t('portal.verifiedEmail')}</dt>
               <dd>{session.email}</dd>
             </>
           )}
           {customer !== null && (
             <>
-              <dt>Tu ficha en {organization.displayName}</dt>
+              <dt>{t('portal.yourRecord', { organization: organization.displayName })}</dt>
               <dd>
                 {customer.givenName} {customer.familyName}{' '}
                 <span className="mono">({customer.externalId})</span>
@@ -246,7 +252,7 @@ async function SignedIn({
           )}
           {customer !== null && customer.accountLast4 !== null && (
             <>
-              <dt>Cuenta</dt>
+              <dt>{t('portal.account')}</dt>
               <dd className="mono">•••• {customer.accountLast4}</dd>
             </>
           )}
@@ -255,9 +261,9 @@ async function SignedIn({
 
       {outcome.ok && (
         <div className="card">
-          <h2>El vínculo</h2>
+          <h2>{t('portal.linkTitle')}</h2>
           <dl className="facts">
-            <dt>Referencia</dt>
+            <dt>{t('portal.linkReference')}</dt>
             <dd className="mono">{outcome.linkId}</dd>
             {/*
               «Confirmado el» y no «Hecho el»: esta fecha es la del último
@@ -268,35 +274,33 @@ async function SignedIn({
               Poner «Hecho el» encima de la fecha de hoy sería mentir con un
               dato que además es fácil de comprobar.
             */}
-            <dt>Confirmado el</dt>
-            <dd>{new Date(session.linkedAt).toLocaleString('es-ES')}</dd>
+            <dt>{t('portal.linkConfirmedAt')}</dt>
+            <dd>{formatDateTime(session.linkedAt, t.locale)}</dd>
             {outcome.replaced === true && (
               <>
-                <dt>Vínculo anterior</dt>
-                <dd>Sustituido por éste.</dd>
+                <dt>{t('portal.linkPrevious')}</dt>
+                <dd>{t('portal.linkPreviousReplaced')}</dd>
               </>
             )}
           </dl>
           <p className="muted" style={{ marginTop: 16, marginBottom: 0 }}>
-            {organization.displayName} no sabe qué identidad de TripleEnable hay detrás, y
-            TripleEnable no sabe que eres cliente nuestro: lo único que existe es esta
-            referencia. Puedes retirarla desde tu cartera cuando quieras.
+            {t('portal.linkNote', { organization: organization.displayName })}
           </p>
         </div>
       )}
 
       {!outcome.ok && outcome.requestId !== undefined && (
         <div className="card">
-          <h2>Para soporte</h2>
+          <h2>{t('portal.supportTitle')}</h2>
           <p className="muted" style={{ margin: 0 }}>
-            Si nos llamas, dinos esta referencia:{' '}
-            <span className="mono">{outcome.requestId}</span>
+            {t('portal.supportBody', { requestId: outcome.requestId })}
           </p>
         </div>
       )}
 
       <p>
-        <a href="/portal/login">Volver a vincular</a> · <a href="/portal/logout">Cerrar sesión</a>
+        <a href="/portal/login">{t('portal.relink')}</a> ·{' '}
+        <a href="/portal/logout">{t('portal.signOut')}</a>
       </p>
     </>
   );

@@ -1,5 +1,7 @@
 import 'server-only';
 
+import type { MessageKey, Translator } from '@/i18n/translate';
+
 import { query } from './db';
 import type { VerificationStatus } from './verification-status';
 
@@ -296,11 +298,20 @@ export interface CustomerInput {
   readonly customerSince: string | null;
 }
 
-/** El alta ya existía con ese `external_id` en esta organización. */
+/**
+ * El alta ya existía con ese `external_id` en esta organización.
+ *
+ * Lleva el identificador y **no una frase**: el mensaje lo compone quien lo va
+ * a enseñar, en el idioma de quien está mirando. Un error que carga con su
+ * propio texto acaba enseñando el idioma del servidor a quien eligió otro.
+ */
 export class DuplicateCustomerError extends Error {
+  readonly externalId: string;
+
   constructor(externalId: string) {
-    super(`ya hay un cliente con el identificador ${externalId}`);
+    super(`duplicate customer ${externalId}`);
     this.name = 'DuplicateCustomerError';
+    this.externalId = externalId;
   }
 }
 
@@ -328,7 +339,7 @@ export async function createCustomer(orgId: string, input: CustomerInput): Promi
       ],
     );
     const row = rows[0];
-    if (row === undefined) throw new Error('el alta no devolvió ninguna fila');
+    if (row === undefined) throw new Error('the insert returned no row');
     return toCustomer(row);
   } catch (error) {
     // `23505` es la violación de la única `(org_id, external_id)`. Se traduce
@@ -344,7 +355,8 @@ export async function createCustomer(orgId: string, input: CustomerInput): Promi
 /** Un campo mal, con el nombre del campo para poder señalarlo en el formulario. */
 export interface ValidationIssue {
   readonly field: keyof CustomerInput;
-  readonly message: string;
+  /** Qué le pasa, como clave. Lo traduce la acción, que sabe qué idioma toca. */
+  readonly messageKey: MessageKey;
 }
 
 /**
@@ -384,21 +396,20 @@ export function validateCustomerInput(raw: {
   // `sub` en un JWT y aparece en URLs. Dejar espacios o barras dentro es
   // regalarse un problema de codificación dentro de una credencial firmada.
   if (externalId === '') {
-    issues.push({ field: 'externalId', message: 'el identificador de cliente es obligatorio' });
+    issues.push({ field: 'externalId', messageKey: 'customerForm.errorRequiredExternalId' });
   } else if (!/^[A-Za-z0-9._:-]{1,128}$/.test(externalId)) {
-    issues.push({
-      field: 'externalId',
-      message: 'sólo letras, dígitos y . _ : - (hasta 128 caracteres)',
-    });
+    issues.push({ field: 'externalId', messageKey: 'customerForm.errorExternalIdCharset' });
   }
 
-  if (givenName === '') issues.push({ field: 'givenName', message: 'el nombre es obligatorio' });
+  if (givenName === '') {
+    issues.push({ field: 'givenName', messageKey: 'customerForm.errorRequiredGivenName' });
+  }
   if (familyName === '') {
-    issues.push({ field: 'familyName', message: 'los apellidos son obligatorios' });
+    issues.push({ field: 'familyName', messageKey: 'customerForm.errorRequiredFamilyName' });
   }
 
   if (accountLast4 !== null && !/^[0-9]{4}$/.test(accountLast4)) {
-    issues.push({ field: 'accountLast4', message: 'son exactamente cuatro dígitos' });
+    issues.push({ field: 'accountLast4', messageKey: 'customerForm.errorAccountLast4' });
   }
 
   // La póliza y la historia se comprueban por LARGO y por juego de caracteres,
@@ -411,12 +422,12 @@ export function validateCustomerInput(raw: {
     ['medicalRecordNumber', medicalRecordNumber],
   ] as const) {
     if (value !== null && !/^[A-Za-z0-9./_:-]{1,64}$/.test(value)) {
-      issues.push({ field, message: 'sólo letras, dígitos y . / _ : - (hasta 64 caracteres)' });
+      issues.push({ field, messageKey: 'customerForm.errorReferenceCharset' });
     }
   }
 
   if (customerSince !== null && !/^\d{4}-\d{2}-\d{2}$/.test(customerSince)) {
-    issues.push({ field: 'customerSince', message: 'la fecha va en formato AAAA-MM-DD' });
+    issues.push({ field: 'customerSince', messageKey: 'customerForm.errorCustomerSince' });
   }
 
   return {
@@ -457,13 +468,15 @@ export interface CustomerAttribute {
   /** El nombre del claim en la credencial. Es lo que viaja y lo que se pide. */
   readonly claim: string;
   /**
-   * El rótulo que lee el agente.
+   * El rótulo que lee el agente, **como clave del catálogo**.
    *
-   * El nombre técnico se enseña **al lado** y no en su lugar: el agente tiene
-   * que poder leer «Apellidos» de un vistazo, y quien depura tiene que poder
-   * cruzar `family_name` con lo que devuelve te-api.
+   * Es una clave y no un texto porque el mismo atributo lo rotulan cinco
+   * pantallas y todas tienen que decirlo igual en el idioma que sea. El nombre
+   * técnico se enseña **al lado** y no en su lugar: el agente tiene que poder
+   * leer «Apellidos» de un vistazo, y quien depura tiene que poder cruzar
+   * `family_name` con lo que devuelve te-api.
    */
-  readonly label: string;
+  readonly labelKey: MessageKey;
   /**
    * Si forma parte del mínimo con el que este banco confirma «quién eres».
    *
@@ -497,7 +510,7 @@ export interface CustomerAttribute {
    * aparte en vez de recortar el largo en pantalla: recortar produce «Últimos
    * cuatro de la…», que no es un rótulo.
    */
-  readonly shortLabel?: string;
+  readonly shortLabelKey?: MessageKey;
 }
 
 /**
@@ -514,15 +527,25 @@ export interface CustomerAttribute {
  * ofrece lo que hay aquí, y el servidor **rechaza** lo que no esté.
  */
 export const CUSTOMER_ATTRIBUTES: readonly CustomerAttribute[] = [
-  { claim: 'given_name', label: 'Nombre', identifying: true, read: (c) => c.givenName },
-  { claim: 'family_name', label: 'Apellidos', identifying: true, read: (c) => c.familyName },
+  {
+    claim: 'given_name',
+    labelKey: 'attributes.givenName',
+    identifying: true,
+    read: (c) => c.givenName,
+  },
+  {
+    claim: 'family_name',
+    labelKey: 'attributes.familyName',
+    identifying: true,
+    read: (c) => c.familyName,
+  },
   {
     claim: 'account_last4',
-    label: 'Últimos cuatro de la cuenta',
+    labelKey: 'attributes.accountLast4',
     identifying: false,
     read: (c) => c.accountLast4,
     display: (value) => `···· ${value}`,
-    shortLabel: 'Cuenta',
+    shortLabelKey: 'attributes.accountLast4Short',
   },
   /*
     ─────────────────────────────────────────────────────────────────────────
@@ -547,21 +570,21 @@ export const CUSTOMER_ATTRIBUTES: readonly CustomerAttribute[] = [
   */
   {
     claim: 'policy_number',
-    label: 'Número de póliza',
+    labelKey: 'attributes.policyNumber',
     identifying: false,
     read: (c) => c.policyNumber,
-    shortLabel: 'Póliza',
+    shortLabelKey: 'attributes.policyNumberShort',
   },
   {
     claim: 'medical_record_number',
-    label: 'Número de historia',
+    labelKey: 'attributes.medicalRecordNumber',
     identifying: false,
     read: (c) => c.medicalRecordNumber,
-    shortLabel: 'Historia',
+    shortLabelKey: 'attributes.medicalRecordNumberShort',
   },
   {
     claim: 'customer_since',
-    label: 'Cliente desde',
+    labelKey: 'attributes.customerSince',
     identifying: false,
     read: (c) => c.customerSince,
   },
@@ -679,7 +702,27 @@ export function displayAttribute(attribute: CustomerAttribute, customer: Custome
   return attribute.display === undefined ? value : attribute.display(value);
 }
 
+/** El rótulo largo, ya traducido. */
+export function attributeLabel(t: Translator, attribute: CustomerAttribute): string {
+  return t(attribute.labelKey);
+}
+
 /** El rótulo corto si lo hay, y el largo si no. */
-export function columnLabelOf(attribute: CustomerAttribute): string {
-  return attribute.shortLabel ?? attribute.label;
+export function columnLabelOf(t: Translator, attribute: CustomerAttribute): string {
+  return t(attribute.shortLabelKey ?? attribute.labelKey);
+}
+
+/**
+ * De nombre de claim a rótulo, para los sitios que reciben claims sueltos.
+ *
+ * Lo pintan el registro de verificaciones y el recibo, que leen nombres
+ * técnicos guardados en el diario y tienen que enseñarlos como palabras. Un
+ * claim que ya no esté en el catálogo se queda con su nombre técnico: es un
+ * recibo, y un recibo no puede dejar de enseñar un campo porque la
+ * configuración haya cambiado después.
+ */
+export function attributeLabels(t: Translator): Record<string, string> {
+  return Object.fromEntries(
+    CUSTOMER_ATTRIBUTES.map((attribute) => [attribute.claim, t(attribute.labelKey)]),
+  );
 }

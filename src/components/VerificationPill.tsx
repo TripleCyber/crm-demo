@@ -1,3 +1,4 @@
+import { getTranslator } from '@/i18n/server';
 import { describeVerification, type VerificationStatus } from '@/lib/verification-status';
 
 /**
@@ -17,8 +18,13 @@ import { describeVerification, type VerificationStatus } from '@/lib/verificatio
  * El color nunca va solo: la insignia lleva **texto**, porque uno de cada doce
  * hombres no distingue el rojo del verde y porque un punto de color no dice
  * *rechazada por el titular*.
+ *
+ * Es de SERVIDOR y resuelve el idioma por su cuenta. Lo pintan cuatro pantallas
+ * de servidor y ninguna de navegador; el escenario, que sí es de navegador,
+ * no usa la insignia sino el tono. Pedirle el traductor a quien la pinta
+ * habría metido un parámetro en cuatro sitios para ahorrar una línea aquí.
  */
-export function VerificationPill({
+export async function VerificationPill({
   status,
   expiresAt,
 }: {
@@ -31,7 +37,7 @@ export function VerificationPill({
    */
   expiresAt: string;
 }) {
-  const verdict = describeVerification(status, expiresAt);
+  const verdict = describeVerification(await getTranslator(), status, expiresAt);
   return (
     <span className={`pill ${verdict.tone}`}>
       <span className="pill-mark" aria-hidden="true" />

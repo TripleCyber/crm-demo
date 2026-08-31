@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { getTranslator } from '@/i18n/server';
+import type { Translator } from '@/i18n/translate';
+
 import type { OrganizationConfig } from './organizations';
 import { getRequestOrganization } from './request-organization';
 
@@ -84,12 +87,18 @@ export interface EmployeeSession {
  * «Banco Demo» a mano, y con el segundo partner el titular vería en su móvil el
  * nombre del banco de otro.
  */
-const UNIDENTIFIED_AGENT_ID = 'sin-identificar';
+const UNIDENTIFIED_AGENT_ID = 'unidentified';
 
-function unidentifiedAgent(organization: OrganizationConfig): AgentIdentity {
+/**
+ * El idioma que se usa es el de **la consola**, o sea el del agente, y no el
+ * del titular: el del titular no lo sabe nadie aquí — te-api no lo devuelve y
+ * el padrón no lo guarda. Es la mejor aproximación que hay, y es la misma que
+ * ya se usaba cuando sólo había un idioma.
+ */
+function unidentifiedAgent(t: Translator, organization: OrganizationConfig): AgentIdentity {
   return {
     id: UNIDENTIFIED_AGENT_ID,
-    displayName: `Agente de ${organization.displayName}`,
+    displayName: t('session.unidentifiedAgentName', { organization: organization.displayName }),
   };
 }
 
@@ -105,11 +114,11 @@ export async function getEmployeeSession(): Promise<EmployeeSession> {
   // entonces la consola emite para una organización y el portal vincula contra
   // otra.
   const organization = await getRequestOrganization();
-  const fallback = unidentifiedAgent(organization);
+  const fallback = unidentifiedAgent(await getTranslator(), organization);
 
   return {
     organization,
-    actor: process.env.CRM_ACTIVE_ACTOR?.trim() ?? 'crm:sin-sesion',
+    actor: process.env.CRM_ACTIVE_ACTOR?.trim() ?? 'crm:no-session',
     agent: {
       id: nonEmpty(process.env.CRM_ACTIVE_AGENT_ID) ?? fallback.id,
       displayName: nonEmpty(process.env.CRM_ACTIVE_AGENT_NAME) ?? fallback.displayName,

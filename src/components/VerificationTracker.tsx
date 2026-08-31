@@ -3,8 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { formatClock, formatCountdown } from '@/lib/format';
-import { describeVerification, type VerificationStatus } from '@/lib/verification-status';
+import { useTranslator } from '@/i18n/client';
+import type { MessageKey, Translator } from '@/i18n/translate';
+import { formatClock, formatCountdown, formatDateTime } from '@/lib/format';
+import { verificationTone, type VerificationStatus } from '@/lib/verification-status';
 import { VerificationStage } from './VerificationStage';
 import { WalletLink } from './WalletLink';
 
@@ -189,11 +191,11 @@ const POLL_INTERVAL_MS = 3000;
 const POLL_GRACE_MS = 20_000;
 
 /** Cómo acabó, en cuatro palabras, para el último hito de la línea de tiempo. */
-const OUTCOME_MILESTONE: Record<Exclude<VerificationStatus, 'pending'>, string> = {
-  verified: 'Ha confirmado desde su cartera',
-  rejected: 'Ha dicho que no ha sido él',
-  failed: 'La credencial no ha valido',
-  expired: 'Caducó sin respuesta',
+const OUTCOME_MILESTONE: Record<Exclude<VerificationStatus, 'pending'>, MessageKey> = {
+  verified: 'tracker.outcomeVerified',
+  rejected: 'tracker.outcomeRejected',
+  failed: 'tracker.outcomeFailed',
+  expired: 'tracker.outcomeExpired',
 };
 
 export function VerificationTracker({
@@ -220,6 +222,7 @@ export function VerificationTracker({
   holderName: string | null;
 }) {
   const router = useRouter();
+  const t = useTranslator();
   const [status, setStatus] = useState<VerificationStatus>(verification.status);
   const [disclosed, setDisclosed] = useState(verification.disclosedClaims);
   /**
@@ -313,7 +316,7 @@ export function VerificationTracker({
           // Se enseña, pero **no se para**: un 429 del cubo de tasa o un corte
           // suelto no invalidan la petición, y el titular puede estar
           // contestando justo ahora. El siguiente sondeo lo vuelve a intentar.
-          setError(payload.error ?? `la consulta ha fallado (${response.status})`);
+          setError(payload.error ?? t('tracker.pollFailed', { status: response.status }));
           return;
         }
         // Un sondeo bueno borra el aviso del anterior: dejarlo puesto haría que
@@ -360,7 +363,12 @@ export function VerificationTracker({
     // eso no es un sondeo cada tres segundos, es un bucle tan rápido como
     // conteste la red. Pasó, y se vio en el cubo de tasa de te-api: 611 llamadas
     // en 52 segundos desde una sola pantalla.
-  }, [pending, deadline, verification.presentationId]);
+    //
+    // `t` entra en las dependencias porque el efecto lo usa, y no vuelve a
+    // montar el sondeo: `useTranslator` lo memoriza por idioma, así que sólo
+    // cambia cuando de verdad se cambia de idioma — y entonces la pantalla
+    // entera se está recargando de todas formas.
+  }, [pending, deadline, verification.presentationId, t]);
 
   useEffect(() => {
     if (!pending) return;
@@ -414,7 +422,7 @@ export function VerificationTracker({
       });
       const payload = (await response.json()) as { presentationId?: string; error?: string };
       if (!response.ok || typeof payload.presentationId !== 'string') {
-        setRetryError(payload.error ?? `no se ha podido lanzar otra (${response.status})`);
+        setRetryError(payload.error ?? t('tracker.retryFailed', { status: response.status }));
         setRetrying(false);
         return;
       }
@@ -424,9 +432,7 @@ export function VerificationTracker({
       // misma decisión que en `VerificationLauncher`, y por lo mismo.
       router.push(`/verifications/${encodeURIComponent(payload.presentationId)}`);
     } catch (cause) {
-      setRetryError(
-        cause instanceof Error ? cause.message : 'no se ha podido contactar con el servidor',
-      );
+      setRetryError(cause instanceof Error ? cause.message : t('tracker.noServer'));
       setRetrying(false);
     }
   };
@@ -491,7 +497,7 @@ export function VerificationTracker({
       */}
       {status === 'pending' && !overdue && (
         <div className="card">
-          <h2>{verification.channel === 'qr' ? 'Su código' : 'Abrir en la cartera'}</h2>
+          <h2>{t(verification.channel === 'qr' ? 'tracker.codeTitle' : 'tracker.walletTitle')}</h2>
           {verification.channel === 'qr' && (
             <>
               {/*
@@ -501,7 +507,10 @@ export function VerificationTracker({
               <div className="qr" dangerouslySetInnerHTML={{ __html: qrSvg ?? '' }} />
             </>
           )}
-          <WalletLink uri={verification.authorizationRequestUrl} label="la solicitud" />
+          <WalletLink
+            uri={verification.authorizationRequestUrl}
+            label={t('tracker.walletLinkLabel')}
+          />
         </div>
       )}
 
@@ -517,17 +526,10 @@ export function VerificationTracker({
       */}
       {status === 'pending' && verification.channel === 'phone' && (
         <div className="muted">
-          <p style={{ margin: 0 }}>
-            Que le haya sonado el móvil <strong>no lo confirma nadie</strong>. Si no contesta,
-            pregúntele si tiene la app instalada en vez de darlo por hecho.
-          </p>
+          <p style={{ margin: 0 }}>{t.rich('tracker.wakeupUnconfirmed')}</p>
           <details className="tech">
-            <summary>Ver el detalle técnico</summary>
-            <p>
-              Aviso <span className="mono">{verification.wakeupId ?? '—'}</span>. te-api contesta lo
-              mismo tenga cartera el titular o no, y es deliberado: si distinguiera, esta pantalla
-              serviría para averiguar quién tiene la app probando identificadores.
-            </p>
+            <summary>{t('common.technicalDetail')}</summary>
+            <p>{t.rich('tracker.wakeupTechnical', { id: verification.wakeupId ?? '—' })}</p>
           </details>
         </div>
       )}
@@ -543,6 +545,7 @@ export function VerificationTracker({
         en un portátil de sucursal.
       */}
       <PresentationTimeline
+        t={t}
         verification={verification}
         status={status}
         overdue={overdue}
@@ -553,6 +556,7 @@ export function VerificationTracker({
 
       {status === 'verified' && (
         <PresentationReceipt
+          t={t}
           verification={verification}
           disclosed={disclosed}
           proof={proof}
@@ -589,6 +593,7 @@ export function VerificationTracker({
  * dos hay hasta un intervalo de sondeo, y decirlo cuesta una palabra.
  */
 function PresentationTimeline({
+  t,
   verification,
   status,
   overdue,
@@ -596,6 +601,7 @@ function PresentationTimeline({
   settledAt,
   signedAt,
 }: {
+  t: Translator;
   verification: TrackedVerification;
   status: VerificationStatus;
   overdue: boolean;
@@ -615,37 +621,37 @@ function PresentationTimeline({
 
   return (
     <div className="timeline-block">
-      <h3>Estado</h3>
+      <h3>{t('tracker.timelineTitle')}</h3>
       <ol className="timeline">
         <li className="done">
           <div>
-            <strong>Solicitud creada</strong>
-            <span>firmada a nombre de esta entidad</span>
+            <strong>{t('tracker.milestoneCreated')}</strong>
+            <span>{t('tracker.milestoneCreatedHint')}</span>
           </div>
-          <time>{formatClock(verification.requestedAt)}</time>
+          <time>{formatClock(verification.requestedAt, t.locale)}</time>
         </li>
 
         {verification.wakeupAt !== null && (
           <li className="done">
             <div>
-              <strong>Aviso enviado a su móvil</strong>
+              <strong>{t('tracker.milestoneWakeup')}</strong>
               {/*
                 Se dice, y en la superficie: es algo que no se sabe del mundo,
                 no una carencia de esta consola. Lo que se ha quitado es el
                 nombre de nuestra pieza interna — al agente le da igual quién
                 acepta el timbre, le importa que no puede darlo por sonado.
               */}
-              <span>salió el aviso; que le suene el móvil no lo confirma nadie</span>
+              <span>{t('tracker.milestoneWakeupHint')}</span>
             </div>
-            <time>{formatClock(verification.wakeupAt)}</time>
+            <time>{formatClock(verification.wakeupAt, t.locale)}</time>
           </li>
         )}
 
         {waiting && (
           <li className="current">
             <div>
-              <strong>Esperando su respuesta</strong>
-              <span>Caduca sola cuando llegue a cero; entonces hay que volver a avisar.</span>
+              <strong>{t('tracker.milestoneWaiting')}</strong>
+              <span>{t('tracker.milestoneWaitingHint')}</span>
             </div>
             <time>{formatCountdown(verification.expiresAt, now)}</time>
           </li>
@@ -669,10 +675,10 @@ function PresentationTimeline({
         {signedAt != null && signedAt !== '' && (
           <li className="done ok">
             <div>
-              <strong>Firmó desde su cartera</strong>
-              <span>hora de su teléfono, no la de esta consola</span>
+              <strong>{t('tracker.milestoneSigned')}</strong>
+              <span>{t('tracker.milestoneSignedHint')}</span>
             </div>
-            <time>{formatClock(signedAt)}</time>
+            <time>{formatClock(signedAt, t.locale)}</time>
           </li>
         )}
 
@@ -685,26 +691,26 @@ function PresentationTimeline({
         {status === 'pending' && overdue && (
           <li className="done caution">
             <div>
-              <strong>El plazo se agotó</strong>
-              <span>hora a la que caducaba la solicitud</span>
+              <strong>{t('tracker.milestoneOverdue')}</strong>
+              <span>{t('tracker.milestoneOverdueHint')}</span>
             </div>
-            <time>{formatClock(verification.expiresAt)}</time>
+            <time>{formatClock(verification.expiresAt, t.locale)}</time>
           </li>
         )}
 
         {status !== 'pending' && (
-          <li className={`done ${describeVerification(status, verification.expiresAt).tone}`}>
+          <li className={`done ${verificationTone(status, verification.expiresAt)}`}>
             <div>
-              <strong>{OUTCOME_MILESTONE[status]}</strong>
+              <strong>{t(OUTCOME_MILESTONE[status])}</strong>
               {/*
                 Sigue sin ser «la hora en la que firmó»: entre las dos hay hasta
                 un intervalo de sondeo. Lo que se ha quitado son los segundos
                 —la cadencia es cocina— y no la salvedad, que es la que impide
                 que este registro afirme una hora que el banco no vio.
               */}
-              <span>hora en la que esta consola lo supo</span>
+              <span>{t('tracker.milestoneSettledHint')}</span>
             </div>
-            <time>{settledAt === null ? '—' : formatClock(settledAt)}</time>
+            <time>{settledAt === null ? '—' : formatClock(settledAt, t.locale)}</time>
           </li>
         )}
       </ol>
@@ -714,19 +720,9 @@ function PresentationTimeline({
         primera que hace abandonar a un director de operaciones.
       */}
       <details className="tech">
-        <summary>Ver el detalle técnico</summary>
-        <p>
-          Esta pantalla <strong>no habla con TripleEnable</strong>: pregunta cada{' '}
-          {POLL_INTERVAL_MS / 1000} segundos al servidor de esta organización (
-          <span className="mono">GET /api/credentials/present</span>), y es él quien consulta a
-          te-api (<span className="mono">GET /v1/b2b/presentations/:id</span>) con el token de la
-          organización. Ni el token ni el secreto que lo pide bajan al navegador, y se comprueba
-          abriendo la pestaña de red.
-        </p>
-        <p>
-          La solicitud se abrió en el verificador de TripleEnable, firmada con el DID de esta
-          organización. No tiene verificador propio ni clave de verificación.
-        </p>
+        <summary>{t('common.technicalDetail')}</summary>
+        <p>{t.rich('tracker.architectureNote', { seconds: POLL_INTERVAL_MS / 1000 })}</p>
+        <p>{t('tracker.verifierNote')}</p>
       </details>
     </div>
   );
@@ -757,6 +753,7 @@ function PresentationTimeline({
  * recibo no explica por qué.
  */
 function PresentationReceipt({
+  t,
   verification,
   disclosed,
   proof,
@@ -764,6 +761,7 @@ function PresentationReceipt({
   settledAt,
   organizationName,
 }: {
+  t: Translator;
   verification: TrackedVerification;
   disclosed: Record<string, unknown> | null;
   /** Llave, perfil y firma. Ver `HolderProof`: hoy pueden venir las tres vacías. */
@@ -776,31 +774,31 @@ function PresentationReceipt({
 
   return (
     <div className="receipt">
-      <h3>Recibo · lo que {organizationName} guarda</h3>
+      <h3>{t('tracker.receiptTitle', { organization: organizationName })}</h3>
       <dl className="facts">
-        <dt>Confirmado</dt>
+        <dt>{t('tracker.receiptConfirmed')}</dt>
         <dd>
           {settledAt === null
             ? '—'
-            : `${formatClock(settledAt)} · hora en la que esta consola lo supo`}
+            : t('tracker.receiptConfirmedAt', { time: formatClock(settledAt, t.locale) })}
         </dd>
-        <dt>Petición</dt>
+        <dt>{t('tracker.receiptRequest')}</dt>
         <dd className="mono">{verification.presentationId}</dd>
-        <dt>Credencial exigida</dt>
+        <dt>{t('tracker.receiptRequiredCredential')}</dt>
         <dd>{verification.typeKey}</dd>
         {/*
           El emisor, con la palabra del banco. El DID exacto sigue estando, en
           el detalle de abajo: es la referencia que un perito necesita, y no lo
           que un director de operaciones lee para saber contra qué se comprobó.
         */}
-        <dt>Emisor exigido</dt>
+        <dt>{t('tracker.receiptRequiredIssuer')}</dt>
         <dd>{organizationName}</dd>
         {/*
           El `sub` que te-api exigió. Viene de la ficha —es el mismo que se mandó
           al abrir la sesión— y no se lee del enlace de autorización, donde no
           está: el `sub` viaja dentro del objeto de solicitud firmado, no en la URI.
         */}
-        <dt>Titular exigido</dt>
+        <dt>{t('tracker.receiptRequiredHolder')}</dt>
         <dd className="mono">{verification.externalId}</dd>
 
         {/*
@@ -810,25 +808,25 @@ function PresentationReceipt({
         */}
         {proof.holderKey != null && proof.holderKey !== '' && (
           <>
-            <dt>Llave del titular</dt>
+            <dt>{t('tracker.receiptHolderKey')}</dt>
             <dd className="mono">{proof.holderKey}</dd>
           </>
         )}
         {proof.holderLinkId != null && proof.holderLinkId !== '' && (
           <>
-            <dt>Vínculo del titular</dt>
+            <dt>{t('tracker.receiptHolderLink')}</dt>
             <dd className="mono">{proof.holderLinkId}</dd>
           </>
         )}
         {proof.signedAt != null && proof.signedAt !== '' && (
           <>
-            <dt>Firmado por el titular</dt>
-            <dd>{new Date(proof.signedAt).toLocaleString('es-ES')}</dd>
+            <dt>{t('tracker.receiptSignedAt')}</dt>
+            <dd>{formatDateTime(proof.signedAt, t.locale)}</dd>
           </>
         )}
         {proof.keyBinding != null && proof.keyBinding !== '' && (
           <>
-            <dt>Firma de la presentación</dt>
+            <dt>{t('tracker.receiptKeyBinding')}</dt>
             <dd className="mono">{proof.keyBinding}</dd>
           </>
         )}
@@ -836,7 +834,7 @@ function PresentationReceipt({
 
       {disclosedEntries.length > 0 && (
         <>
-          <h4>Lo que enseñó</h4>
+          <h4>{t('tracker.receiptDisclosed')}</h4>
           {/*
             El rótulo humano y nada más. El nombre técnico del atributo
             —`given_name`— está en el detalle de abajo, junto al resto: en el
@@ -859,35 +857,28 @@ function PresentationReceipt({
         está tres centímetros más abajo, plegado, para quien lo audite.
       */}
       <p className="muted" style={{ marginTop: 14, marginBottom: 0 }}>
-        <strong>Verificado contra el emisor y contra el titular.</strong> La firma la puso la
-        cartera del titular; este recibo es lo que {organizationName} archiva de la comprobación.
+        {t.rich('tracker.receiptGuarantee', { organization: organizationName })}
       </p>
 
       <details className="tech">
-        <summary>Ver el detalle técnico</summary>
+        <summary>{t('common.technicalDetail')}</summary>
         <dl className="facts">
-          <dt>Formato</dt>
-          <dd>
-            <span className="mono">SD-JWT VC</span> presentada por{' '}
-            <span className="mono">OID4VP</span>
-          </dd>
-          <dt>Tipo exigido</dt>
+          <dt>{t('tracker.receiptFormat')}</dt>
+          <dd>{t.rich('tracker.receiptFormatValue')}</dd>
+          <dt>{t('tracker.receiptRequiredType')}</dt>
           <dd className="mono">{verification.typeKey}</dd>
-          <dt>Emisor exigido</dt>
+          <dt>{t('tracker.receiptRequiredIssuer')}</dt>
           <dd className="mono">{verification.issuerDid}</dd>
           {disclosedEntries.length > 0 && (
             <>
-              <dt>Atributos revelados</dt>
+              <dt>{t('tracker.receiptDisclosedClaims')}</dt>
               <dd className="mono">{disclosedEntries.map(([name]) => name).join(' ')}</dd>
             </>
           )}
           {proof.keyBinding != null && proof.keyBinding !== '' && (
             <>
-              <dt>Firma</dt>
-              <dd>
-                la del <span className="mono">KB-JWT</span>, que ata esta presentación a la llave
-                del titular
-              </dd>
+              <dt>{t('tracker.receiptSignature')}</dt>
+              <dd>{t.rich('tracker.receiptSignatureValue')}</dd>
             </>
           )}
         </dl>

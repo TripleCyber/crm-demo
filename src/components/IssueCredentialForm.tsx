@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { useTranslator } from '@/i18n/client';
 import { DELIVERY_OPTIONS, type DeliveryChannel } from '@/lib/delivery';
+import { formatDateTime } from '@/lib/format';
 
 import { WalletLink } from './WalletLink';
 
@@ -131,6 +133,7 @@ export function IssueCredentialForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [result, setResult] = useState<IssueResult | undefined>();
+  const t = useTranslator();
 
   const selectedType = useMemo(
     () => credentialTypes.find((option) => option.type === type),
@@ -176,12 +179,15 @@ export function IssueCredentialForm({
         requestId?: string;
       };
       if (!response.ok) {
-        setError(payload.error ?? `la emisión ha fallado (${response.status})`);
+        // El error del servidor viene YA TRADUCIDO —la ruta resuelve el idioma
+        // con la misma cookie— así que se enseña tal cual. El respaldo de aquí
+        // es para una respuesta sin cuerpo, que es la única que no lo trae.
+        setError(payload.error ?? t('credential.failed', { status: response.status }));
         return;
       }
       setResult(payload as IssueResult);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'no se ha podido contactar con el servidor');
+      setError(cause instanceof Error ? cause.message : t('credential.noServer'));
     } finally {
       setBusy(false);
     }
@@ -190,12 +196,8 @@ export function IssueCredentialForm({
   if (credentialTypes.length === 0) {
     return (
       <div className="card">
-        <h2>No hay ningún tipo que emitir</h2>
-        <p className="alert">
-          Esta organización no declara ningún tipo de credencial. Compruébalo en{' '}
-          <a href="/diagnostics">Diagnóstico</a>: el catálogo lo declara TripleEnable, no esta
-          consola.
-        </p>
+        <h2>{t('credential.noTypesTitle')}</h2>
+        <p className="alert">{t.rich('credential.noTypesBody', { href: '/diagnostics' })}</p>
       </div>
     );
   }
@@ -204,11 +206,11 @@ export function IssueCredentialForm({
     <div className="split wide-side">
       <div className="col-main">
         <div className="card">
-          <h2>La oferta</h2>
+          <h2>{t('credential.offerTitle')}</h2>
 
           <div className="row">
             <label className="field">
-              <span>Tipo de credencial</span>
+              <span>{t('credential.type')}</span>
               {/*
                 El rótulo, y sólo el rótulo. Cuando la organización no declara
                 ninguno, `label` **es** el `type_key` y se lee igual; lo que ya
@@ -219,13 +221,16 @@ export function IssueCredentialForm({
               <select value={type} onChange={(event) => setType(event.target.value)}>
                 {credentialTypes.map((option) => (
                   <option key={option.type} value={option.type}>
-                    {option.label} (máx. {option.maxValidityDays} días)
+                    {t('credential.typeOption', {
+                      label: option.label,
+                      days: option.maxValidityDays,
+                    })}
                   </option>
                 ))}
               </select>
             </label>
             <label className="field">
-              <span>Vigencia en días (vacío = el tope del tipo)</span>
+              <span>{t('credential.validity')}</span>
               <input
                 inputMode="numeric"
                 value={validityDays}
@@ -242,10 +247,7 @@ export function IssueCredentialForm({
               onChange={(event) => setWithPin(event.target.checked)}
               style={{ width: 'auto', marginTop: 3 }}
             />
-            <span style={{ margin: 0, fontWeight: 400 }}>
-              Con código de un solo uso — sin él, quien reciba la oferta por el canal que sea se
-              lleva la credencial
-            </span>
+            <span style={{ margin: 0, fontWeight: 400 }}>{t('credential.withPin')}</span>
           </label>
 
           {/*
@@ -254,7 +256,7 @@ export function IssueCredentialForm({
             teclado y lo lee un lector de pantalla sin ayuda.
           */}
           <fieldset className="field channels" style={{ border: 0, padding: 0, margin: '4px 0 16px' }}>
-            <legend style={{ padding: 0 }}>Cómo se la mandamos</legend>
+            <legend style={{ padding: 0 }}>{t('credential.channelsLegend')}</legend>
             {DELIVERY_OPTIONS.map((option) => (
               <label key={option.value} className="channel">
                 <input
@@ -265,19 +267,18 @@ export function IssueCredentialForm({
                   onChange={() => setDelivery(option.value)}
                 />
                 <span>
-                  {option.label}
-                  <small>{option.hint}</small>
+                  {t(option.labelKey)}
+                  <small>{t(option.hintKey)}</small>
                 </span>
               </label>
             ))}
             <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-              Los cuatro entregan la misma oferta, con la misma firma. El canal decide cómo llega,
-              no si es de fiar: eso lo decide la firma del emisor, y la comprueba la cartera.
+              {t('credential.channelsNote')}
             </p>
           </fieldset>
 
           <button type="button" onClick={issue} disabled={busy || type === ''}>
-            {busy ? 'Enviando…' : 'Enviar oferta'}
+            {t(busy ? 'credential.sending' : 'credential.send')}
           </button>
 
           {error !== undefined && (
@@ -289,9 +290,9 @@ export function IssueCredentialForm({
 
         {result !== undefined && (
           <div className="card" ref={resultRef}>
-            <h2>Oferta creada</h2>
+            <h2>{t('credential.offerCreated')}</h2>
             <p className="alert ok">
-              Caduca el {new Date(result.expiresAt).toLocaleString('es-ES')}.
+              {t('credential.offerExpires', { date: formatDateTime(result.expiresAt, t.locale) })}
             </p>
 
             {result.delivery === 'qr' && (
@@ -305,37 +306,26 @@ export function IssueCredentialForm({
 
             {result.delivery === 'email' && result.mail !== undefined && (
               <div className="delivery">
-                <h3>Correo a {result.mail.to}</h3>
-                <p>
-                  Se abre en tu propio programa de correo, ya redactado. Sale a tu nombre y no de un
-                  buzón automático — que es lo que pasa de verdad cuando llama un agente.
-                </p>
+                <h3>{t('credential.mailTo', { address: result.mail.to })}</h3>
+                <p>{t('credential.mailIntro')}</p>
                 <p>
                   <a className="button-link" href={result.mail.href}>
-                    Abrir el borrador
+                    {t('credential.mailOpenDraft')}
                   </a>
                 </p>
                 <pre>{result.mail.body}</pre>
                 <p className="muted" style={{ margin: 0 }}>
-                  El código de un solo uso <strong>no está</strong> en ese texto, y no es un olvido:
-                  si viajara en el mismo correo que el enlace, quien leyera el buzón tendría las dos
-                  mitades.
+                  {t.rich('credential.mailNote')}
                 </p>
               </div>
             )}
 
             {result.delivery === 'app' && (
               <div className="delivery">
-                <h3>Esperándole en el portal</h3>
-                <p>
-                  La oferta queda guardada para este cliente. La verá al entrar en{' '}
-                  <span className="mono">{result.portalUrl}</span> con su cuenta de TripleEnable, y
-                  sólo la ve él: es el único de los cuatro canales en el que quien recoge la oferta
-                  está autenticado.
-                </p>
+                <h3>{t('credential.portalTitle')}</h3>
+                <p>{t.rich('credential.portalBody', { url: result.portalUrl ?? '' })}</p>
                 <p className="muted" style={{ margin: 0 }}>
-                  Dile por teléfono que entre en su área de cliente. Y el código de un solo uso, en
-                  voz alta por esta misma llamada.
+                  {t('credential.portalNote')}
                 </p>
               </div>
             )}
@@ -344,28 +334,28 @@ export function IssueCredentialForm({
                 carteras que se abren desde el enlace y pantallas desde las que
                 no se puede fotografiar nada. Y ahora se puede TOCAR, que es lo
                 que hace falta cuando la consola se abre desde el móvil. */}
-            <WalletLink uri={result.offerUri} label="la oferta" />
+            <WalletLink uri={result.offerUri} label={t('credential.walletLinkLabel')} />
 
             {result.officialNumbers.length > 0 && (
               <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>
-                Ha ido dentro: <span className="mono">{result.officialNumbers.join(' · ')}</span>
+                {t('credential.officialNumbersSent', {
+                  numbers: result.officialNumbers.join(' · '),
+                })}
               </p>
             )}
 
-            <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>
-              Oferta <span className="mono">{result.offerId}</span>
+            <p className="muted mono" style={{ marginTop: 12, marginBottom: 0 }}>
+              {t('credential.offerId', { id: result.offerId })}
             </p>
           </div>
         )}
 
         {result?.pin != null && (
           <div className="card">
-            <h2>Código de un solo uso</h2>
+            <h2>{t('credential.pinTitle')}</h2>
             <p className="pin">{result.pin}</p>
             <p className="muted" style={{ margin: 0 }}>
-              Dáselo por teléfono o en la oficina,{' '}
-              <strong>nunca por el mismo canal que el enlace</strong>. Si viajan juntos, el código
-              no protege de nada.
+              {t.rich('credential.pinNote')}
             </p>
           </div>
         )}
@@ -391,19 +381,19 @@ export function IssueCredentialForm({
             necesita —el que va a escribir la integración— y donde no estorban a
             quien decide comprarla.
           */}
-          <h2>Lo que llevará dentro</h2>
+          <h2>{t('credential.payloadTitle')}</h2>
 
           <dl className="facts">
-            <dt>Titular</dt>
+            <dt>{t('credential.holder')}</dt>
             <dd>
               {holder.displayName}
               {holder.reference === null ? null : ` · ${holder.reference}`}
             </dd>
-            <dt>Identificador</dt>
+            <dt>{t('credential.identifier')}</dt>
             <dd className="mono">{externalId}</dd>
             {issuerDid !== undefined && (
               <>
-                <dt>Emisor</dt>
+                <dt>{t('credential.issuer')}</dt>
                 <dd className="mono">{issuerDid}</dd>
               </>
             )}
@@ -414,14 +404,14 @@ export function IssueCredentialForm({
               <h3>{selectedType.label}</h3>
               {selectedType.claims.length === 0 ? (
                 <p className="none" style={{ margin: 0, fontSize: 13 }}>
-                  Esta ficha no rellena ningún atributo de este tipo.
+                  {t('credential.noClaims')}
                 </p>
               ) : (
                 <dl className="facts">
                   {selectedType.claims.map((claim) => (
                     <div key={claim.name} style={{ display: 'contents' }}>
                       <dt>{claim.label}</dt>
-                      <dd>{claim.value ?? <span className="none">—</span>}</dd>
+                      <dd>{claim.value ?? <span className="none">{t('common.dash')}</span>}</dd>
                     </div>
                   ))}
                 </dl>
@@ -436,7 +426,7 @@ export function IssueCredentialForm({
             dentro de un documento que dura años.
           */}
           <div className="official">
-            <h3>Números oficiales</h3>
+            <h3>{t('credential.officialNumbers')}</h3>
             {officialNumbers.length === 0 ? (
               /*
                 ═══════════════════════════════════════════════════════════════
@@ -456,10 +446,7 @@ export function IssueCredentialForm({
                 ponerla — y por eso el enlace va ahí y no a una explicación.
               */
               <p className="muted" style={{ margin: 0 }}>
-                Todavía no están dados de alta los teléfonos oficiales de la entidad, así que la
-                credencial saldrá sin ellos y el titular no podrá comprobar desde qué número le
-                llamamos. Se puede emitir igual. Para darlos de alta, habla con quien lleva la
-                integración: el detalle está en <a href="/diagnostics">Diagnóstico</a>.
+                {t.rich('credential.officialNumbersMissing', { href: '/diagnostics' })}
               </p>
             ) : (
               <>
@@ -469,19 +456,13 @@ export function IssueCredentialForm({
                   ))}
                 </ul>
                 <p className="muted" style={{ margin: 0 }}>
-                  Van firmados dentro de la credencial. El titular los puede consultar sin llamada y
-                  sin conexión, y por eso su cartera puede decir «uno de los números que guarda tu
-                  credencial» en vez de «te llama tu entidad».
+                  {t('credential.officialNumbersNote')}
                 </p>
               </>
             )}
           </div>
 
-          <p className="panel-note">
-            El correo y el teléfono del cliente <strong>no entran</strong> en ninguna credencial: no
-            están en el catálogo de atributos divulgables, y un dato metido «ya que estamos» acaba
-            en todas las presentaciones que se hagan con ella.
-          </p>
+          <p className="panel-note">{t.rich('credential.contactNote')}</p>
 
           {/*
             Lo que se ha quitado de arriba, entero y en un solo sitio. Es
@@ -490,9 +471,9 @@ export function IssueCredentialForm({
             tiene en una tabla en vez de repartida por seis filas.
           */}
           <details className="tech">
-            <summary>Ver el detalle técnico</summary>
+            <summary>{t('common.technicalDetail')}</summary>
             <dl className="facts">
-              <dt>Formato</dt>
+              <dt>{t('credential.format')}</dt>
               <dd className="mono">SD-JWT VC</dd>
               <dt>sub</dt>
               <dd className="mono">{externalId}</dd>

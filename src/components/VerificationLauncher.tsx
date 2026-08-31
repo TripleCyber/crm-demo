@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
+import { useTranslator } from '@/i18n/client';
+import type { Translator } from '@/i18n/translate';
+
 /**
  * La pantalla que **lanza** una comprobación de identidad — la primera mitad
  * de **C1** del artifact «Llamada Verificada».
@@ -99,6 +102,7 @@ export function VerificationLauncher({
   initialLevel: Level;
 }) {
   const router = useRouter();
+  const t = useTranslator();
   const [level, setLevel] = useState<Level>(initialLevel);
   const [type, setType] = useState(credentialTypes[0]?.type ?? '');
 
@@ -143,7 +147,9 @@ export function VerificationLauncher({
       });
       const payload = (await response.json()) as { presentationId?: string; error?: string };
       if (!response.ok || typeof payload.presentationId !== 'string') {
-        setError(payload.error ?? `la petición ha fallado (${response.status})`);
+        // El error del servidor viene ya traducido: la ruta resuelve el idioma
+        // con la misma cookie. El respaldo es para la respuesta sin cuerpo.
+        setError(payload.error ?? t('verify.requestFailed', { status: response.status }));
         setBusy(undefined);
         return;
       }
@@ -153,7 +159,7 @@ export function VerificationLauncher({
       // son dos timbres en el móvil de la misma persona.
       router.push(`/verifications/${encodeURIComponent(payload.presentationId)}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'no se ha podido contactar con el servidor');
+      setError(cause instanceof Error ? cause.message : t('verify.noServer'));
       setBusy(undefined);
     }
   };
@@ -161,12 +167,8 @@ export function VerificationLauncher({
   if (credentialTypes.length === 0) {
     return (
       <div className="card">
-        <h2>No hay nada que comprobar</h2>
-        <p className="alert">
-          Esta organización no declara ningún tipo de credencial. Compruébalo en{' '}
-          <a href="/diagnostics">Diagnóstico</a>: el catálogo lo declara TripleEnable, no esta
-          consola.
-        </p>
+        <h2>{t('verify.noTypesTitle')}</h2>
+        <p className="alert">{t.rich('verify.noTypesBody', { href: '/diagnostics' })}</p>
       </div>
     );
   }
@@ -188,8 +190,8 @@ export function VerificationLauncher({
           aria-pressed={level === 'identity'}
           onClick={() => setLevel('identity')}
         >
-          Verificar quién habla
-          <small>Nivel 1 · que sea él quien está al teléfono</small>
+          {t('verify.levelIdentity')}
+          <small>{t('verify.levelIdentityHint')}</small>
         </button>
         <button
           type="button"
@@ -197,26 +199,22 @@ export function VerificationLauncher({
           aria-pressed={level === 'transaction'}
           onClick={() => setLevel('transaction')}
         >
-          Autorizar operación
-          <small>Nivel 2 · firmar un importe · todavía no</small>
+          {t('verify.levelTransaction')}
+          <small>{t('verify.levelTransactionHint')}</small>
         </button>
       </div>
 
       {level === 'transaction' ? (
-        <TransactionLevel />
+        <TransactionLevel t={t} />
       ) : (
         <div className="split wide-side">
           <div className="col-main">
             <div className="card">
-              <h2>Qué se le pide</h2>
-              <p className="muted">
-                Se le enviará una solicitud <strong>firmada a nombre de esta entidad</strong>, y su
-                cartera comprobará esa firma antes de enseñar nada. La verificación la hace
-                TripleEnable: esta organización no tiene que custodiar ninguna clave.
-              </p>
+              <h2>{t('verify.requestTitle')}</h2>
+              <p className="muted">{t.rich('verify.requestIntro')}</p>
 
               <label className="field">
-                <span>Tipo de credencial</span>
+                <span>{t('verify.type')}</span>
                 {/*
                   El rótulo, y sólo el rótulo. Sale de configuración y puede no
                   estar; entonces `label` ES el `type_key` y se lee igual de bien.
@@ -233,11 +231,10 @@ export function VerificationLauncher({
               </label>
 
               <fieldset className="field claims" style={{ border: 0, padding: 0, margin: 0 }}>
-                <legend style={{ padding: 0 }}>Atributos</legend>
+                <legend style={{ padding: 0 }}>{t('verify.claimsLegend')}</legend>
                 {claimOptions.length === 0 ? (
                   <p className="alert warn" style={{ marginTop: 8 }}>
-                    Este tipo no lleva ningún atributo que esta ficha pueda rellenar, así que no hay
-                    nada que pedirle. Revisa la ficha, o el perfil del tipo en la configuración.
+                    {t('verify.claimsEmpty')}
                   </p>
                 ) : (
                   /*
@@ -259,12 +256,11 @@ export function VerificationLauncher({
                   ))
                 )}
                 <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                  Se pide sólo lo que hace falta: <strong>lo que no se marque no sale de la cartera
-                  del titular</strong>, y lo que su cartera enseñe de más tampoco llega hasta aquí.
+                  {t.rich('verify.claimsNote')}
                 </p>
                 {claimOptions.length > 0 && (
                   <details className="tech">
-                    <summary>Ver el detalle técnico</summary>
+                    <summary>{t('common.technicalDetail')}</summary>
                     <dl className="facts">
                       {claimOptions.map((claim) => (
                         <div key={claim.name} style={{ display: 'contents' }}>
@@ -273,17 +269,14 @@ export function VerificationLauncher({
                         </div>
                       ))}
                     </dl>
-                    <p>
-                      Se piden por nombre en la sesión de presentación y te-api devuelve la
-                      intersección entre lo pedido y lo que la cartera reveló.
-                    </p>
+                    <p>{t('verify.claimsTechnical')}</p>
                   </details>
                 )}
               </fieldset>
             </div>
 
             <div className="card">
-              <h2>Cómo se le avisa</h2>
+              <h2>{t('verify.alertTitle')}</h2>
               {/*
                 Los dos botones, y en este orden. El de arriba es el de la llamada de
                 teléfono, que es la situación normal de un agente con auriculares
@@ -298,7 +291,7 @@ export function VerificationLauncher({
                   onClick={() => void startRequest('phone')}
                   disabled={busy !== undefined || type === '' || selected.length === 0}
                 >
-                  {busy === 'phone' ? 'Avisando…' : 'Está al teléfono · avisar a su móvil'}
+                  {t(busy === 'phone' ? 'verify.alertPhoneBusy' : 'verify.alertPhone')}
                 </button>
                 <button
                   type="button"
@@ -306,7 +299,7 @@ export function VerificationLauncher({
                   onClick={() => void startRequest('qr')}
                   disabled={busy !== undefined || type === '' || selected.length === 0}
                 >
-                  {busy === 'qr' ? 'Pidiendo…' : 'Está delante · enseñar QR'}
+                  {t(busy === 'qr' ? 'verify.alertQrBusy' : 'verify.alertQr')}
                 </button>
               </div>
 
@@ -321,20 +314,18 @@ export function VerificationLauncher({
           <div className="col-side">
             <div className="panel">
               <h2>
-                Lo que le llega a él
+                {t('verify.previewTitle')}
                 <span className="panel-mark">TripleEnable</span>
               </h2>
               <dl className="facts">
-                <dt>A nombre de</dt>
-                <dd>
-                  {agent.displayName}, agente <span className="mono">{agent.id}</span>
-                </dd>
-                <dt>Sobre</dt>
+                <dt>{t('verify.onBehalfOf')}</dt>
+                <dd>{t('verify.onBehalfOfValue', { name: agent.displayName, id: agent.id })}</dd>
+                <dt>{t('verify.about')}</dt>
                 <dd>{holderName}</dd>
-                <dt>Se le pedirá</dt>
+                <dt>{t('verify.willBeAsked')}</dt>
                 <dd>
                   {selected.length === 0 ? (
-                    <span className="none">Nada todavía. Marca al menos un atributo.</span>
+                    <span className="none">{t('verify.willBeAskedEmpty')}</span>
                   ) : (
                     selected
                       .map(
@@ -345,22 +336,14 @@ export function VerificationLauncher({
                   )}
                 </dd>
               </dl>
-              <p className="panel-note">
-                <strong>Dile en voz alta que se la has mandado y con qué nombre.</strong> Que lo que
-                oye por teléfono sea lo que lee en la pantalla del móvil es la mitad de la
-                comprobación — la otra mitad la pone la firma de su cartera.
-              </p>
+              <p className="panel-note">{t.rich('verify.sayItNote')}</p>
               {/*
                 Se queda entera: es una salvedad sobre el mundo —el nombre del
                 agente no lo garantiza nadie— y es justo la que impide que el
                 agente se confíe. Sólo se le ha quitado el nombre de la pieza
                 interna, que no cambiaba ni una coma de lo que significa.
               */}
-              <p className="panel-note">
-                El nombre del agente es <em>informativo</em>: no lo verifica nadie y no decide nada.
-                Lo infalsificable es que la solicitud viene firmada por esta organización, y eso lo
-                comprueba su cartera antes de enseñar nada.
-              </p>
+              <p className="panel-note">{t.rich('verify.agentNameNote')}</p>
             </div>
           </div>
         </div>
@@ -397,25 +380,17 @@ export function VerificationLauncher({
  * Por eso el panel dice qué falta y en dónde. Cuando esté, esta pantalla es una
  * cifra grande y una advertencia — la parte fácil.
  */
-function TransactionLevel() {
+function TransactionLevel({ t }: { t: Translator }) {
   return (
     <div className="level-pane">
       <p className="alert warn" style={{ marginBottom: 16 }}>
-        El nivel 2 todavía no se puede ejecutar, y esta pantalla no lo simula.
+        {t('verify.transactionUnavailable')}
       </p>
 
-      <p>
-        Autorizar una operación es <strong>otra ceremonia</strong>, no la misma con otro rótulo: el
-        titular tiene que ver el importe, firmarlo —de forma que la firma cubra lo que leyó— y
-        teclear cuatro cifras que sólo pueden haber llegado por la voz de quien le está llamando.
-        Mandar la ceremonia del nivel 1 con este nombre acostumbraría a todo el mundo a autorizar
-        transferencias deslizando, que es exactamente lo que las dos ceremonias existen para
-        impedir.
-      </p>
+      <p>{t.rich('verify.transactionBody')}</p>
 
       <p className="muted" style={{ margin: '18px 0 0' }}>
-        Mientras tanto, para confirmar que quien está al teléfono es el titular, usa el nivel 1.
-        No autoriza ninguna operación y lo dice: es lo que separa esta ceremonia de un permiso.
+        {t('verify.transactionMeanwhile')}
       </p>
 
       {/*
@@ -425,27 +400,14 @@ function TransactionLevel() {
         POR QUÉ no se puede, no la lista de rutas que faltan.
       */}
       <details className="tech">
-        <summary>Ver el detalle técnico · qué falta y dónde</summary>
+        <summary>{t('verify.transactionTechnicalSummary')}</summary>
         <dl className="facts">
-          <dt>Cartera</dt>
-          <dd>
-            <span className="mono">transaction_data</span> de OID4VP en el KB-JWT, y negarse a
-            firmar si no coincide con lo que se pintó. Es el único trabajo de criptografía nuevo
-            del plan.
-          </dd>
-          <dt>te-api · las cuatro cifras</dt>
-          <dd>
-            Ya las acuña <span className="mono">createWakeup</span>, pero no salen: hacen falta en
-            la respuesta de <span className="mono">POST /v1/b2b/wakeups</span> —para que este CRM
-            las enseñe— y en <span className="mono">GET /v1/requests/pending</span> —para que la
-            cartera las pida—, y <span className="mono">POST /v1/requests/:id/outcome</span> tiene
-            que comprobarlas y matar el reto al primer fallo.
-          </dd>
-          <dt>te-api · la operación</dt>
-          <dd>
-            El timbre no lleva importe ni destinatario. Sin ellos no hay nada que resumir dentro
-            del <span className="mono">transaction_data</span>.
-          </dd>
+          <dt>{t('verify.transactionWallet')}</dt>
+          <dd>{t.rich('verify.transactionWalletDetail')}</dd>
+          <dt>{t('verify.transactionDigits')}</dt>
+          <dd>{t.rich('verify.transactionDigitsDetail')}</dd>
+          <dt>{t('verify.transactionOperation')}</dt>
+          <dd>{t.rich('verify.transactionOperationDetail')}</dd>
         </dl>
       </details>
     </div>

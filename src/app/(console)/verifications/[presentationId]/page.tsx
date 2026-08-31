@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { VerificationTracker } from '@/components/VerificationTracker';
-import { CUSTOMER_ATTRIBUTES, findCustomer } from '@/lib/customers';
+import { getTranslator } from '@/i18n/server';
+import { attributeLabels, findCustomer } from '@/lib/customers';
 import { formatTimestamp } from '@/lib/format';
 import { renderQrSvg } from '@/lib/qr';
 import { getEmployeeSession } from '@/lib/session';
@@ -44,6 +45,7 @@ export default async function VerificationPage({
 }: {
   params: Promise<{ presentationId: string }>;
 }) {
+  const t = await getTranslator();
   const { presentationId } = await params;
   const session = await getEmployeeSession();
   const verification = await findVerification(
@@ -69,16 +71,14 @@ export default async function VerificationPage({
   // pedirlos. Un atributo que ya no esté en el catálogo se enseña por su nombre
   // técnico: es un recibo, y un recibo no puede dejar de enseñar un campo
   // porque la configuración haya cambiado después.
-  const labelFor = Object.fromEntries(
-    CUSTOMER_ATTRIBUTES.map((attribute) => [attribute.claim, attribute.label]),
-  );
+  const labelFor = attributeLabels(t);
 
   return (
     <>
       <header className="page-head">
         <div>
           <p className="eyebrow">
-            <Link href="/verifications">Verificaciones</Link>
+            <Link href="/verifications">{t('nav.verifications')}</Link>
             {customer !== null && (
               <>
                 {' · '}
@@ -88,15 +88,21 @@ export default async function VerificationPage({
               </>
             )}
           </p>
-          <h1>Verificación de identidad</h1>
+          <h1>{t('verification.title')}</h1>
           <p className="page-facts">
-            <span>
-              Petición <span className="mono">{verification.presentationId}</span>
+            <span className="mono">
+              {t('verification.request', { id: verification.presentationId })}
             </span>
-            <span>Lanzada el {formatTimestamp(verification.requestedAt)}</span>
             <span>
-              Por {verification.agentName}, agente{' '}
-              <span className="mono">{verification.agentId}</span>
+              {t('verification.startedOn', {
+                date: formatTimestamp(verification.requestedAt, t.locale),
+              })}
+            </span>
+            <span>
+              {t('verification.startedBy', {
+                name: verification.agentName,
+                id: verification.agentId,
+              })}
             </span>
           </p>
         </div>
@@ -105,7 +111,7 @@ export default async function VerificationPage({
             className="button-link secondary"
             href={`/customers/${encodeURIComponent(verification.externalId)}`}
           >
-            Volver a la ficha
+            {t('verification.backToCustomer')}
           </Link>
         </div>
       </header>
@@ -135,31 +141,33 @@ export default async function VerificationPage({
         <div className="col-side">
           <div className="panel">
             <h2>
-              La petición
+              {t('verification.panelTitle')}
               <span className="panel-mark">TripleEnable</span>
             </h2>
             <dl className="facts">
-              <dt>Titular</dt>
+              <dt>{t('verification.holder')}</dt>
               <dd>
-                {holderName ?? <span className="none">la ficha ya no está en el padrón</span>}
+                {holderName ?? <span className="none">{t('verification.holderGone')}</span>}
                 <br />
                 <span className="mono">{verification.externalId}</span>
               </dd>
-              <dt>Credencial exigida</dt>
+              <dt>{t('verification.requiredCredential')}</dt>
               <dd>{verification.typeKey}</dd>
-              <dt>Atributos pedidos</dt>
+              <dt>{t('verification.requestedClaims')}</dt>
               <dd>
                 {verification.requestedClaims
                   .map((name) => labelFor[name] ?? name)
                   .join(', ')}
               </dd>
-              <dt>Cómo se avisó</dt>
+              <dt>{t('verification.howAlerted')}</dt>
               <dd>
-                {verification.channel === 'phone'
-                  ? 'Aviso a su móvil · estaba al teléfono'
-                  : 'QR en pantalla · estaba delante'}
+                {t(
+                  verification.channel === 'phone'
+                    ? 'verification.alertedPhone'
+                    : 'verification.alertedQr',
+                )}
               </dd>
-              <dt>Emisor exigido</dt>
+              <dt>{t('verification.requiredIssuer')}</dt>
               <dd>{session.organization.displayName}</dd>
             </dl>
             {/*
@@ -169,22 +177,19 @@ export default async function VerificationPage({
               su entidad no tiene que montar ni custodiar un verificador. La
               dirección exacta sigue estando, abajo.
             */}
-            <p className="panel-note">
-              La comprobación la hace TripleEnable. Esta organización no tiene que montar ni custodiar
-              ningún verificador: pone la pregunta y lee la respuesta.
-            </p>
+            <p className="panel-note">{t('verification.panelNote')}</p>
             <details className="tech">
-              <summary>Ver el detalle técnico</summary>
+              <summary>{t('common.technicalDetail')}</summary>
               <dl className="facts">
-                <dt>Protocolo</dt>
+                <dt>{t('verification.protocol')}</dt>
                 <dd className="mono">OID4VP</dd>
-                <dt>Tipo exigido</dt>
+                <dt>{t('verification.requiredType')}</dt>
                 <dd className="mono">{verification.typeKey}</dd>
-                <dt>Atributos pedidos</dt>
+                <dt>{t('verification.requestedClaims')}</dt>
                 <dd className="mono">{verification.requestedClaims.join(' ')}</dd>
-                <dt>Emisor exigido</dt>
+                <dt>{t('verification.requiredIssuer')}</dt>
                 <dd className="mono">{verification.issuerDid}</dd>
-                <dt>La cartera la recoge en</dt>
+                <dt>{t('verification.walletCollectsAt')}</dt>
                 <dd className="mono">{verification.requestUri}</dd>
               </dl>
             </details>

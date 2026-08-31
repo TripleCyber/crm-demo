@@ -4,7 +4,7 @@ import { findCustomerByEmail } from '@/lib/customers';
 import { exchangeCode, getPortalBaseUrl, PortalLoginError } from '@/lib/portal-oidc';
 import { saveSession, takeAuthorizationRequest, type LinkOutcome } from '@/lib/portal-session';
 import { getRequestOrganization } from '@/lib/request-organization';
-import { describeTeApiError, linkCustomer, TeApiError } from '@/lib/te-api';
+import { describeTeApiFailure, linkCustomer, TeApiError } from '@/lib/te-api';
 
 /**
  * `GET /portal/callback` — **aquí ocurre el vínculo**.
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       error: logtoError,
       description: params.get('error_description')?.slice(0, 300),
     });
-    home.searchParams.set('error', 'logto');
+    home.searchParams.set('error', 'provider');
     return NextResponse.redirect(home);
   }
 
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const state = params.get('state');
 
   if (authorizationRequest === null || code === null || state === null) {
-    home.searchParams.set('error', 'sesion-perdida');
+    home.searchParams.set('error', 'session-lost');
     return NextResponse.redirect(home);
   }
 
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (organization.portal === undefined) {
-    home.searchParams.set('error', 'sin-portal');
+    home.searchParams.set('error', 'no-portal');
     return NextResponse.redirect(home);
   }
 
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       '[portal] el canje del código no completó',
       error instanceof PortalLoginError ? error.message : error,
     );
-    home.searchParams.set('error', 'canje');
+    home.searchParams.set('error', 'exchange');
     return NextResponse.redirect(home);
   }
 
@@ -111,13 +111,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let outcome: LinkOutcome;
 
   if (customer === null) {
-    outcome = {
-      ok: false,
-      message:
-        identity.email === null
-          ? 'Logto no nos ha dado tu correo, así que no podemos encontrar tu ficha de cliente.'
-          : `No encontramos ninguna ficha de cliente con ese correo en ${organization.displayName}.`,
-    };
+    outcome =
+      identity.email === null
+        ? { ok: false, messageKey: 'portal.linkNoEmail' }
+        : {
+            ok: false,
+            messageKey: 'portal.linkNoCustomer',
+            messageValues: { organization: organization.displayName },
+          };
   } else {
     try {
       const link = await linkCustomer(organization, {
@@ -130,14 +131,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       outcome = { ok: true, linkId: link.linkId, replaced: link.replaced };
     } catch (error) {
       if (error instanceof TeApiError) {
+        // La clave y sus valores, no la frase: esto se guarda en la cookie y se
+        // pinta después, quizá en otro idioma. Ver `LinkOutcome`.
+        const failure = describeTeApiFailure(error, 'link');
         outcome = {
           ok: false,
-          message: describeTeApiError(error, 'link'),
+          messageKey: failure.key,
+          messageValues: failure.values,
           ...(error.requestId === undefined ? {} : { requestId: error.requestId }),
         };
       } else {
         console.error('[portal] el vínculo falló por algo que no es te-api', error);
-        outcome = { ok: false, message: 'No hemos podido hablar con TripleEnable ahora mismo.' };
+        outcome = { ok: false, messageKey: 'portal.linkNoTeApi' };
       }
     }
   }

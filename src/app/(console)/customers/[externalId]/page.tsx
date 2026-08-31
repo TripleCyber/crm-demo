@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { VerificationPill } from '@/components/VerificationPill';
+import { getTranslator } from '@/i18n/server';
+import type { Translator } from '@/i18n/translate';
 import { listOffersForCustomer, type IssuedOffer } from '@/lib/credential-offers';
 import { columnLabelOf, referenceOf } from '@/lib/customers';
 import { loadCustomerContext } from '@/lib/customer-context';
@@ -57,6 +59,7 @@ export default async function CustomerPage({
 }: {
   params: Promise<{ externalId: string }>;
 }) {
+  const t = await getTranslator();
   const { externalId } = await params;
   const { session, customer, teApiWarning } = await loadCustomerContext(externalId);
 
@@ -95,7 +98,7 @@ export default async function CustomerPage({
       <header className="page-head">
         <div>
           <p className="eyebrow">
-            <Link href="/customers">Clientes</Link>
+            <Link href="/customers">{t('nav.customers')}</Link>
           </p>
           <h1>
             {customer.givenName} {customer.familyName}
@@ -111,7 +114,7 @@ export default async function CustomerPage({
             */}
             {reference !== undefined && (
               <span>
-                {columnLabelOf(reference.attribute)}{' '}
+                {columnLabelOf(t, reference.attribute)}{' '}
                 <span className="mono">
                   {reference.attribute.display === undefined
                     ? reference.value
@@ -120,27 +123,31 @@ export default async function CustomerPage({
               </span>
             )}
             {customer.customerSince !== null && (
-              <span>Cliente desde {formatCalendarDate(customer.customerSince)}</span>
+              <span>
+                {t('customer.customerSince', {
+                  date: formatCalendarDate(customer.customerSince, t.locale),
+                })}
+              </span>
             )}
           </p>
         </div>
       </header>
 
       {teApiWarning !== undefined && (
-        <p className="alert">No se ha podido consultar TripleEnable: {teApiWarning}</p>
+        <p className="alert">{t('customer.teApiWarning', { reason: teApiWarning })}</p>
       )}
 
       <div className="split side-first">
         <div className="col-main">
           <div className="card">
-            <h2>Datos del titular</h2>
+            <h2>{t('customer.holderData')}</h2>
             <dl className="facts">
-              <dt>Identificador</dt>
+              <dt>{t('customer.identifier')}</dt>
               <dd className="mono">{customer.externalId}</dd>
-              <dt>Correo</dt>
-              <dd>{customer.email ?? <span className="none">no consta</span>}</dd>
-              <dt>Teléfono</dt>
-              <dd>{customer.phone ?? <span className="none">no consta</span>}</dd>
+              <dt>{t('customer.email')}</dt>
+              <dd>{customer.email ?? <span className="none">{t('common.none')}</span>}</dd>
+              <dt>{t('customer.phone')}</dt>
+              <dd>{customer.phone ?? <span className="none">{t('common.none')}</span>}</dd>
               {/*
                 La fila lleva el rótulo LARGO —«Últimos cuatro de la cuenta»—
                 porque aquí hay sitio y porque es la ficha: quien la lee está
@@ -151,7 +158,7 @@ export default async function CustomerPage({
               */}
               {reference !== undefined && (
                 <>
-                  <dt>{reference.attribute.label}</dt>
+                  <dt>{t(reference.attribute.labelKey)}</dt>
                   <dd className="mono">
                     {reference.attribute.display === undefined
                       ? reference.value
@@ -159,53 +166,51 @@ export default async function CustomerPage({
                   </dd>
                 </>
               )}
-              <dt>Cliente desde</dt>
+              <dt>{t('attributes.customerSince')}</dt>
               <dd>
                 {customer.customerSince === null ? (
-                  <span className="none">no consta</span>
+                  <span className="none">{t('common.none')}</span>
                 ) : (
-                  formatCalendarDate(customer.customerSince)
+                  formatCalendarDate(customer.customerSince, t.locale)
                 )}
               </dd>
             </dl>
           </div>
 
           <div className="card">
-            <h2>Actividad de identidad</h2>
-            <p className="muted">
-              Lo que esta consola ha hecho con la identidad de esta persona, de lo más reciente a
-              lo más antiguo. Es el registro de la organización: cada línea es algo que hizo un empleado
-              suyo, con su hora.
-            </p>
-            <CustomerActivity offers={offers} verifications={verifications} />
+            <h2>{t('customer.activityTitle')}</h2>
+            <p className="muted">{t('customer.activityIntro')}</p>
+            <CustomerActivity t={t} offers={offers} verifications={verifications} />
           </div>
         </div>
 
         <div className="col-side">
           <div className="panel">
             <h2>
-              Identidad digital
+              {t('customer.digitalIdentity')}
               <span className="panel-mark">TripleEnable</span>
             </h2>
 
             <dl className="facts">
-              <dt>Credencial</dt>
+              <dt>{t('customer.credential')}</dt>
               <dd>
                 {lastOffer === undefined ? (
-                  <span className="none">Todavía no se le ha ofrecido ninguna</span>
+                  <span className="none">{t('customer.credentialNeverOffered')}</span>
                 ) : (
                   <>
-                    Ofrecida el {formatTimestamp(lastOffer.createdAt)}
+                    {t('customer.credentialOfferedOn', {
+                      date: formatTimestamp(lastOffer.createdAt, t.locale),
+                    })}
                     <br />
-                    {lastOffer.typeKey} · {deliveryPhrase(lastOffer.delivery)}
+                    {lastOffer.typeKey} · {deliveryPhrase(t, lastOffer.delivery)}
                   </>
                 )}
               </dd>
 
-              <dt>Última verificación</dt>
+              <dt>{t('customer.lastVerification')}</dt>
               <dd>
                 {lastVerification === undefined ? (
-                  <span className="none">Nunca se le ha comprobado la identidad</span>
+                  <span className="none">{t('customer.neverVerified')}</span>
                 ) : (
                   <>
                     <VerificationPill
@@ -214,7 +219,7 @@ export default async function CustomerPage({
                     />
                     <br />
                     <Link href={`/verifications/${encodeURIComponent(lastVerification.presentationId)}`}>
-                      {formatTimestamp(lastVerification.requestedAt)}
+                      {formatTimestamp(lastVerification.requestedAt, t.locale)}
                     </Link>
                   </>
                 )}
@@ -231,15 +236,11 @@ export default async function CustomerPage({
               basta con que no lo sabemos, y a nadie le tranquiliza leer un
               inventario de nuestras carencias en la ficha de su cliente.
             */}
-            <p className="panel-note">
-              «Ofrecida» es lo que hizo esta organización.{' '}
-              <strong>Si el titular la guardó, no lo sabemos</strong>, y por eso aquí no hay ninguna
-              insignia de «credencial activa».
-            </p>
+            <p className="panel-note">{t.rich('customer.honestyNote')}</p>
           </div>
 
           <div className="panel">
-            <h2>Qué se puede hacer</h2>
+            <h2>{t('customer.actionsTitle')}</h2>
             <div className="actions">
               {/*
                 Si hay una ceremonia viva, volver a ella es lo primero y no una
@@ -253,16 +254,20 @@ export default async function CustomerPage({
                   className="action primary"
                   href={`/verifications/${encodeURIComponent(liveVerification.presentationId)}`}
                 >
-                  <strong>Seguir la verificación en curso</strong>
-                  <span>Lanzada a las {formatTimestamp(liveVerification.requestedAt)}.</span>
+                  <strong>{t('customer.resumeVerification')}</strong>
+                  <span>
+                    {t('customer.resumeVerificationHint', {
+                      time: formatTimestamp(liveVerification.requestedAt, t.locale),
+                    })}
+                  </span>
                 </Link>
               )}
               <Link
                 className={liveVerification === undefined ? 'action primary' : 'action'}
                 href={`${href}/credential`}
               >
-                <strong>Emitir credencial</strong>
-                <span>Crear la oferta y hacérsela llegar por uno de los cuatro canales.</span>
+                <strong>{t('customer.issueCredential')}</strong>
+                <span>{t('customer.issueCredentialHint')}</span>
               </Link>
               {/*
                 Los dos niveles del artifact, cada uno abriendo la misma
@@ -271,12 +276,12 @@ export default async function CustomerPage({
                 cifras— y por eso son dos entradas y no un desplegable.
               */}
               <Link className="action" href={`${href}/verify`}>
-                <strong>Verificar quién habla</strong>
-                <span>Nivel 1 · que quien está al teléfono sea el titular.</span>
+                <strong>{t('customer.verifyCaller')}</strong>
+                <span>{t('customer.verifyCallerHint')}</span>
               </Link>
               <Link className="action" href={`${href}/verify?level=transaction`}>
-                <strong>Autorizar operación</strong>
-                <span>Nivel 2 · firmar un importe. Todavía no se puede ejecutar.</span>
+                <strong>{t('customer.authoriseTransaction')}</strong>
+                <span>{t('customer.authoriseTransactionHint')}</span>
               </Link>
             </div>
           </div>
@@ -294,9 +299,13 @@ export default async function CustomerPage({
  * obliga a leer dos veces y a cruzar fechas a ojo para saber qué pasó antes.
  */
 function CustomerActivity({
+  t,
   offers,
   verifications,
 }: {
+  // El traductor baja por parámetro y no se vuelve a pedir: dos resoluciones
+  // del mismo idioma en la misma pantalla es una de más.
+  t: Translator;
   offers: readonly IssuedOffer[];
   verifications: readonly VerificationRecord[];
 }) {
@@ -312,8 +321,7 @@ function CustomerActivity({
   if (entries.length === 0) {
     return (
       <p className="none" style={{ margin: 0 }}>
-        Todavía no ha pasado nada. Empieza emitiéndole su credencial: sin ella no hay nada que
-        comprobar después.
+        {t('customer.activityEmpty')}
       </p>
     );
   }
@@ -322,13 +330,14 @@ function CustomerActivity({
     <ul className="activity">
       {entries.map((entry) => (
         <li key={entry.offer?.offerId ?? entry.verification?.presentationId}>
-          <span className="activity-when">{formatTimestamp(entry.at)}</span>
+          <span className="activity-when">{formatTimestamp(entry.at, t.locale)}</span>
           <div className="activity-what">
             {entry.offer !== undefined && (
               <>
-                <strong>Credencial ofrecida</strong>
+                <strong>{t('customer.activityOffer')}</strong>
                 <span className="activity-sub">
-                  {entry.offer.typeKey} · {deliveryPhrase(entry.offer.delivery)} · desde{' '}
+                  {entry.offer.typeKey} · {deliveryPhrase(t, entry.offer.delivery)} ·{' '}
+                  {t('customer.activityOfferFrom')}{' '}
                   <span className="mono">{entry.offer.createdBy}</span>
                 </span>
               </>
@@ -336,19 +345,21 @@ function CustomerActivity({
             {entry.verification !== undefined && (
               <>
                 <strong>
-                  Verificación de identidad{' '}
+                  {t('customer.activityVerification')}{' '}
                   <VerificationPill
                     status={entry.verification.status}
                     expiresAt={entry.verification.expiresAt}
                   />
                 </strong>
                 <span className="activity-sub">
-                  {entry.verification.channel === 'phone'
-                    ? 'Aviso a su móvil'
-                    : 'QR en el mostrador'}{' '}
-                  · a nombre de {entry.verification.agentName} ·{' '}
+                  {t(
+                    entry.verification.channel === 'phone'
+                      ? 'customer.channelPhone'
+                      : 'customer.channelQr',
+                  )}{' '}
+                  · {t('customer.onBehalfOf', { agent: entry.verification.agentName })} ·{' '}
                   <Link href={`/verifications/${encodeURIComponent(entry.verification.presentationId)}`}>
-                    ver la verificación
+                    {t('customer.activityVerificationLink')}
                   </Link>
                 </span>
               </>

@@ -1,4 +1,6 @@
+import { LocaleSwitch } from '@/components/LocaleSwitch';
 import { RailNav } from '@/components/RailNav';
+import { getTranslator } from '@/i18n/server';
 import { getEmployeeSession } from '@/lib/session';
 
 /**
@@ -29,6 +31,8 @@ import { getEmployeeSession } from '@/lib/session';
  * mismo que el cliente está leyendo.
  */
 export default async function ConsoleLayout({ children }: { children: React.ReactNode }) {
+  const t = await getTranslator();
+
   // La organización se lee aquí sólo para rotularla. Si la configuración está a
   // medias, la barra lo dice y las pantallas siguen cargando: enterarse de que
   // falta una variable de entorno con una pantalla en blanco es la peor forma
@@ -36,7 +40,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   // El nombre del banco sale de la organización activa y no está escrito aquí:
   // la consola de un segundo partner llevaría el rótulo del primero, que es la
   // clase de detalle que nadie mira hasta que lo ve un cliente.
-  let bankName = 'Consola de agentes';
+  let bankName = t('nav.consoleFallbackName');
   let orgId: string | undefined;
   let misconfigured = false;
   let agent: { id: string; displayName: string } | undefined;
@@ -61,7 +65,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
         <div className="rail-brand">
           <strong>{bankName}</strong>
           {orgId === undefined ? (
-            <span className="rail-org warn">sin configurar</span>
+            <span className="rail-org warn">{t('nav.unconfigured')}</span>
           ) : (
             <span className="rail-org mono">{orgId}</span>
           )}
@@ -72,9 +76,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
         {agent === undefined ? (
           <div className="rail-agent">
             <p className="rail-agent-warn">
-              {misconfigured
-                ? 'Consola sin configurar. El detalle está en Diagnóstico.'
-                : 'Sin identificar.'}
+              {t(misconfigured ? 'nav.unconfiguredAgent' : 'nav.unidentifiedAgent')}
             </p>
           </div>
         ) : (
@@ -85,11 +87,19 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
             <div>
               <strong>{agent.displayName}</strong>
               <span>
-                Agente <span className="mono">{agent.id}</span>
+                {t('nav.agentNumber')} <span className="mono">{agent.id}</span>
               </span>
             </div>
           </div>
         )}
+
+        {/*
+          El selector de idioma, al final de la barra y debajo de quién eres.
+          No es una acción de la ceremonia —se toca una vez y no se vuelve— así
+          que va donde no compite con la navegación, que es lo que se pulsa todo
+          el día.
+        */}
+        <LocaleSwitch />
       </aside>
 
       <main className="workspace">{children}</main>

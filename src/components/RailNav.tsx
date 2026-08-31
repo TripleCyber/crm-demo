@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Fragment } from 'react';
 
+import { useTranslator } from '@/i18n/client';
+import type { MessageKey } from '@/i18n/translate';
+
 /**
  * La navegación de la barra, con la sección abierta marcada.
  *
@@ -24,19 +27,20 @@ import { Fragment } from 'react';
 
 interface RailLink {
   readonly href: string;
-  readonly label: string;
+  readonly labelKey: MessageKey;
   /** El rótulo del grupo al que abre. Sólo lo lleva el primero de cada grupo. */
-  readonly group?: string;
+  readonly groupKey?: MessageKey;
 }
 
 const LINKS: readonly RailLink[] = [
-  { href: '/customers', label: 'Clientes', group: 'Atención al cliente' },
-  { href: '/verifications', label: 'Verificaciones' },
-  { href: '/diagnostics', label: 'Diagnóstico', group: 'Integración' },
+  { href: '/customers', labelKey: 'nav.customers', groupKey: 'nav.groupService' },
+  { href: '/verifications', labelKey: 'nav.verifications' },
+  { href: '/diagnostics', labelKey: 'nav.diagnostics', groupKey: 'nav.groupIntegration' },
 ];
 
 export function RailNav() {
   const pathname = usePathname();
+  const t = useTranslator();
 
   return (
     <nav className="rail-nav">
@@ -47,13 +51,13 @@ export function RailNav() {
       */}
       {LINKS.map((link) => (
         <Fragment key={link.href}>
-          {link.group !== undefined && <p className="rail-group">{link.group}</p>}
+          {link.groupKey !== undefined && <p className="rail-group">{t(link.groupKey)}</p>}
           <Link
             href={link.href}
             className={isInSection(pathname, link.href) ? 'on' : undefined}
             aria-current={isInSection(pathname, link.href) ? 'page' : undefined}
           >
-            {link.label}
+            {t(link.labelKey)}
           </Link>
         </Fragment>
       ))}

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { useTranslator } from '@/i18n/client';
+
 /**
  * El enlace que abre la cartera, y el botón que lo abre.
  *
@@ -41,6 +43,7 @@ export function WalletLink({
   readonly label: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const t = useTranslator();
 
   async function copy() {
     // `navigator.clipboard` no existe fuera de un origen seguro. La consola va
@@ -71,16 +74,13 @@ export function WalletLink({
           encuentra una página vacía que parece un error.
         */}
         <a className="button-link" href={uri}>
-          Abrir en la cartera
+          {t('wallet.open')}
         </a>
         <button type="button" className="secondary" onClick={copy}>
-          {copied ? 'Enlace copiado' : 'Copiar enlace'}
+          {t(copied ? 'wallet.copied' : 'wallet.copy')}
         </button>
       </div>
-      <p className="muted wallet-link-note">
-        «Abrir en la cartera» funciona en el aparato donde esté instalada. Desde este
-        navegador, si no la tiene, no ocurre nada: copia {label} y ábrela allí.
-      </p>
+      <p className="muted wallet-link-note">{t('wallet.note', { label })}</p>
     </div>
   );
 }

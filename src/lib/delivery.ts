@@ -1,3 +1,5 @@
+import type { MessageKey, Translator } from '@/i18n/translate';
+
 /**
  * Los cuatro canales de entrega, con su nombre y para qué sirve cada uno.
  *
@@ -24,45 +26,46 @@ export type DeliveryChannel = 'qr' | 'link' | 'email' | 'app';
 export interface DeliveryOption {
   readonly value: DeliveryChannel;
   /** El rótulo del selector, tal y como lo escribe el artifact. */
-  readonly label: string;
+  readonly labelKey: MessageKey;
   /** A quién llega y qué hace falta. Es lo que de verdad decide cuál se elige. */
-  readonly hint: string;
+  readonly hintKey: MessageKey;
   /**
    * Cómo se lee el canal **dentro de una frase** del historial.
    *
    * Hace falta porque el rótulo del selector no encaja en prosa: «se le ofreció
    * por Desde nuestra app» no lo escribiría nadie. El diario del banco lo lee
-   * un empleado meses después y tiene que sonar a español, no a valor de un
-   * desplegable.
+   * un empleado meses después y tiene que sonar al idioma en el que se habla,
+   * no a valor de un desplegable — y por eso es una clave aparte y no el mismo
+   * rótulo reutilizado: la traducción de un rótulo no encaja en una frase.
    */
-  readonly phrase: string;
+  readonly phraseKey: MessageKey;
 }
 
 /** Los cuatro, en el orden del artifact. */
 export const DELIVERY_OPTIONS: readonly DeliveryOption[] = [
   {
     value: 'email',
-    label: 'Correo',
-    hint: 'Al correo de la ficha, desde tu propio buzón',
-    phrase: 'por correo',
+    labelKey: 'delivery.emailLabel',
+    hintKey: 'delivery.emailHint',
+    phraseKey: 'delivery.emailPhrase',
   },
   {
     value: 'link',
-    label: 'Enlace',
-    hint: 'Lo copias y lo pegas donde haga falta',
-    phrase: 'por enlace',
+    labelKey: 'delivery.linkLabel',
+    hintKey: 'delivery.linkHint',
+    phraseKey: 'delivery.linkPhrase',
   },
   {
     value: 'qr',
-    label: 'QR',
-    hint: 'El cliente está delante y lo escanea de esta pantalla',
-    phrase: 'por QR',
+    labelKey: 'delivery.qrLabel',
+    hintKey: 'delivery.qrHint',
+    phraseKey: 'delivery.qrPhrase',
   },
   {
     value: 'app',
-    label: 'Desde nuestra app',
-    hint: 'Le espera en el portal, ya autenticado',
-    phrase: 'en su área de cliente',
+    labelKey: 'delivery.appLabel',
+    hintKey: 'delivery.appHint',
+    phraseKey: 'delivery.appPhrase',
   },
 ];
 
@@ -73,6 +76,7 @@ export const DELIVERY_OPTIONS: readonly DeliveryOption[] = [
  * una fila con un canal que esta versión no conoce se enseña tal cual, que es
  * información, y no como «Desconocido», que no lo es.
  */
-export function deliveryPhrase(value: string): string {
-  return DELIVERY_OPTIONS.find((option) => option.value === value)?.phrase ?? value;
+export function deliveryPhrase(t: Translator, value: string): string {
+  const option = DELIVERY_OPTIONS.find((entry) => entry.value === value);
+  return option === undefined ? value : t(option.phraseKey);
 }

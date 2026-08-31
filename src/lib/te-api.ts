@@ -1,5 +1,7 @@
 import 'server-only';
 
+import type { MessageKey, Translator } from '@/i18n/translate';
+
 import { getB2bToken, invalidateB2bToken } from './b2b-token';
 import type { OrganizationConfig } from './organizations';
 
@@ -432,7 +434,7 @@ async function callB2b<T>(
 
   // Inalcanzable: el bucle sale por `return` o por `throw`. Está para que el
   // tipo de retorno no dependa de que TypeScript entienda el bucle.
-  throw new TeApiError(`te-api ${path}: reintento agotado`, 500, 'internal_error');
+  throw new TeApiError(`te-api ${path}: retries exhausted`, 500, 'internal_error');
 }
 
 async function toTeApiError(response: Response, path: string): Promise<TeApiError> {
@@ -450,7 +452,7 @@ async function toTeApiError(response: Response, path: string): Promise<TeApiErro
   }
 
   return new TeApiError(
-    `te-api ${path} respondió ${response.status} (${code})`,
+    `te-api ${path} answered ${response.status} (${code})`,
     response.status,
     code,
     requestId,
@@ -481,29 +483,38 @@ async function toTeApiError(response: Response, path: string): Promise<TeApiErro
 export type TeApiOperation = 'link' | 'presentation' | 'issue';
 
 /**
- * El mensaje que ve el empleado. Traduce el 404 opaco a algo accionable sin
+ * Qué falló, **como clave y datos**, sin traducir todavía.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  UN FALLO NO PUEDE VIAJAR YA ESCRITO EN UN IDIOMA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * El del vínculo del portal se guarda en la cookie de sesión del titular y se
+ * pinta en la siguiente petición, o en la de mañana. Si se guardara la frase
+ * hecha, quedaría escrita en el idioma que estaba activo cuando falló: cambiar
+ * a inglés dejaría la pantalla entera en inglés y ese aviso —el único que
+ * importa— en castellano. Se guarda qué pasó, y se escribe al pintarlo.
+ */
+export interface TeApiFailure {
+  readonly key: MessageKey;
+  /** El `requestId`, el código y el estado, cuando hacen falta en la frase. */
+  readonly values: Readonly<Record<string, string | number>>;
+}
+
+/**
+ * El fallo que ve el empleado. Traduce el 404 opaco a algo accionable sin
  * inventarse un motivo que te-api no ha dado.
  */
-export function describeTeApiError(error: TeApiError, operation?: TeApiOperation): string {
-  const reference = error.requestId === undefined ? '' : ` (requestId ${error.requestId})`;
+export function describeTeApiFailure(
+  error: TeApiError,
+  operation?: TeApiOperation,
+): TeApiFailure {
+  const values: Record<string, string | number> =
+    error.requestId === undefined ? {} : { requestId: error.requestId };
 
-  if (error.status === 404) {
-    return (
-      'te-api ha rechazado la llamada. La puerta B2B contesta lo mismo para ocho ' +
-      'motivos distintos (token, recurso, organización, padrón o scope), así que ' +
-      'el motivo real está en el registro de te-api' +
-      reference +
-      '.'
-    );
-  }
+  if (error.status === 404) return { key: 'errors.teApiNotFound', values };
   if (error.status === 403 && operation === 'presentation') {
-    return (
-      'te-api no puede pedir ese tipo de credencial de vuelta: le falta el `vct` en el padrón ' +
-      'de la organización. Se emite pero no se verifica, y se arregla volviendo a sembrar el ' +
-      'tipo en te-api, no reintentando desde aquí' +
-      reference +
-      '.'
-    );
+    return { key: 'errors.teApiNoVct', values };
   }
   if (error.status === 403) {
     // El `403 cannot_complete` del vínculo tapa cuatro cosas a la vez y es
@@ -512,26 +523,44 @@ export function describeTeApiError(error: TeApiError, operation?: TeApiOperation
     // te-api — o sea, alguien que todavía no tiene cartera de TripleEnable. Ese
     // último es el caso normal y el único accionable por el titular, así que la
     // frase lo nombra sin afirmar que sea ése.
-    return (
-      'te-api no ha podido completar el vínculo. El motivo más habitual es que esa cuenta ' +
-      'todavía no tiene una cartera de TripleEnable dada de alta; el motivo real está en el ' +
-      'registro de te-api' +
-      reference +
-      '.'
-    );
+    return { key: 'errors.teApiLink', values };
   }
-  if (error.status === 503) {
-    return `El emisor de credenciales no está operativo ahora mismo${reference}.`;
-  }
-  if (error.status === 429) {
-    return `Demasiadas peticiones para esta organización; espera un momento${reference}.`;
-  }
+  if (error.status === 503) return { key: 'errors.teApiUnavailable', values };
+  if (error.status === 429) return { key: 'errors.teApiRateLimited', values };
   if (error.status === 400) {
     // El código sí distingue, y por eso se enseña: `invalid_request` es el
     // cuerpo mal formado —un `requestUri` en `http`, por ejemplo, que el
     // timbre rechaza sin excepción— y `unauthorized_client` es un canal
     // apagado en te-api, que no se arregla cambiando lo que se manda.
-    return `te-api ha rechazado los datos de la llamada: ${error.code}${reference}.`;
+    return { key: 'errors.teApiBadRequest', values: { ...values, code: error.code } };
   }
-  return `te-api ha respondido ${error.status} (${error.code})${reference}.`;
+  return {
+    key: 'errors.teApiOther',
+    values: { ...values, status: error.status, code: error.code },
+  };
+}
+
+/**
+ * El fallo ya escrito.
+ *
+ * La referencia —` (requestId …)`— se compone aquí y no en cada mensaje: va al
+ * final de las siete frases, y repetir su paréntesis siete veces por idioma es
+ * repetir siete veces la ocasión de escribirlo distinto. Cuando no hay
+ * `requestId` se queda vacía, y la frase termina en su punto.
+ */
+export function translateTeApiFailure(t: Translator, failure: TeApiFailure): string {
+  const requestId = failure.values['requestId'];
+  return t(failure.key, {
+    ...failure.values,
+    reference: requestId === undefined ? '' : t('errors.teApiReference', { requestId }),
+  });
+}
+
+/** Los dos pasos de arriba, para quien pinta el fallo en el acto. */
+export function describeTeApiError(
+  t: Translator,
+  error: TeApiError,
+  operation?: TeApiOperation,
+): string {
+  return translateTeApiFailure(t, describeTeApiFailure(error, operation));
 }

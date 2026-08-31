@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 
 import { createCustomerAction, type CreateCustomerState } from '@/app/(console)/customers/actions';
+import { useTranslator } from '@/i18n/client';
 
 /**
  * El formulario de alta.
@@ -20,15 +21,17 @@ const initialState: CreateCustomerState = {};
 
 function SubmitButton() {
   const { pending } = useFormStatus();
+  const t = useTranslator();
   return (
     <button type="submit" disabled={pending}>
-      {pending ? 'Guardando…' : 'Dar de alta'}
+      {t(pending ? 'customerForm.submitting' : 'customerForm.submit')}
     </button>
   );
 }
 
 export function CustomerForm() {
   const [state, formAction] = useActionState(createCustomerAction, initialState);
+  const t = useTranslator();
   const fieldError = (name: string): string | undefined => state.fields?.[name];
 
   return (
@@ -36,7 +39,7 @@ export function CustomerForm() {
       {state.error !== undefined && <p className="alert">{state.error}</p>}
 
       <label className="field">
-        <span>Identificador de cliente (el que irá en la credencial)</span>
+        <span>{t('customerForm.externalId')}</span>
         <input name="externalId" placeholder="BD-99120447" required />
         {fieldError('externalId') !== undefined && (
           <small style={{ color: 'var(--danger)' }}>{fieldError('externalId')}</small>
@@ -45,15 +48,15 @@ export function CustomerForm() {
 
       <div className="row">
         <label className="field">
-          <span>Nombre</span>
-          <input name="givenName" placeholder="Juan" required />
+          <span>{t('customerForm.givenName')}</span>
+          <input name="givenName" placeholder={t('customerForm.givenNameExample')} required />
           {fieldError('givenName') !== undefined && (
             <small style={{ color: 'var(--danger)' }}>{fieldError('givenName')}</small>
           )}
         </label>
         <label className="field">
-          <span>Apellidos</span>
-          <input name="familyName" placeholder="Pérez Molina" required />
+          <span>{t('customerForm.familyName')}</span>
+          <input name="familyName" placeholder={t('customerForm.familyNameExample')} required />
           {fieldError('familyName') !== undefined && (
             <small style={{ color: 'var(--danger)' }}>{fieldError('familyName')}</small>
           )}
@@ -62,25 +65,25 @@ export function CustomerForm() {
 
       <div className="row">
         <label className="field">
-          <span>Correo</span>
-          <input name="email" type="email" placeholder="juan@example.com" />
+          <span>{t('customerForm.email')}</span>
+          <input name="email" type="email" placeholder={t('customerForm.emailExample')} />
         </label>
         <label className="field">
-          <span>Teléfono</span>
+          <span>{t('customerForm.phone')}</span>
           <input name="phone" placeholder="+34 600 000 000" />
         </label>
       </div>
 
       <div className="row">
         <label className="field">
-          <span>Últimos cuatro de la cuenta</span>
+          <span>{t('customerForm.accountLast4')}</span>
           <input name="accountLast4" inputMode="numeric" maxLength={4} placeholder="4471" />
           {fieldError('accountLast4') !== undefined && (
             <small style={{ color: 'var(--danger)' }}>{fieldError('accountLast4')}</small>
           )}
         </label>
         <label className="field">
-          <span>Cliente desde</span>
+          <span>{t('customerForm.customerSince')}</span>
           <input name="customerSince" type="date" />
           {fieldError('customerSince') !== undefined && (
             <small style={{ color: 'var(--danger)' }}>{fieldError('customerSince')}</small>
@@ -108,14 +111,14 @@ export function CustomerForm() {
       */}
       <div className="row">
         <label className="field">
-          <span>Número de póliza</span>
+          <span>{t('customerForm.policyNumber')}</span>
           <input name="policyNumber" placeholder="PA-2019-004471" />
           {fieldError('policyNumber') !== undefined && (
             <small style={{ color: 'var(--danger)' }}>{fieldError('policyNumber')}</small>
           )}
         </label>
         <label className="field">
-          <span>Número de historia</span>
+          <span>{t('customerForm.medicalRecordNumber')}</span>
           <input name="medicalRecordNumber" placeholder="HC-0044718" />
           {fieldError('medicalRecordNumber') !== undefined && (
             <small style={{ color: 'var(--danger)' }}>{fieldError('medicalRecordNumber')}</small>

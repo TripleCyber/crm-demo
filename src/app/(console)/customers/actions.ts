@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { getTranslator } from '@/i18n/server';
 import { describeConsoleFailure } from '@/lib/console-failures';
 import { createCustomer, DuplicateCustomerError, validateCustomerInput } from '@/lib/customers';
 import { getEmployeeSession } from '@/lib/session';
@@ -30,6 +31,8 @@ export async function createCustomerAction(
   _previous: CreateCustomerState,
   formData: FormData,
 ): Promise<CreateCustomerState> {
+  const t = await getTranslator();
+
   const read = (name: string): string | undefined => {
     const value = formData.get(name);
     return typeof value === 'string' ? value : undefined;
@@ -49,8 +52,8 @@ export async function createCustomerAction(
 
   if (issues.length > 0) {
     return {
-      error: 'Revisa los campos marcados.',
-      fields: Object.fromEntries(issues.map((issue) => [issue.field, issue.message])),
+      error: t('customerForm.checkFields'),
+      fields: Object.fromEntries(issues.map((issue) => [issue.field, t(issue.messageKey)])),
     };
   }
 
@@ -60,14 +63,14 @@ export async function createCustomerAction(
   } catch (error) {
     if (error instanceof DuplicateCustomerError) {
       return {
-        error: error.message,
-        fields: { externalId: 'ya existe en esta organización' },
+        error: t('customerForm.duplicate', { externalId: error.externalId }),
+        fields: { externalId: t('customerForm.duplicateField') },
       };
     }
     // El duplicado de arriba SÍ se dice tal cual: es del padrón, lo entiende
     // quien está dando el alta y lo puede corregir. Lo que cae aquí es
     // configuración o base, que no es ni una cosa ni la otra.
-    return { error: describeConsoleFailure(error, 'el alta de cliente falló') };
+    return { error: describeConsoleFailure(t, error, 'el alta de cliente falló') };
   }
 
   // `redirect` lanza una excepción de control de Next: tiene que quedar FUERA

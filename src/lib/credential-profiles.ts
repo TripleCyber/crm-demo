@@ -1,5 +1,7 @@
 import 'server-only';
 
+import type { Translator } from '@/i18n/translate';
+
 import { CUSTOMER_ATTRIBUTES, type Customer } from './customers';
 
 /**
@@ -126,6 +128,7 @@ function readClaimList(name: string): readonly string[] | undefined {
  *    `buildCredentialClaims` omite los vacíos.
  */
 export function resolveCredentialType(
+  t: Translator,
   declared: DeclaredCredentialType,
   customer: Customer,
 ): CredentialTypeView {
@@ -159,21 +162,49 @@ export function resolveCredentialType(
 
   return {
     type: declared.type,
-    // Sin rótulo declarado se enseña el `type_key` tal cual, y es deliberado:
-    // fabricar «Cliente» a partir de `cliente` acertaría en castellano y
-    // produciría basura con `poliza-hogar` o con un padrón en otro idioma.
-    label: readText(`CRM_TYPE_${key}_LABEL`) ?? declared.type,
+    label: typeLabel(t, declared.type, key),
     maxValidityDays: declared.maxValidityDays,
-    claims: available.map((attribute) => ({ name: attribute.claim, label: attribute.label })),
+    claims: available.map((attribute) => ({ name: attribute.claim, label: t(attribute.labelKey) })),
     defaultClaims: defaults.map((attribute) => attribute.claim),
   };
 }
 
+/**
+ * El rótulo de un tipo, con sus tres fuentes en este orden.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL CATÁLOGO MANDA SOBRE LA VARIABLE, Y ES A PROPÓSITO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * 1. **El catálogo de mensajes** (`credentialTypes.<type_key>`). Es lo único
+ *    que puede estar en dos idiomas: una variable de entorno es una cadena y
+ *    una cadena es un idioma. Si el rótulo de un tipo saliera del entorno, la
+ *    consola en inglés enseñaría «Asegurado» — que es justo lo que este cambio
+ *    venía a quitar.
+ * 2. **`CRM_TYPE_<CLAVE>_LABEL`**, para un tipo que el catálogo no conoce. Un
+ *    partner nuevo con su propio `type_key` sigue pudiendo rotularlo sin tocar
+ *    código, que es para lo que se puso la variable.
+ * 3. **El `type_key` tal cual**, y es deliberado: fabricar «Cliente» a partir
+ *    de `cliente` acertaría en castellano y produciría basura con
+ *    `poliza-hogar` o con un padrón en otro idioma.
+ *
+ * El `type_key` con un punto dentro —te-api los acepta— no se busca en el
+ * catálogo: el punto es el separador de las claves, y `a.b` bajaría por una
+ * rama en vez de leer una hoja.
+ */
+function typeLabel(t: Translator, type: string, environmentSuffix: string): string {
+  const fromCatalogue = type.includes('.')
+    ? undefined
+    : t.optional(`credentialTypes.${type}`);
+  return fromCatalogue ?? readText(`CRM_TYPE_${environmentSuffix}_LABEL`) ?? type;
+}
+
 export function resolveCredentialTypes(
+  t: Translator,
   declared: readonly DeclaredCredentialType[],
   customer: Customer,
 ): readonly CredentialTypeView[] {
-  return declared.map((entry) => resolveCredentialType(entry, customer));
+  return declared.map((entry) => resolveCredentialType(t, entry, customer));
 }
 
 /**

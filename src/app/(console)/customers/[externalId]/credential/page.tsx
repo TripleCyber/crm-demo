@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { IssueCredentialForm } from '@/components/IssueCredentialForm';
+import { getTranslator } from '@/i18n/server';
 import { loadCustomerContext } from '@/lib/customer-context';
 import { findCustomerAttribute, referenceOf } from '@/lib/customers';
 
@@ -39,6 +40,7 @@ export default async function IssueCredentialPage({
 }: {
   params: Promise<{ externalId: string }>;
 }) {
+  const t = await getTranslator();
   const { externalId } = await params;
   const { session, customer, credentialTypes, issuerDid, teApiWarning } =
     await loadCustomerContext(externalId);
@@ -70,9 +72,10 @@ export default async function IssueCredentialPage({
       <header className="page-head">
         <div>
           <p className="eyebrow">
-            <Link href="/customers">Clientes</Link> · <Link href={href}>{holderName}</Link>
+            <Link href="/customers">{t('nav.customers')}</Link> ·{' '}
+            <Link href={href}>{holderName}</Link>
           </p>
-          <h1>Emitir credencial</h1>
+          <h1>{t('credential.title')}</h1>
           {/*
             Decía «TripleEnable no ve lo que va dentro», y **es falso**: los
             claims viajan a te-api, que es quien firma —ver el cuerpo que arma
@@ -83,19 +86,12 @@ export default async function IssueCredentialPage({
             Lo cierto, que además vende igual de bien: **el contenido lo decide
             el banco** y sale de su padrón, nunca del navegador.
           */}
-          <p className="page-sub">
-            La crea <strong>esta organización</strong>: lo que lleva dentro sale de su padrón y de ningún
-            otro sitio. TripleEnable la firma a nombre de esta entidad y la lleva hasta la cartera
-            del titular.
-          </p>
+          <p className="page-sub">{t.rich('credential.subtitle')}</p>
         </div>
       </header>
 
       {teApiWarning !== undefined && (
-        <p className="alert">
-          No se ha podido consultar TripleEnable, así que no se sabe qué credenciales puede emitir
-          esta organización: {teApiWarning}
-        </p>
+        <p className="alert">{t('credential.teApiWarning', { reason: teApiWarning })}</p>
       )}
 
       {/*

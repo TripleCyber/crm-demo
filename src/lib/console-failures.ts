@@ -1,5 +1,7 @@
 import 'server-only';
 
+import type { Translator } from '@/i18n/translate';
+
 import { OrganizationConfigError } from './organizations';
 
 /**
@@ -27,20 +29,10 @@ import { OrganizationConfigError } from './organizations';
  * enterarse, y es la misma razón por la que `describeTeApiError` distingue el
  * 403 del vínculo del 403 de la presentación.
  */
-export function describeConsoleFailure(error: unknown, context: string): string {
+export function describeConsoleFailure(t: Translator, error: unknown, context: string): string {
   logConsoleFailure(error, context);
 
-  if (error instanceof OrganizationConfigError) {
-    return (
-      'Esta consola está a medio configurar y no puede mostrar los datos de la organización. ' +
-      'Avisa a quien lleva la integración: el detalle está en Diagnóstico.'
-    );
-  }
-
-  return (
-    'No hemos podido cargar los datos ahora mismo. Vuelve a intentarlo en un momento; si sigue ' +
-    'igual, avisa a quien lleva la integración — el detalle está en Diagnóstico.'
-  );
+  return t(error instanceof OrganizationConfigError ? 'errors.misconfigured' : 'errors.generic');
 }
 
 /**

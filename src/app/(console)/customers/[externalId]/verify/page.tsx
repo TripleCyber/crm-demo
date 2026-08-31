@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { VerificationLauncher } from '@/components/VerificationLauncher';
+import { getTranslator } from '@/i18n/server';
 import { loadCustomerContext } from '@/lib/customer-context';
 
 /**
@@ -33,6 +34,7 @@ export default async function VerifyCustomerPage({
   params: Promise<{ externalId: string }>;
   searchParams: Promise<{ level?: string | string[] }>;
 }) {
+  const t = await getTranslator();
   const { externalId } = await params;
   const { level: rawLevel } = await searchParams;
   const { session, customer, credentialTypes, teApiWarning } =
@@ -51,14 +53,15 @@ export default async function VerifyCustomerPage({
       <header className="page-head">
         <div>
           <p className="eyebrow">
-            <Link href="/customers">Clientes</Link> · <Link href={href}>{holderName}</Link>
+            <Link href="/customers">{t('nav.customers')}</Link> ·{' '}
+            <Link href={href}>{holderName}</Link>
           </p>
-          <h1>Verificar identidad</h1>
+          <h1>{t('verify.title')}</h1>
           <p className="page-facts">
             <span className="mono">{customer.externalId}</span>
             {customer.phone !== null && (
               <span>
-                Teléfono <span className="mono">{customer.phone}</span>
+                {t('verify.phone')} <span className="mono">{customer.phone}</span>
               </span>
             )}
           </p>
@@ -66,10 +69,7 @@ export default async function VerifyCustomerPage({
       </header>
 
       {teApiWarning !== undefined && (
-        <p className="alert">
-          No se ha podido consultar TripleEnable, así que no se sabe qué se le puede pedir:{' '}
-          {teApiWarning}
-        </p>
+        <p className="alert">{t('verify.teApiWarning', { reason: teApiWarning })}</p>
       )}
 
       {/*

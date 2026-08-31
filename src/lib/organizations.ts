@@ -205,7 +205,23 @@ export interface LogtoConfig {
   readonly b2bScope: string;
 }
 
-/** Falta una variable o está vacía. El mensaje nombra la variable, nunca el valor. */
+/**
+ * Falta una variable o está vacía. El mensaje nombra la variable, nunca el valor.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ESTOS MENSAJES VAN EN INGLÉS Y **NO** PASAN POR EL CATÁLOGO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * No son texto de pantalla de atención al cliente: sólo salen en Diagnóstico y
+ * en la respuesta de una ruta de API, y sólo los lee quien despliega. Están en
+ * el mismo registro que `relation "customer" does not exist`, que Postgres
+ * escribe en inglés y que esta misma pantalla enseña dos filas más abajo — y en
+ * el mismo idioma que la variable que nombran.
+ *
+ * Traducirlos obligaría a arrastrar el traductor hasta funciones síncronas de
+ * `lib/` que hoy no saben nada de peticiones, y a cambio se ganaría media
+ * pantalla bilingüe: la otra media seguiría siendo lo que conteste Postgres.
+ */
 export class OrganizationConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -218,7 +234,7 @@ const ORG_KEY_PATTERN = /^CRM_ORG_([A-Z0-9]+)_ID$/;
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (value === undefined || value.trim() === '') {
-    throw new OrganizationConfigError(`falta la variable de entorno ${name}`);
+    throw new OrganizationConfigError(`missing environment variable ${name}`);
   }
   return value.trim();
 }
@@ -234,10 +250,10 @@ function readSlug(slug: string): OrganizationConfig {
   const verifierUrl = process.env[`${prefix}_VERIFIER_URL`]?.trim() ?? fallbackBase;
 
   if (issuerUrl === undefined || issuerUrl === '') {
-    throw new OrganizationConfigError(`falta ${prefix}_ISSUER_URL (o TE_API_BASE_URL)`);
+    throw new OrganizationConfigError(`missing ${prefix}_ISSUER_URL (or TE_API_BASE_URL)`);
   }
   if (verifierUrl === undefined || verifierUrl === '') {
-    throw new OrganizationConfigError(`falta ${prefix}_VERIFIER_URL (o TE_API_BASE_URL)`);
+    throw new OrganizationConfigError(`missing ${prefix}_VERIFIER_URL (or TE_API_BASE_URL)`);
   }
 
   // El portal es opcional, pero **a medias no**: con el `client_id` y sin el
@@ -368,7 +384,7 @@ export function getOrganizations(): ReadonlyMap<string, OrganizationConfig> {
 
   if (organizations.size === 0) {
     throw new OrganizationConfigError(
-      'no hay ninguna organización declarada: falta CRM_ORG_<SLUG>_ID (ver .env.example)',
+      'no organisation is declared: CRM_ORG_<SLUG>_ID is missing (see .env.example)',
     );
   }
 
@@ -382,7 +398,7 @@ export function getOrganizations(): ReadonlyMap<string, OrganizationConfig> {
       const owner = seen.get(host);
       if (owner !== undefined) {
         throw new OrganizationConfigError(
-          `el host ${host} está declarado en dos organizaciones (${owner} y ${organization.orgId})`,
+          `host ${host} is declared by two organisations (${owner} and ${organization.orgId})`,
         );
       }
       seen.set(host, organization.orgId);
@@ -434,7 +450,7 @@ export function findOrganizationByHost(
 export function getOrganization(orgId: string): OrganizationConfig {
   const organization = getOrganizations().get(orgId);
   if (organization === undefined) {
-    throw new OrganizationConfigError(`la organización ${orgId} no está declarada en el entorno`);
+    throw new OrganizationConfigError(`organisation ${orgId} is not declared in the environment`);
   }
   return organization;
 }
@@ -461,8 +477,8 @@ export function getActiveOrganization(): OrganizationConfig {
   const [only] = [...organizations.values()];
   if (organizations.size !== 1 || only === undefined) {
     throw new OrganizationConfigError(
-      'esta dirección no corresponde a ninguna organización declarada, y hay varias: ' +
-        'entra por el dominio de la organización (CRM_ORG_<SLUG>_DOMAIN) o fija CRM_ACTIVE_ORG_ID',
+      'this address matches no declared organisation, and there is more than one: ' +
+        'come in through the organisation domain (CRM_ORG_<SLUG>_DOMAIN) or set CRM_ACTIVE_ORG_ID',
     );
   }
   return only;
