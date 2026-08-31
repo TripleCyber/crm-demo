@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { buildDidDocument } from '@/lib/did-document';
+import { resolveDidDocument } from '@/lib/did-document';
 import { findOrganizationByHost, OrganizationConfigError } from '@/lib/organizations';
 
 /**
@@ -43,6 +43,19 @@ import { findOrganizationByHost, OrganizationConfigError } from '@/lib/organizat
  * el resto a partir del dominio declarado de cada organización, y convierte el
  * 404 del host desconocido en una línea explícita en vez de en la consecuencia
  * accidental de que falte un fichero.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LAS CLAVES SALEN DE te-api, Y ESTA RUTA NO PUEDE FALLAR POR ELLO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Desde el 2026-08-30 el contenido lo resuelve `resolveDidDocument`, que
+ * pregunta a te-api (`GET /v1/trust/did-documents/:host`) y **une** lo que diga
+ * con la lista fija que este módulo publicaba antes. El porqué largo —y las
+ * tres reglas del respaldo— están en `@/lib/did-document.ts`; lo que hay que
+ * saber aquí es que esa función **no lanza nunca** y siempre devuelve un
+ * documento con claves dentro. Un 500 en esta ruta rompería la verificación de
+ * todas las credenciales ya emitidas de este dominio, así que la ruta no tiene
+ * ningún camino que dependa de que te-api esté en pie.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  *  UN HOST QUE NO ES DE NADIE DEVUELVE 404. NUNCA EL DOCUMENTO DE OTRO
@@ -105,17 +118,41 @@ export async function GET(request: Request): Promise<NextResponse> {
     return notAvailable(404, 'not_found');
   }
 
-  return NextResponse.json(buildDidDocument(organization.domain), {
+  const resolved = await resolveDidDocument(organization, organization.domain);
+
+  return NextResponse.json(resolved.document, {
     headers: {
       // `NextResponse.json` ya pone `application/json`, pero se deja escrito:
       // sin este `content-type` el documento no resuelve, y es lo primero que
       // rompería si alguien cambiara la forma de responder.
       'content-type': 'application/json; charset=utf-8',
-      // Cinco minutos. Es un documento que casi nunca cambia y que la cartera
-      // pide en cada verificación, pero cuando cambia —una rotación de clave—
-      // hay credenciales que dejan de verificar mientras dure la caché. Cinco
-      // minutos es poco para una rotación y mucho para el tráfico.
-      'cache-control': 'public, max-age=300',
+      // Cinco minutos cuando las claves vienen de te-api. Es un documento que
+      // casi nunca cambia y que la cartera pide en cada verificación, pero
+      // cuando cambia —una rotación— hay credenciales que dejan de verificar
+      // mientras dure la caché: cinco minutos es poco para una rotación y mucho
+      // para el tráfico.
+      //
+      // Un minuto cuando NO vienen de te-api, y ése es el motivo de que haya
+      // dos números. Un documento servido del suelo puede estar **de menos**:
+      // le faltaría la clave propia de la organización si te-api la tuviera y
+      // no hubiera podido decirlo. Fijar eso cinco minutos en cada caché
+      // intermedia alarga el hueco justo en el caso en el que ya vamos ciegos.
+      'cache-control':
+        resolved.source === 'te-api' ? 'public, max-age=300' : 'public, max-age=60',
+      // ── De dónde salió esto ────────────────────────────────────────────
+      //
+      // Los tres casos producen un 200 con un documento de aspecto impecable, y
+      // lo único que los distingue es qué claves lleva dentro. Sin estas tres
+      // cabeceras, «¿por qué no verifica esta credencial?» se contesta
+      // adivinando; con ellas, un `curl -I` lo dice.
+      //
+      // Van en cabecera y NO dentro del documento a propósito: el cuerpo es un
+      // documento DID y su forma la fija la especificación. Un campo nuestro
+      // ahí dentro es un campo que algún resolvedor estricto puede rechazar, y
+      // el precio de equivocarse es que la cartera no verifique nada.
+      'x-te-did-source': resolved.source,
+      'x-te-did-keys': String(resolved.keyCount),
+      'x-te-did-age': String(resolved.ageSeconds),
     },
   });
 }

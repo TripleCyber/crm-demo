@@ -3,16 +3,30 @@ import 'server-only';
 import type { MessageKey, Translator } from '@/i18n/translate';
 
 import { getB2bToken, invalidateB2bToken } from './b2b-token';
+import type { PublicJwk } from './did-document';
 import type { OrganizationConfig } from './organizations';
 
 /**
- * El cliente de `/v1/b2b/` de te-api.
+ * El cliente de te-api.
  *
  * **Es la única puerta de salida del CRM hacia TripleEnable.** No hay ningún
  * otro `fetch` a un servicio nuestro en este proyecto, y en particular no hay
  * ninguno a walt.id: la credencial la construye y la firma te-api, y la recoge
  * la cartera del titular hablando directamente con el emisor. El CRM sólo pide
  * la oferta y pinta el enlace.
+ *
+ * ## Dos clases de llamada, y la diferencia importa
+ *
+ * Casi todo va por `/v1/b2b/` con el token M2M de la organización, y de eso se
+ * encarga `callB2b`. La excepción es **una**, `fetchOrgDidKeys`, que pide
+ * `GET /v1/trust/did-documents/:host`: una ruta **pública y sin token**, porque
+ * lo que devuelve es el documento DID que la cartera de cualquier titular
+ * consulta antes de guardar una credencial (ver `src/routes/trust-did.ts` de
+ * te-api). Pedirle un token sería pedírselo a la web abierta.
+ *
+ * Que no lleve token no es sólo una comodidad: es lo que hace que el
+ * `did.json` —que sostiene la verificación de TODO lo ya emitido— no dependa
+ * de que Logto esté en pie.
  *
  * ## El 404 de te-api no significa «no existe»
  *
@@ -396,6 +410,191 @@ export async function fetchPresentationStatus(
     `/v1/b2b/presentations/${encodeURIComponent(presentationId)}`,
     { method: 'GET' },
   );
+}
+
+/**
+ * Cuánto se espera a te-api por el documento DID. **Dos segundos y se corta.**
+ *
+ * No es el mismo problema que emitir. Una emisión la está mirando un empleado y
+ * puede esperar; este documento lo pide **la cartera en mitad de una
+ * verificación**, así que la respuesta lenta y la respuesta ausente valen lo
+ * mismo para quien espera. Se corta pronto y se sirve lo que haya —la caché
+ * caliente, o el suelo—, que es lo que `@/lib/did-document.ts` hace con el
+ * `null` de aquí.
+ */
+const DID_KEYS_TIMEOUT_MS = 2_000;
+
+/**
+ * `GET /v1/trust/did-documents/:host` — **las claves publicables de una
+ * organización, según te-api.**
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ESTA RUTA ES EL CONTRATO, Y NO ES `GET /v1/b2b/keys`
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Las dos leen `te.org_key` y las dos existen, pero contestan preguntas
+ * distintas y sólo una es la de aquí:
+ *
+ *  · `/v1/b2b/keys` es **la consola**: usa `listAllKeys`, o sea que devuelve
+ *    también **las revocadas**, más el historial, más las cuentas atrás. Quien
+ *    la usara para componer un `did.json` tendría que filtrar `revoked` y
+ *    reordenar por estado **aquí**, duplicando `listPublishableKeys` — y el día
+ *    que las dos copias discrepen, lo que se publica es una clave revocada. La
+ *    revocación es la operación de emergencia; no puede depender de que este
+ *    repositorio recuerde filtrar.
+ *  · `/v1/trust/did-documents/:host` está escrita para esto, lo dice en su
+ *    cabecera —«quien sirva el documento pide esto»— y ya viene filtrada
+ *    (nada revocado), ordenada (la activa primera) y montada.
+ *
+ * Y además es **pública**: el `did.json` sigue saliendo aunque Logto no dé
+ * tokens.
+ *
+ * ## Qué se comprueba antes de creerse la respuesta
+ *
+ *  1. **Que el `id` es el DID que se pidió.** Es la línea que impide que un
+ *     te-api mal configurado —o algo puesto en medio— haga que este dominio
+ *     publique las claves de otra organización.
+ *  2. **Que ningún JWK trae `d`.** te-api ya no la deja salir, pero este
+ *     módulo es el último salto antes de la web abierta y la consecuencia de
+ *     que se cuele es regalar la capacidad de emitir.
+ *  3. **Que cada JWK está completo** (`x` **y** `y`). La cartera descarta en
+ *     silencio la clave EC a la que le falte un componente (`Jwk.kt`), y el
+ *     síntoma —`NO_PUBLISHED_KEY`— no se parece a «te falta un campo». Lo que
+ *     no encaja se descarta **gritando en el log**, nunca callando.
+ *
+ * Devuelve `null` cuando no hay respuesta útil, y ahí caben cosas muy
+ * distintas —te-api caído, tarda, 404 porque la organización todavía no tiene
+ * clave propia, 404 porque está suspendida—. **A propósito no se distinguen**:
+ * el 404 de te-api es el mismo cuerpo para todas, y quien llama tiene que hacer
+ * lo mismo en todos los casos (servir el suelo) o se queda sin documento.
+ */
+export async function fetchOrgDidKeys(
+  organization: OrganizationConfig,
+  expectedDid: string,
+  host: string,
+): Promise<readonly PublicJwk[] | null> {
+  // `issuerUrl` y no `verifierUrl`: este documento contesta «quién firmó», que
+  // es la mitad de emitir. Hoy son la misma base; el día que se separen, la
+  // identidad del emisor vive con el emisor.
+  const url = `${organization.issuerUrl}/v1/trust/did-documents/${encodeURIComponent(host)}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      // La caché la lleva `@/lib/did-document.ts`, que es quien sabe qué se
+      // puede servir viejo y qué no. Dos cachés encima serían dos ventanas de
+      // rotación sumadas, y la de aquí no se puede inspeccionar desde fuera.
+      cache: 'no-store',
+      signal: AbortSignal.timeout(DID_KEYS_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // Caído, DNS, TLS o el corte de los dos segundos. Es una línea de log y no
+    // un error que suba: el documento se sirve igual, con el suelo.
+    console.warn('[crm] te-api no contestó por el documento DID', {
+      orgId: organization.orgId,
+      host,
+      reason: error instanceof Error ? error.message : 'desconocido',
+    });
+    return null;
+  }
+
+  if (!response.ok) {
+    console.warn('[crm] te-api rechazó el documento DID', {
+      orgId: organization.orgId,
+      host,
+      status: response.status,
+    });
+    return null;
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    console.error('[crm] te-api devolvió un documento DID ilegible', {
+      orgId: organization.orgId,
+      host,
+    });
+    return null;
+  }
+
+  return readDidDocumentKeys(payload, expectedDid, organization.orgId);
+}
+
+/** Las claves de un documento DID de te-api, o `null` si no es de fiar. */
+function readDidDocumentKeys(
+  payload: unknown,
+  expectedDid: string,
+  orgId: string,
+): readonly PublicJwk[] | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const document = payload as Record<string, unknown>;
+
+  // ── La comprobación 1: el documento tiene que ser el que se pidió ────────
+  //
+  // Sin esto, cualquier cosa que conteste en esa URL puede hacer que este
+  // dominio publique un documento que dice ser de otro DID. La cartera lo
+  // rechazaría —el `id` no es el que resolvió— pero para entonces ya habríamos
+  // dejado de publicar las claves buenas.
+  if (document['id'] !== expectedDid) {
+    console.error('[crm] te-api devolvió un documento DID de otro DID', {
+      orgId,
+      expected: expectedDid,
+      received: typeof document['id'] === 'string' ? document['id'] : '(sin id)',
+    });
+    return null;
+  }
+
+  const methods = document['verificationMethod'];
+  if (!Array.isArray(methods)) return null;
+
+  const keys: PublicJwk[] = [];
+  for (const method of methods) {
+    if (typeof method !== 'object' || method === null) continue;
+    const jwk = readPublicJwk((method as Record<string, unknown>)['publicKeyJwk']);
+    if (jwk === null) {
+      // Gritar y seguir. Descartar una clave en silencio es exactamente la
+      // trampa que este proyecto ya pisó una vez, y el síntoma sale semanas
+      // después en el teléfono de otra persona.
+      console.error('[crm] se descartó una clave del documento DID de te-api', {
+        orgId,
+        did: expectedDid,
+      });
+      continue;
+    }
+    keys.push(jwk);
+  }
+
+  // Cero claves útiles es lo mismo que no haber preguntado. Nunca se devuelve
+  // una lista vacía: quien llama la uniría con el suelo y no se enteraría de
+  // que te-api no dijo nada.
+  return keys.length === 0 ? null : keys;
+}
+
+/** Un JWK público completo, o `null`. Ver las comprobaciones 2 y 3 de arriba. */
+function readPublicJwk(value: unknown): PublicJwk | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const jwk = value as Record<string, unknown>;
+
+  // La comprobación 2. Va la primera y no se negocia: una clave con parte
+  // privada no se «arregla» quitándosela, se tira y se grita.
+  if ('d' in jwk) return null;
+
+  // La comprobación 3. `x` e `y` los dos, o la cartera la descarta callando.
+  const { x, y, kid } = jwk;
+  if (typeof x !== 'string' || x === '') return null;
+  if (typeof y !== 'string' || y === '') return null;
+  if (typeof kid !== 'string' || kid === '') return null;
+
+  // Las cuatro constantes son las que te-api genera hoy (`generateSigningKey`)
+  // y las únicas que la cartera sabe verificar. Se exigen en vez de copiarse
+  // para que una clave de otra curva no salga publicada como si fuera P-256:
+  // saldría en el log de arriba, que es donde se quiere que salga.
+  if (jwk['kty'] !== 'EC' || jwk['crv'] !== 'P-256') return null;
+  if (jwk['alg'] !== 'ES256' || jwk['use'] !== 'sig') return null;
+
+  return { kty: 'EC', crv: 'P-256', x, y, kid, alg: 'ES256', use: 'sig' };
 }
 
 async function callB2b<T>(
