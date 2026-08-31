@@ -34,6 +34,7 @@ producción.
 | ⛔ | Estado real **de la credencial y del vínculo**: si el titular aceptó la oferta o si tiene cartera enrolada. te-api no lo cuenta, así que la ficha dice «ofrecida» —lo que hizo el banco— y **no pinta ninguna insignia** de «credencial activa» ni de «perfil verificado» |
 | ✅ | Botón «pedir credencial» → `POST /v1/b2b/presentations` de te-api → QR de la petición OID4VP, y en la misma pantalla lo que el titular enseñó. **Probado de punta a punta el 2026-08-29** con un guion que hace de cartera: `pending` → la cartera presenta → `verified` con `given_name` y `family_name`, y sólo con ésos |
 | ✅ | **La vía telefónica**: «está al teléfono · avisar a su móvil» → la misma presentación **más `POST /v1/b2b/wakeups`**, el timbre. Es lo que hace que la comprobación sirva para una llamada, donde el cliente no ve la pantalla del agente. **Probado el 2026-08-29**: la llamada sale con `kind: identity` y el `actor` del empleado, te-api contesta `{ wakeupId, expiresAt }` y anota `b2b.wakeup_created`. **Ningún teléfono ha sonado todavía** — ver «Lo que falta para que suene un teléfono» |
+| ✅ | **Consola bilingüe.** El original está en **inglés** y el castellano es una traducción; lo elige quien mira la pantalla y no el dominio, se guarda en una cookie y **no hace falta reconstruir la imagen** para cambiarlo. Ver «El idioma» |
 | ⛔ | **Revocación** (la otra mitad de F4c) |
 | ✅ | `/.well-known/did.json`, **uno por organización y elegido por el `Host`** (`src/app/.well-known/did.json/route.ts`). Era un estático en `public/`, que se sirve por camino y no por `Host`: con tres dominios devolvía el documento del banco en los tres. Un `Host` que no es de ninguna organización devuelve **404**, nunca el de otra. Lleva **dos** claves, la del emisor desplegado y la del local, porque durante una rotación las dos tienen que valer; el porqué de cada campo está en `src/lib/did-document.ts` |
 | ⛔ | Que los documentos de **Seguros Aurora y Clínica San Rafael** se descarguen de sus dominios. El documento ya lo sirve esta aplicación; lo que falta es **declarar los dos dominios en Coolify**, que es lo que dispara el certificado — ver [`DOMINIOS.md`](../docs/fases/DOMINIOS.md) §4 |
@@ -53,6 +54,46 @@ existe para que la cabecera del banco viva en un fichero aparte de la del
 portal. Un `if` en una cabecera compartida se olvida; un enlace a «Clientes»
 pintado en la pantalla de un titular es un enlace que alguien va a pulsar.
 
+## El idioma
+
+**El original es el inglés.** `src/i18n/messages/en.ts` es el catálogo del que
+sale el tipo `MessageKey`, así que una clave que no exista allí no compila;
+`es.ts` es una **traducción** y todo lo suyo es opcional. Una clave sin traducir
+cae al inglés — no revienta y **no pinta nunca el nombre de la clave**.
+
+> ⚠ Este README está escrito en castellano y **cita los textos de pantalla en
+> castellano**. Son la traducción, no el original: por defecto la consola se ve
+> en inglés, y lo que sale ahí es lo que dice `messages/en.ts`.
+
+**Lo elige quien mira la pantalla, y no el dominio.** El dominio es la identidad
+de la organización (`src/lib/request-organization.ts`) y ésa es otra pregunta:
+de quién es esta consola, frente a en qué idioma la lee quien la tiene delante.
+Atarlas obligaría a un dominio por idioma. Tampoco va en la ruta —nada de
+`/en/customers`—: un segmento delante cambiaría el enlace que un agente pega en
+un chat para pasar una verificación, el `redirect_uri` declarado en Logto y
+`/.well-known/did.json`, que tiene que responder en la raíz del dominio o la
+cartera no resuelve el `did:web`.
+
+Así que va en **una cookie**, `crm_locale`, que escribe el selector de la barra
+lateral y de la cabecera del portal. Sin cookie se negocia con `Accept-Language`
+del navegador, y si tampoco dice nada, inglés. **No hay ninguna variable de
+entorno del idioma y no hay que reconstruir nada para cambiarlo.**
+
+| Fichero | Qué es |
+|---|---|
+| `src/i18n/config.ts` | Los idiomas, la cookie, la negociación de `Accept-Language` |
+| `src/i18n/messages/en.ts` · `es.ts` | El catálogo original y su traducción |
+| `src/i18n/translate.tsx` | El traductor: `t()`, `t.rich()` y el respaldo al inglés |
+| `src/i18n/server.ts` · `client.tsx` | Cómo lo consigue el servidor (cookie) y el navegador (contexto) |
+| `src/i18n/actions.ts` | La acción que escribe la cookie |
+| `src/components/LocaleSwitch.tsx` | El selector, en las dos secciones |
+
+Lo que **no** se traduce, y a propósito: los comentarios del código
+(`AGENTS.md` §0.5), los mensajes de `console.error` —diagnóstico interno, que se
+lee junto a esos comentarios— y los errores de configuración que lanza `src/lib`
+(«falta esta variable»), que están en inglés fijo porque los lee quien despliega
+y van al lado de lo que conteste Postgres, que también viene en inglés.
+
 ## Las pantallas de la consola, y por qué son cinco y no una
 
 **Cada acción tiene su dirección.** Es la estructura que dibuja el artifact
@@ -71,7 +112,7 @@ formulario largo donde lo que se leía era el desplegable.
 | `/verifications/<presentationId>` | **Seguir** una comprobación: el estado en grande —con el titular, su número de cliente y el plazo corriendo—, el QR o el enlace, la línea de tiempo y el recibo | C2 · C3 |
 | `/verifications` | El registro de comprobaciones de la organización | — |
 | `/customers/new` | Alta de cliente | — |
-| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, portal), cómo se elige la organización, y una comprobación real de la base. **Es el único sitio donde se dice el nombre de una variable de entorno** | — |
+| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, portal), cómo se elige la organización, **de dónde sale el idioma**, y una comprobación real de la base. **Es el único sitio donde se dice el nombre de una variable de entorno** | — |
 
 Que el seguimiento tenga dirección propia es lo que arregla tres cosas de golpe:
 recargar la pestaña ya no pierde la ceremonia en curso, el enlace se le puede
@@ -132,7 +173,7 @@ situación y no por la tecnología:
 
 | Botón | Cuándo | Cómo se entera el titular |
 |---|---|---|
-| **Está al teléfono · avisar a su móvil** | Pedro tiene a Juan al aparato. Juan **no ve esta pantalla** | Le suena el móvil: `POST /v1/b2b/wakeups` |
+| **Está al teléfono · avisar a su móvil** | El agente tiene al titular al aparato. El titular **no ve esta pantalla** | Le suena el móvil: `POST /v1/b2b/wakeups` |
 | **Está delante · enseñar QR** | El cliente está en el mostrador mirando la pantalla del agente | Escanea el QR con su cartera |
 
 Los dos abren **la misma sesión de presentación** y se consultan igual. Lo único
@@ -191,8 +232,9 @@ teléfono» en vez de pintar «este cliente no tiene la app», que es una frase 
 la respuesta no permite escribir.
 
 **2 · El `actor` es atribución, no autenticación.** te-api no lo verifica y no
-decide nada con él. Sirve para que en el móvil de Juan ponga «Pedro Ramírez,
-agente 4471» y para el diario. La ficha lo pinta debajo de los botones a
+decide nada con él. Sirve para que en el móvil del titular ponga el nombre y el
+número del empleado que le está llamando —`CRM_ACTIVE_AGENT_NAME` y
+`CRM_ACTIVE_AGENT_ID`— y para el diario. La ficha lo pinta debajo de los botones a
 propósito: el agente tiene que poder decir en voz alta el mismo nombre que el
 cliente está viendo en la pantalla del móvil, que es lo que convierte la
 comprobación en algo que sirve contra quien llama diciendo que es del banco.
@@ -253,7 +295,7 @@ fuentes, en orden:
 | La lista de **tipos** | `GET /v1/b2b/organization` de te-api. Ya era así |
 | Los **atributos** de cada tipo, y sus rótulos | Configuración: `CRM_TYPE_<CLAVE>_CLAIMS` |
 | Qué va **marcado** al abrir | `CRM_TYPE_<CLAVE>_DEFAULT_CLAIMS`, o el mínimo de identidad del catálogo |
-| El **rótulo** de un tipo | `CRM_TYPE_<CLAVE>_LABEL`, o el `type_key` tal cual |
+| El **rótulo** de un tipo | El catálogo de mensajes (`credentialTypes.<type_key>`), luego `CRM_TYPE_<CLAVE>_LABEL`, y si no, el `type_key` tal cual |
 | El nombre del **banco** | `CRM_ORG_<SLUG>_NAME`, vía la organización del dominio de la petición |
 
 Los atributos salen de configuración **y no del padrón porque te-api no los
@@ -273,13 +315,17 @@ Lo único que sigue siendo código de este banco es el **catálogo de atributos*
 atributo sólo se puede poner en una credencial si hay una columna del padrón de
 donde sacarlo. Declarar un atributo en un `.env` no crea la columna — y cuando `policy_number` hizo falta de verdad (2026-08-30) salió en `db/005_sector_reference.sql`, no en una variable.
 
-**Comprobado el 2026-08-29** declarando `CRM_TYPE_CLIENTE_LABEL=Cliente del
-banco`, `CRM_TYPE_CLIENTE_CLAIMS=given_name family_name account_last4` y
-`CRM_TYPE_CLIENTE_DEFAULT_CLAIMS=account_last4`: los dos paneles pasaron a
-rotular «Cliente del banco · cliente», `customer_since` desapareció de las
-casillas, la marca por defecto se movió a `account_last4`, y pedir
-`customer_since` por la API devolvió `400 la credencial «Cliente del banco» de
-este cliente no lleva customer_since`. **Sin tocar una línea de código.**
+**Comprobado el 2026-08-29** declarando `CRM_TYPE_CLIENTE_CLAIMS=given_name
+family_name account_last4` y `CRM_TYPE_CLIENTE_DEFAULT_CLAIMS=account_last4`:
+`customer_since` desapareció de las casillas, la marca por defecto se movió a
+`account_last4`, y pedir `customer_since` por la API devolvió un 400 diciendo
+que la credencial de este cliente no lo lleva. **Sin tocar una línea de código.**
+
+> El rótulo ya **no** entra en esa comprobación. `cliente`, `asegurado` y
+> `paciente` los rotula el catálogo de mensajes, que es lo único que puede estar
+> en dos idiomas: `CRM_TYPE_CLIENTE_LABEL` puesto en el entorno hoy no hace
+> nada. La variable sigue sirviendo para un `type_key` que el catálogo no
+> conozca, que es para lo que se puso.
 
 ### El canal sí es un dato del CRM, y por eso se queda
 
@@ -510,12 +556,23 @@ npm run dev                         # http://localhost:3000
 prueba (13 clientes de Banco Demo, 10 de Seguros Aurora, 10 de Clínica San
 Rafael). Es idempotente. `CRM_SEED_ORG=<SLUG>` limita a una.
 
+Los nombres y los correos sembrados están **en inglés** desde el 2026-08-30; los
+identificadores, los teléfonos y las referencias de sector **no cambiaron**,
+porque el `external_id` viaja como `sub` dentro de cada credencial ya emitida.
+Como la siembra es `on conflict do nothing`, una base con el padrón viejo no se
+actualiza sola: hay que borrar esas filas por su `external_id` y volver a
+sembrar.
+
 Dos direcciones, no una:
 
 ```
 http://localhost:3000/customers     la consola de agentes
 http://localhost:3000/portal        el portal del cliente
 ```
+
+Las dos abren **en inglés** salvo que el navegador pida otra cosa en
+`Accept-Language`. El selector de la barra lateral —y el de la cabecera del
+portal— cambian al castellano sin recargar nada más que la pantalla.
 
 **En `localhost` a secas la organización sale de `CRM_ACTIVE_ORG_ID`**, porque
 `localhost` no es el dominio de nadie. Para probar las tres sin reiniciar,
@@ -537,9 +594,10 @@ curl -s -H "Host: bank.demo-te.com" http://127.0.0.1:3000/.well-known/did.json
 
 El portal necesita además la aplicación de Logto y el `portal_client_id` en el
 padrón de te-api — ver «El portal del cliente» más arriba. Sin ellos el botón de
-entrar se queda deshabilitado y la pantalla lo dice **en el idioma del titular**,
-en vez de mandar a nadie a un error de Logto: el nombre de la variable que falta
-está en `/diagnostics`, que es la pantalla de quien puede ponerla.
+entrar se queda deshabilitado y la pantalla lo dice **con las palabras de un
+titular**, no con las de quien despliega, en vez de mandar a nadie a un error de
+Logto: el nombre de la variable que falta está en `/diagnostics`, que es la
+pantalla de quien puede ponerla.
 
 Un Postgres de usar y tirar, si no hay otro a mano:
 
@@ -604,7 +662,7 @@ importarlos desde un componente de cliente **no compila**.
 | `CRM_ORG_<SLUG>_M2M_SECRET` | Su secreto. **Sólo en el servidor** |
 | `CRM_ORG_<SLUG>_ISSUER_URL` | Base de te-api para emitir. Opcional |
 | `CRM_ORG_<SLUG>_VERIFIER_URL` | Base de te-api para verificar. Opcional |
-| `CRM_TYPE_<CLAVE>_LABEL` | Cómo se rotula ese tipo de credencial. Sin él, el `type_key` tal cual. `<CLAVE>` es el `type_key` en mayúsculas con `[^A-Z0-9]` → `_` |
+| `CRM_TYPE_<CLAVE>_LABEL` | Cómo se rotula un tipo de credencial **que el catálogo de mensajes no conozca**. Para `cliente`, `asegurado` y `paciente` no hace nada: los rotula el catálogo, que es lo único que puede estar en dos idiomas. Sin ninguno de los dos, el `type_key` tal cual. `<CLAVE>` es el `type_key` en mayúsculas con `[^A-Z0-9]` → `_` |
 | `CRM_TYPE_<CLAVE>_CLAIMS` | Qué atributos lleva ese tipo, separados por espacios o comas. Sin él, todos los del catálogo del padrón |
 | `CRM_TYPE_<CLAVE>_DEFAULT_CLAIMS` | Cuáles van marcados al abrir la comprobación. Sin él, el mínimo de identidad del catálogo |
 | `CRM_SEED_ORG` | Sólo para `npm run db:seed`: limita la siembra a un slug. Sin él siembra todas las declaradas |
@@ -614,6 +672,10 @@ importarlos desde un componente de cliente **no compila**.
 | `CRM_ACTIVE_AGENT_NAME` | El nombre del agente, igual. Sin estas dos al titular le sale «Agente de \<la organización\>», compuesto con su nombre — no se inventa un nombre de persona |
 | `CRM_ORG_<SLUG>_PORTAL_CLIENT_ID` | La aplicación **Traditional Web** del portal de esa organización. Es además el `portal_client_id` que te-api tiene en su padrón |
 | `CRM_ORG_<SLUG>_PORTAL_CLIENT_SECRET` | Su secreto. **Sólo en el servidor.** Va junta con la de arriba: una sin la otra es un error de configuración y se ve al arrancar |
+
+**El idioma no está en esta tabla, y no falta:** no es una variable de entorno.
+Lo elige quien mira la pantalla, se guarda en la cookie `crm_locale` y por
+defecto se negocia con `Accept-Language`. Ver «El idioma».
 | `CRM_ORG_<SLUG>_PORTAL_LINK_TYPE` | El `type` que el portal declara al vincular (`cliente`). Opcional |
 | `CRM_ORG_<SLUG>_PORTAL_BASE_URL` | La dirección pública del portal **de esa organización**. De aquí sale su `redirect_uri`, que Logto compara carácter a carácter con el declarado en **su** aplicación. Con tres dominios hace falta por organización |
 | `CRM_PORTAL_BASE_URL` | El respaldo de la anterior, y lo que se usa en local (las tres viven en `localhost:3000`). **Nunca sale de la cabecera `Host`** |
@@ -670,7 +732,10 @@ de la columna es el nombre del claim**, y un verificador que recibe
   `alreadyLinked: true`, una sola fila en `te.org_subject`, mismo `linkId`.
 - **De la verificación sólo vuelve lo que se pidió.** Se hizo presentar a la
   cartera **las cuatro** divulgaciones habiendo pedido sólo `given_name`, y la
-  respuesta de te-api trajo `{ "given_name": "Teófilo" }` y nada más.
+  respuesta de te-api trajo un solo claim, `given_name`, y nada más. (El valor
+  concreto era el del padrón de entonces: los nombres sembrados pasaron al
+  inglés el 2026-08-30 y los identificadores no, que es lo que ata la
+  credencial.)
 - **Un identificador de cliente con una expresión regular dentro no cuela.** Se
   pidió una presentación con `subjectReference = ".*"`: te-api construyó la
   política del verificador con el valor escapado (`\.\*`), la credencial real
