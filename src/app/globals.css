@@ -240,6 +240,66 @@ a {
   color: #f3c98b;
 }
 
+/* ═════════════════════════════════════════════════════════════════════════
+ *  EL SELECTOR DE IDIOMA
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * Vive en dos sitios oscuros —el pie de la barra de la consola y la cabecera
+ * del portal— y por eso lleva un solo juego de colores, claros sobre fondo
+ * oscuro. Es deliberadamente pequeño: se usa una vez y no compite con la
+ * navegación, que es lo que se pulsa todo el día.
+ *
+ * Los botones son botones de verdad y no enlaces: esto envía un formulario que
+ * escribe una cookie, y un `<a>` que cambia el estado del servidor con un GET
+ * es lo que hace que un rastreador cambie el idioma de la sesión de alguien.
+ */
+.locale-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px 14px;
+}
+
+.locale-switch-legend {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(234, 241, 248, 0.45);
+}
+
+.locale-switch-options {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* `all: unset` no: hay que apagar sólo lo que estorba, para que el foco del
+   teclado siga saliendo del navegador y el botón siga siendo pulsable. */
+.locale-switch button {
+  width: auto;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(234, 241, 248, 0.7);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.locale-switch button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.locale-switch button.on {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+  cursor: default;
+}
+
 /* La zona de trabajo. El ancho máximo es el de una tabla de seis columnas que
    se lee sin barrer la cabeza de lado a lado. */
 main {
@@ -2041,6 +2101,18 @@ dl.facts dt .mono,
   color: rgba(255, 255, 255, 0.75);
 }
 
+/* El selector en la cabecera del portal: sin su rótulo y sin el hueco vertical
+   de la barra lateral, que aquí descuadraría la línea base de la cabecera.
+   El `margin-left` lo pone ya `.org`, que es quien empuja hacia la derecha. */
+.topbar .locale-switch {
+  padding: 0;
+  margin-left: 0;
+}
+
+.topbar .locale-switch-legend {
+  display: none;
+}
+
 main.narrow {
   max-width: 640px;
 }
@@ -2111,6 +2183,17 @@ main.narrow {
   .rail-agent {
     border-top: none;
     padding: 0;
+  }
+
+  /* En fila, el selector pierde su rótulo: la barra es una cabecera de una
+     línea y «Idioma» delante de dos botones de dos letras ocupa más que lo
+     que rotula. Los botones conservan su etiqueta accesible. */
+  .locale-switch {
+    padding: 0;
+  }
+
+  .locale-switch-legend {
+    display: none;
   }
 
   main.workspace {

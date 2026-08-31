@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 
+import { LocaleProvider } from '@/i18n/client';
+import { getLocale, getTranslator } from '@/i18n/server';
 import { getRequestOrganization } from '@/lib/request-organization';
 
 import './globals.css';
@@ -16,14 +18,15 @@ import './globals.css';
  * afirma el nombre de ninguna.
  */
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
   try {
     const organization = await getRequestOrganization();
     return {
       title: organization.displayName,
-      description: `Consola de agentes y portal de clientes de ${organization.displayName}`,
+      description: t('app.description', { organization: organization.displayName }),
     };
   } catch {
-    return { title: 'CRM', description: 'Consola de agentes y portal de clientes' };
+    return { title: t('app.fallbackTitle'), description: t('app.fallbackDescription') };
   }
 }
 
@@ -42,11 +45,21 @@ export async function generateMetadata(): Promise<Metadata> {
  * enlace que un titular va a pulsar. La separación estructural —dos grupos de
  * rutas, dos disposiciones, dos sesiones distintas— hace que ese enlace no
  * exista en vez de que esté escondido.
+ *
+ * Lo que sí es de la raíz es **el idioma**, y por dos motivos que no se pueden
+ * repartir: el atributo `lang` del documento es de aquí —lo lee el corrector
+ * ortográfico del navegador y el lector de pantalla para elegir voz— y el
+ * contexto que da el idioma a los componentes de navegador tiene que envolver
+ * las dos secciones, porque las dos tienen.
  */
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+
   return (
-    <html lang="es">
-      <body>{children}</body>
+    <html lang={locale}>
+      <body>
+        <LocaleProvider locale={locale}>{children}</LocaleProvider>
+      </body>
     </html>
   );
 }
