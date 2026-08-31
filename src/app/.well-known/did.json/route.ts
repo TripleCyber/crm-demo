@@ -120,6 +120,15 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const resolved = await resolveDidDocument(organization, organization.domain);
 
+  // Sin claves no hay documento. te-api no tiene ninguna para esta
+  // organización y tampoco hay caché: todavía no ha encendido su emisión, así
+  // que no tiene identidad de emisor que publicar. Un documento con la lista
+  // vacía la cartera lo daría por bueno y diría «no publica claves», que suena
+  // a error suyo; el 404 dice lo que pasa.
+  if (resolved === null) {
+    return notAvailable(404, 'not_found');
+  }
+
   return NextResponse.json(resolved.document, {
     headers: {
       // `NextResponse.json` ya pone `application/json`, pero se deja escrito:
