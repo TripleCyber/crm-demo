@@ -1,5 +1,6 @@
 import { LocaleSwitch } from '@/components/LocaleSwitch';
 import { getTranslator } from '@/i18n/server';
+import { monogramOf } from '@/lib/brand';
 import { getRequestOrganization } from '@/lib/request-organization';
 
 /**
@@ -13,11 +14,17 @@ import { getRequestOrganization } from '@/lib/request-organization';
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslator();
   let bankName: string;
+  // Vacío mientras no se sepa de quién es la pantalla. Ver la nota del disco
+  // más abajo: una inicial inventada es peor que ninguna.
+  let monogram = '';
   try {
-    // El nombre sale del dominio por el que entró la petición: los tres portales
-    // —banco, aseguradora y clínica— son el mismo despliegue, y la cabecera es
-    // lo primero que el titular lee para saber que está en el sitio correcto.
-    bankName = (await getRequestOrganization()).displayName;
+    // El nombre sale del dominio por el que entró la petición: los cuatro
+    // portales —banco, aseguradora, clínica y comercializadora— son el mismo
+    // despliegue, y la cabecera es lo primero que el titular lee para saber que
+    // está en el sitio correcto.
+    const organization = await getRequestOrganization();
+    bankName = organization.displayName;
+    monogram = monogramOf(organization);
   } catch {
     // El rótulo no puede tumbar la pantalla que explica que falta configuración.
     // Genérico y no el nombre de un banco concreto: si la configuración está
@@ -29,6 +36,17 @@ export default async function PortalLayout({ children }: { children: React.React
   return (
     <>
       <header className="topbar portal">
+        {/*
+          El mismo disco que la barra de la consola, y aquí importa más: el
+          titular llega a esta pantalla desde un enlace y lo primero que tiene
+          que reconocer es de quién es. Decorativo —el nombre va al lado—, así
+          que fuera del árbol de accesibilidad.
+        */}
+        {monogram !== '' && (
+          <span className="brand-mark" aria-hidden="true">
+            {monogram}
+          </span>
+        )}
         <strong>{bankName}</strong>
         <span className="org">{t('portal.header')}</span>
         {/*

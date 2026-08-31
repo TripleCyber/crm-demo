@@ -1,6 +1,7 @@
 import { LOCALE_NAMES } from '@/i18n/config';
 import { getTranslator } from '@/i18n/server';
 import type { Translator } from '@/i18n/translate';
+import { monogramOf } from '@/lib/brand';
 import { query } from '@/lib/db';
 import { didWebOf } from '@/lib/did-document';
 import { getEmployeeSession } from '@/lib/session';
@@ -123,7 +124,7 @@ export default async function DiagnosticsPage() {
           <dt>{t('diagnostics.name')}</dt>
           <dd>{session.organization.displayName}</dd>
           {/*
-            El dominio, porque es lo que ELIGE esta organización. Los tres
+            El dominio, porque es lo que ELIGE esta organización. Los cuatro
             dominios los sirve el mismo despliegue, así que «¿por qué veo el
             padrón de éstos?» se contesta aquí y no adivinando.
           */}
@@ -155,6 +156,32 @@ export default async function DiagnosticsPage() {
               </span>
             ) : (
               <span className="mono">{session.organization.officialNumbers.join(' · ')}</span>
+            )}
+          </dd>
+          {/*
+            La marca, porque es lo único de la configuración de una organización
+            que se ve **sin poder leerse**: si la barra sale azul cuando tenía
+            que salir violeta, lo que hay que saber es si la variable llegó o
+            no. Los colores se pintan además de escribirse — un `#5b3ea6` no le
+            dice a nadie qué color es.
+
+            No es un secreto: es el color de la pantalla que se está mirando.
+          */}
+          <dt>{t('diagnostics.brand')}</dt>
+          <dd>
+            {session.organization.brand === undefined ? (
+              <span className="warn">
+                {t('diagnostics.brandNone')}
+                <span className="mono">CRM_ORG_&lt;SLUG&gt;_BRAND_COLOR</span> y{' '}
+                <span className="mono">CRM_ORG_&lt;SLUG&gt;_BRAND_SURFACE</span>
+              </span>
+            ) : (
+              <span className="mono">
+                <span className="brand-swatch" style={{ background: 'var(--navy)' }} />
+                {session.organization.brand.accent}{' '}
+                <span className="brand-swatch" style={{ background: 'var(--navy-deep)' }} />
+                {session.organization.brand.surface} · {monogramOf(session.organization)}
+              </span>
             )}
           </dd>
           <dt>{t('diagnostics.issuerBase')}</dt>

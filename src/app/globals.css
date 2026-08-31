@@ -21,6 +21,13 @@
  *     verde = comprobado; azul = en curso. La regla está escrita entera en
  *     `src/lib/verification-status.ts`, y aquí sólo se pinta.
  *
+ *     Desde el 2026-08-31 hay una segunda familia, `--navy-*`, que es **la
+ *     marca de la organización** y que una organización puede traer suya
+ *     (`src/lib/brand.ts`). Tampoco es decorativa: dice de quién es esta
+ *     pantalla, que con cuatro empresas sobre el mismo despliegue es un dato.
+ *     Y **no se cruzan**: la marca no puede repintar el rojo del fraude, o el
+ *     agente que cambia de consola deja de poder leer el color.
+ *
  *  3. **La columna de la izquierda no se mueve.** Es el ancla de una
  *     herramienta que se usa ocho horas seguidas.
  */
@@ -39,13 +46,32 @@
   --rule: #dde3ea;
   --rule-soft: #edf0f4;
 
-  /* La marca del banco. El azul profundo es el de la barra; el claro, el de
-     las superficies seleccionadas. */
+  /* ─────────────────────────────────────────────────────────────────────
+     LA FAMILIA DE MARCA · aquí vive el AZUL, pero ya no es «el del banco»
+
+     Estos seis valores son la marca **por defecto**, y desde el 2026-08-31
+     una organización puede traer la suya: `src/lib/brand.ts` redefine estas
+     mismas variables en el `<body>` con lo que declare su
+     `CRM_ORG_<SLUG>_BRAND_COLOR` y `_BRAND_SURFACE`, y ni una regla de esta
+     hoja se entera — siguen leyendo `var(--navy-deep)`.
+
+     Se conserva el nombre `--navy` a propósito, aunque para Larkfield Energy
+     valga un violeta: renombrarlas a `--brand-*` son ciento y pico
+     sustituciones en esta hoja para que el historial deje de poder leerse. El
+     nombre miente un poco; el diff mentiría más.
+
+     ⚠ Los cuatro colores de ESTADO —de aquí abajo— NO son la marca y no se
+     repintan por organización. Ver la nota 2 de la cabecera.
+     ───────────────────────────────────────────────────────────────────── */
   --navy: #0a3a63;
   --navy-deep: #0b2942;
   --navy-line: #17456d;
   --navy-ink: #eaf1f8;
   --navy-tint: #e9f0f7;
+  /* El filo de la sección abierta en la barra: un claro del acento que se ve
+     sobre el fondo oscuro. Estaba escrito a mano en dos sitios y con una barra
+     violeta se quedaba azul, que es justo lo que la marca viene a arreglar. */
+  --navy-mark: #7fb2e0;
 
   /* Los cuatro estados. Ver la nota 2 de arriba. */
   --ok: #12664a;
@@ -129,6 +155,42 @@ a {
   border-bottom: 1px solid var(--navy-line);
 }
 
+/*
+ * EL DISCO DE MARCA · el logotipo que se puede tener el día del alta
+ *
+ * Una organización que se da de alta desde la consola no trae un fichero de
+ * imagen, y hasta que lo traiga esta pantalla tiene que enseñar algo que se
+ * reconozca de lejos. Una o dos letras dentro de un cuadrado redondeado, del
+ * color de la empresa: es lo que hace cualquier herramienta que da de alta
+ * organizaciones, y por la misma razón.
+ *
+ * **Cuadrado redondeado y no círculo**, y no es capricho: dos filas más abajo
+ * `.rail-avatar` es un círculo y es el de una PERSONA. Que una empresa y una
+ * persona no tengan la misma silueta es lo que permite distinguirlas de un
+ * vistazo en una barra que se mira ocho horas.
+ *
+ * En serif, como el nombre que lleva al lado: son la misma marca, y la serif es
+ * la única familia de esta pantalla que no es interfaz.
+ *
+ * El fondo es blanco al 14 %, no un color fijo: así funciona sobre CUALQUIER
+ * superficie que declare una organización sin tener que calcular contraste con
+ * un color que todavía no existe.
+ */
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.14);
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
 /* El nombre del banco en serif: es la única marca de la pantalla y la única
    pieza que no es interfaz. Todo lo demás está en la de sistema. */
 .rail-brand strong {
@@ -144,7 +206,7 @@ a {
   display: block;
   margin-top: 5px;
   font-size: 11.5px;
-  color: rgba(234, 241, 248, 0.6);
+  color: color-mix(in srgb, var(--navy-ink) 60%, transparent);
 }
 
 .rail-org.warn {
@@ -162,7 +224,7 @@ a {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(234, 241, 248, 0.45);
+  color: color-mix(in srgb, var(--navy-ink) 45%, transparent);
 }
 
 .rail-group:first-child {
@@ -175,7 +237,7 @@ a {
   margin-bottom: 2px;
   border-radius: 6px;
   border-left: 2px solid transparent;
-  color: rgba(234, 241, 248, 0.82);
+  color: color-mix(in srgb, var(--navy-ink) 82%, transparent);
   text-decoration: none;
   font-size: 14px;
 }
@@ -189,7 +251,7 @@ a {
    columna oscura un cambio de fondo del 7 % no se ve a un metro de distancia. */
 .rail-nav a.on {
   background: rgba(255, 255, 255, 0.1);
-  border-left-color: #7fb2e0;
+  border-left-color: var(--navy-mark);
   color: #fff;
   font-weight: 600;
 }
@@ -231,7 +293,7 @@ a {
 .rail-agent span {
   display: block;
   font-size: 11.5px;
-  color: rgba(234, 241, 248, 0.6);
+  color: color-mix(in srgb, var(--navy-ink) 60%, transparent);
 }
 
 .rail-agent-warn {
@@ -264,7 +326,7 @@ a {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(234, 241, 248, 0.45);
+  color: color-mix(in srgb, var(--navy-ink) 45%, transparent);
 }
 
 .locale-switch-options {
@@ -281,7 +343,7 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 5px;
   background: transparent;
-  color: rgba(234, 241, 248, 0.7);
+  color: color-mix(in srgb, var(--navy-ink) 70%, transparent);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -2085,6 +2147,43 @@ dl.facts dt .mono,
   font-size: 17px;
 }
 
+/*
+ * La muestra de color de Diagnóstico: un cuadradito del color, delante de su
+ * código. El código hexadecimal no le dice a nadie qué color es, y lo que se
+ * viene a comprobar en esa pantalla es precisamente si la marca llegó.
+ *
+ * Lleva borde propio porque una marca casi blanca sobre papel blanco no se
+ * vería, y entonces la muestra diría lo contrario de lo que va a decir.
+ */
+.brand-swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+/*
+ * El disco en la cabecera del portal. Más pequeño que en la barra —la cabecera
+ * es una línea— y centrado: los demás hijos se alinean por la línea base, y un
+ * cuadrado alineado por su línea base queda colgando.
+ *
+ * El margen negativo recorta el `gap: 24px` de la cabecera a 10 px, y sólo para
+ * este hijo: 24 px es la distancia entre bloques distintos, y el disco y el
+ * nombre son UNA cosa. Cambiar el `gap` de la cabecera los separaría a todos.
+ */
+.topbar .brand-mark {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 0;
+  margin-right: -14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .topbar .org {
   margin-left: auto;
   font-size: 13px;
@@ -2154,6 +2253,22 @@ main.narrow {
   .rail-brand {
     padding: 0;
     border-bottom: none;
+    /* En fila el disco va al lado del nombre, no encima: apilado obligaría a la
+       cabecera a crecer el doble para meter un cuadrado de 34 px. */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .brand-mark {
+    margin-bottom: 0;
+  }
+
+  /* En columna el identificador cuelga debajo del nombre y lleva su hueco; en
+     fila va al lado, y ese hueco lo descuadraría del centro. */
+  .rail-org {
+    margin-top: 0;
   }
 
   .rail-nav {
@@ -2177,7 +2292,7 @@ main.narrow {
 
   .rail-nav a.on {
     border-left-color: transparent;
-    border-bottom-color: #7fb2e0;
+    border-bottom-color: var(--navy-mark);
   }
 
   .rail-agent {

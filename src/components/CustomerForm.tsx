@@ -93,13 +93,13 @@ export function CustomerForm() {
 
       {/*
         ═══════════════════════════════════════════════════════════════════════
-         LOS TRES SECTORES COMPARTEN FORMULARIO, Y SE RELLENA EL QUE TOQUE
+         LOS CUATRO SECTORES COMPARTEN FORMULARIO, Y SE RELLENA EL QUE TOQUE
         ═══════════════════════════════════════════════════════════════════════
 
-        Los tres campos —cuenta, póliza, historia— son la misma cosa en tres
-        sectores: el dato con el que el titular reconoce de qué relación se le
-        habla. Se enseñan los tres y son opcionales, en vez de esconder dos
-        según la organización.
+        Los cuatro campos —cuenta, póliza, historia, punto de suministro— son la
+        misma cosa en cuatro sectores: el dato con el que el titular reconoce de
+        qué relación se le habla. Se enseñan los cuatro y son opcionales, en vez
+        de esconder tres según la organización.
 
         No es dejarlo a medias: este formulario es de CLIENTE (`'use client'`),
         no importa nada de `src/lib` —todo eso es `server-only`— y por tanto no
@@ -122,6 +122,16 @@ export function CustomerForm() {
           <input name="medicalRecordNumber" placeholder="HC-0044718" />
           {fieldError('medicalRecordNumber') !== undefined && (
             <small style={{ color: 'var(--danger)' }}>{fieldError('medicalRecordNumber')}</small>
+          )}
+        </label>
+      </div>
+
+      <div className="row">
+        <label className="field">
+          <span>{t('customerForm.supplyPointNumber')}</span>
+          <input name="supplyPointNumber" placeholder="LE-SP-0044718" />
+          {fieldError('supplyPointNumber') !== undefined && (
+            <small style={{ color: 'var(--danger)' }}>{fieldError('supplyPointNumber')}</small>
           )}
         </label>
       </div>

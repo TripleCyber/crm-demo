@@ -7,8 +7,16 @@ import 'server-only';
  *
  * Nació como mapa con un solo inquilino —Banco Demo— para que el segundo no
  * obligara a reescribir cada sitio que leyera esas variables. **Desde el
- * 2026-08-30 hay tres**: Banco Demo, Seguros Aurora y Clínica San Rafael, y los
- * tres los sirve **un solo despliegue** desde tres dominios distintos.
+ * 2026-08-31 hay cuatro**: Banco Demo, Seguros Aurora, Clínica San Rafael y
+ * Larkfield Energy, y las cuatro las sirve **un solo despliegue** desde cuatro
+ * dominios distintos.
+ *
+ * Larkfield Energy es la prueba de que el alta se hace sin tocar código: entró
+ * el 2026-08-31 **como un bloque de variables y nada más** en lo que toca a
+ * identidad, encaminamiento y credenciales M2M. Lo único que necesitó código
+ * fue lo que un sector nuevo siempre necesita —su columna de referencia en el
+ * padrón (`db/006_…`)— y lo que hasta ese día no existía para nadie: la marca
+ * por organización, aquí abajo.
  *
  * ## Cómo se declara una organización
  *
@@ -30,8 +38,8 @@ import 'server-only';
  *
  * ## El dominio es lo que elige de qué organización es cada petición
  *
- * Un despliegue, tres dominios. `CRM_ORG_<SLUG>_DOMAIN` es lo que ata cada uno
- * a su organización, y de él salen dos cosas que no se pueden separar:
+ * Un despliegue, cuatro dominios. `CRM_ORG_<SLUG>_DOMAIN` es lo que ata cada
+ * uno a su organización, y de él salen dos cosas que no se pueden separar:
  *
  *  · el `did:web:<dominio>` que la organización publica en
  *    `/.well-known/did.json`, y
@@ -89,10 +97,10 @@ export interface OrganizationConfig {
   /**
    * Hosts que además encaminan a esta organización, **sin ser su identidad**.
    *
-   * Existe por una sola razón: en local no hay tres dominios con TLS, y sin
-   * esto probar las tres organizaciones obliga a reiniciar el servidor tres
-   * veces cambiando `CRM_ACTIVE_ORG_ID`. Con `seguros.localhost` declarado
-   * aquí, un solo `next dev` sirve las tres.
+   * Existe por una sola razón: en local no hay cuatro dominios con TLS, y sin
+   * esto probar las cuatro organizaciones obliga a reiniciar el servidor cuatro
+   * veces cambiando `CRM_ACTIVE_ORG_ID`. Con `energy.localhost` declarado
+   * aquí, un solo `next dev` las sirve todas.
    *
    * **No entra jamás en un documento DID.** Ése se compone siempre con
    * `domain`, así que un alias mal puesto encamina a una consola —lo mismo que
@@ -154,7 +162,7 @@ export interface OrganizationConfig {
    * La dirección pública del portal **de esta organización**.
    *
    * Con un despliegue por organización bastaba una global
-   * (`CRM_PORTAL_BASE_URL`), y sigue sirviendo de respaldo. Con tres dominios
+   * (`CRM_PORTAL_BASE_URL`), y sigue sirviendo de respaldo. Con cuatro dominios
    * sobre el mismo despliegue no: de aquí sale el `redirect_uri`, y Logto lo
    * compara carácter a carácter con el declarado en **la aplicación de esa
    * organización**. Una sola global mandaría al titular de Seguros Aurora a
@@ -166,6 +174,69 @@ export interface OrganizationConfig {
    * se deducen de un dominio.
    */
   readonly portalBaseUrl: string | undefined;
+  /**
+   * Su marca: el color con el que se pinta su consola y su portal.
+   *
+   * `undefined` = esta organización no declara marca y se queda con el azul de
+   * la hoja (`globals.css`). Las tres primeras no la declaran, así que **su
+   * pantalla no cambia ni un píxel** al entrar esto.
+   */
+  readonly brand: BrandConfig | undefined;
+}
+
+/**
+ * La marca de una organización: dos colores y un monograma.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  POR QUÉ ESTO EXISTE, Y POR QUÉ SON DOS COLORES Y NO QUINCE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Hasta el 2026-08-31 el CRM tenía **una sola** paleta: el azul del banco, en
+ * `globals.css`, con el nombre de la organización como única diferencia entre
+ * un inquilino y otro. Con cuatro dominios eso no se sostiene — en una
+ * demostración lo que se ve es la misma pantalla cuatro veces, que es
+ * exactamente lo contrario de lo que hay que enseñar.
+ *
+ * Son **dos** colores porque la hoja ya tenía dos oficios separados y no más:
+ * una superficie oscura —la barra de la consola, la cabecera del portal— y un
+ * acento sobre papel blanco —enlaces, foco, el filo de la tarjeta de oferta—.
+ * Los otros tres tonos de la familia (`--navy-line`, `--navy-ink`,
+ * `--navy-tint`) se **derivan** de esos dos con `color-mix()` en
+ * `src/lib/brand.ts`: son mezclas con blanco, no decisiones, y pedirlas por
+ * configuración sería regalar cinco maneras de que una organización quede con
+ * un texto ilegible sobre su propia barra.
+ *
+ * ⚠ **Los colores de estado NO son la marca y no se tocan aquí.** Rojo =
+ * fraude, ámbar = ha ido mal, verde = comprobado, azul = en curso. Esa regla
+ * (`globals.css`, nota 2) vale para las cuatro organizaciones y para las que
+ * vengan: si la marca de una empresa pudiera repintar el rojo, el agente que
+ * cambia de consola dejaría de poder leer el color.
+ */
+export interface BrandConfig {
+  /**
+   * El acento sobre papel blanco. Es lo que hoy es `--navy`.
+   *
+   * Va sobre blanco y lo lee gente ocho horas seguidas, así que tiene que
+   * contrastar de verdad. No se comprueba aquí —haría falta convertir a
+   * luminancia y la validación de un `.env` no es el sitio—, pero el que se
+   * elija se mira antes: el violeta de Larkfield da 7,9:1 sobre blanco.
+   */
+  readonly accent: string;
+  /**
+   * La superficie oscura: la barra lateral de la consola y la cabecera del
+   * portal. Es lo que hoy es `--navy-deep`.
+   */
+  readonly surface: string;
+  /**
+   * El monograma del disco de la barra — «LE» —, o `undefined` para componerlo
+   * con las iniciales del nombre.
+   *
+   * Se puede declarar porque las iniciales no siempre son la marca: «Clínica
+   * San Rafael» da «CS», que no es como se llama nadie. Una o dos letras y no
+   * más: en un disco de 32 píxeles, cinco letras no se leen y lo que queda es
+   * una mancha.
+   */
+  readonly monogram: string | undefined;
 }
 
 /** La aplicación OIDC del portal de clientes: *traditional web*, con secreto. */
@@ -280,6 +351,7 @@ function readSlug(slug: string): OrganizationConfig {
     issuerUrl: issuerUrl.replace(/\/+$/, ''),
     verifierUrl: verifierUrl.replace(/\/+$/, ''),
     officialNumbers: readOfficialNumbers(`${prefix}_OFFICIAL_NUMBERS`),
+    brand: readBrand(prefix),
     portalBaseUrl: emptyToUndefined(process.env[`${prefix}_PORTAL_BASE_URL`])?.replace(/\/+$/, ''),
     portal:
       portalClientId === undefined || portalClientId === '' || portalClientSecret === undefined
@@ -295,6 +367,101 @@ function readSlug(slug: string): OrganizationConfig {
 function emptyToUndefined(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+}
+
+/**
+ * Un color de marca: **sólo notación hexadecimal**, y no por gusto.
+ *
+ * Estos dos valores acaban dentro del atributo `style` del `<body>`, o sea
+ * dentro de una hoja de estilo que compone el servidor con algo que viene de
+ * fuera del código. React escapa el atributo, así que no se puede salir de él;
+ * lo que sí se podría con la sintaxis abierta de CSS es colar un `url(...)` que
+ * pida una imagen a un tercero desde la pantalla de un agente, o un valor que
+ * rompa la cascada y deje la barra sin fondo.
+ *
+ * La lista blanca lo cierra de raíz: `#rgb` o `#rrggbb` y nada más. Ni `rgb()`,
+ * ni `hsl()`, ni nombres de color — que además serían tres formas de escribir
+ * lo mismo en cuatro despliegues.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA ALMOHADILLA SE ACEPTA **OPCIONAL**, Y ESO SÍ ES POR ALGO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * En un fichero `.env` la almohadilla abre un comentario. `BRAND_COLOR=#5b3ea6`
+ * sin comillas **no vale la cadena vacía por descuido: vale la cadena vacía por
+ * diseño del formato**, porque todo lo que va detrás de la `#` es un
+ * comentario. Se descubrió el 2026-08-31 en la primera prueba en el navegador,
+ * y el síntoma era el peor posible: la consola salía azul, sin ningún error, y
+ * la variable estaba escrita correctamente en el fichero.
+ *
+ * De ahí las dos defensas, que son distintas y hacen falta las dos:
+ *
+ *  1. **`5b3ea6` sin almohadilla vale igual**, y se le pone al normalizar. Es
+ *     la forma que no puede salir mal en ningún sitio — ni en un `.env`, ni en
+ *     un `docker-compose`, ni en la caja de texto de Coolify.
+ *  2. **Una variable presente y vacía revienta**, y el mensaje nombra la
+ *     trampa. Vacía sólo puede significar dos cosas —o se dejó a medias, o se
+ *     la comió la almohadilla— y las dos son un error de configuración que hay
+ *     que ver al arrancar, no una organización sin marca.
+ *
+ * Ausente y vacía **no** son lo mismo, y esa distinción es toda la defensa 2:
+ * ausente es «esta organización no declara marca», que es legítimo y es lo que
+ * tienen las tres primeras.
+ */
+const BRAND_COLOR_PATTERN = /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function readBrandColor(name: string): string | undefined {
+  const raw = process.env[name];
+  // Ausente: esta organización no declara marca. Legítimo.
+  if (raw === undefined) return undefined;
+
+  const value = raw.trim();
+  if (value === '') {
+    throw new OrganizationConfigError(
+      `${name} is declared but empty. In a .env file a value starting with '#' is a comment: ` +
+        `write it without the '#' (5b3ea6) or in quotes ("#5b3ea6")`,
+    );
+  }
+  if (!BRAND_COLOR_PATTERN.test(value)) {
+    // El mensaje NO lleva el valor: sale en Diagnóstico y en la respuesta de
+    // una ruta, y la regla de esta casa es nombrar la variable y nunca lo que
+    // hay dentro.
+    throw new OrganizationConfigError(`${name} must be a hex colour (#rgb, #rrggbb or rrggbb)`);
+  }
+  // Se normaliza CON almohadilla porque es lo que entiende CSS, que es donde
+  // acaba: aceptarla opcional es cosa de quien escribe el `.env`, no de la hoja.
+  return value.startsWith('#') ? value.toLowerCase() : `#${value.toLowerCase()}`;
+}
+
+/**
+ * La marca de una organización, o `undefined` si no declara ninguna.
+ *
+ * Los dos colores **van juntos o no van**, por la misma razón que el par del
+ * portal: media marca es peor que ninguna. Una barra violeta con los enlaces
+ * azules del banco no se lee como «otra empresa», se lee como una pantalla a
+ * medio pintar, y encima el que la ve no tiene forma de saber cuál de los dos
+ * colores es el que sobra.
+ */
+function readBrand(prefix: string): BrandConfig | undefined {
+  const accent = readBrandColor(`${prefix}_BRAND_COLOR`);
+  const surface = readBrandColor(`${prefix}_BRAND_SURFACE`);
+
+  if (accent === undefined && surface === undefined) return undefined;
+  if (accent === undefined || surface === undefined) {
+    throw new OrganizationConfigError(
+      `${prefix}_BRAND_COLOR y ${prefix}_BRAND_SURFACE van juntas o no van`,
+    );
+  }
+
+  const monogram = emptyToUndefined(process.env[`${prefix}_BRAND_MONOGRAM`]);
+  // Dos caracteres como mucho. Se cuenta con el iterador de cadena y no con
+  // `.length`, que cuenta unidades UTF-16: una «Ñ» compuesta o un emoji dan 2 y
+  // 4 y quedarían fuera por un motivo que nadie adivina leyendo el `.env`.
+  if (monogram !== undefined && [...monogram].length > 2) {
+    throw new OrganizationConfigError(`${prefix}_BRAND_MONOGRAM must be one or two characters`);
+  }
+
+  return { accent, surface, monogram };
 }
 
 /**
@@ -458,7 +625,7 @@ export function getOrganization(orgId: string): OrganizationConfig {
 /**
  * La organización de este despliegue **cuando el `Host` no dice cuál es**.
  *
- * Ya no es la forma normal de elegir: desde que un despliegue sirve tres
+ * Ya no es la forma normal de elegir: desde que un despliegue sirve cuatro
  * dominios, quien elige es el dominio de la petición
  * (`./request-organization.ts`). Esto es lo que queda para las peticiones que
  * llegan por un host que no encaja con nada —`localhost:3000` en desarrollo— y

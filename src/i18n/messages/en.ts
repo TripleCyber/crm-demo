@@ -77,6 +77,8 @@ export const en = {
     policyNumberShort: 'Policy',
     medicalRecordNumber: 'Medical record number',
     medicalRecordNumberShort: 'Record',
+    supplyPointNumber: 'Supply point number',
+    supplyPointNumberShort: 'Supply point',
     customerSince: 'Customer since',
   },
 
@@ -191,6 +193,7 @@ export const en = {
     customerSince: 'Customer since',
     policyNumber: 'Policy number',
     medicalRecordNumber: 'Medical record number',
+    supplyPointNumber: 'Supply point number',
     givenNameExample: 'Emma',
     familyNameExample: 'Whitfield',
     emailExample: 'emma@example.com',
@@ -554,10 +557,12 @@ export const en = {
     verifierBase: 'te-api (verification)',
     customerPortal: 'Customer portal',
     portalUndeclared: 'no application declared · ',
+    brand: 'Brand',
+    brandNone: 'the default palette · declare ',
     orgChoiceTitle: 'How the organisation is chosen',
     whoChooses: 'Who chooses',
     whoChoosesDetail:
-      'The domain the request came in on. Each organisation declares its own in <code>CRM_ORG_<SLUG>_DOMAIN</code>, and a single deployment answers on all three.',
+      'The domain the request came in on. Each organisation declares its own in <code>CRM_ORG_<SLUG>_DOMAIN</code>, and a single deployment answers on all of them.',
     unknownDomain: 'If the domain belongs to nobody',
     unknownDomainDetail:
       '<code>CRM_ACTIVE_ORG_ID</code> is used, which is a decision written by whoever deploys. In production it is not set: without it, an address that matches no organisation says so instead of showing the first one’s roster.',

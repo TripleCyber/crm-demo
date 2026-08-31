@@ -1,0 +1,53 @@
+-- 006_supply_point · el cuarto sector: la comercializadora de energía.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+--  ESTO ES LO ÚNICO QUE LARKFIELD ENERGY NECESITÓ DE CÓDIGO
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- El 2026-08-31 entró la cuarta organización del CRM, y entró para comprobar
+-- una afirmación del `README`: **dar de alta un inquilino es un bloque de
+-- variables de entorno y nada más**. Se cumplió en todo lo que es identidad
+-- —dominio, `did:web`, credenciales M2M, portal, siembra— y **no se cumplió
+-- aquí**, exactamente por donde `db/005_…` avisó que no se cumpliría: un sector
+-- nuevo trae su propia referencia, y una referencia necesita columna.
+--
+-- La razón es la misma que allí, y no ha mejorado con la práctica:
+-- `CUSTOMER_ATTRIBUTES` sólo puede ofrecer un atributo si hay una columna de
+-- donde sacarlo, así que declarar `supply_point_number` en un `.env` sería
+-- configuración que miente. Lo que no está en el padrón no se puede firmar.
+--
+-- ── Qué es el punto de suministro, y por qué es la referencia del sector ───
+--
+-- Es el identificador del **contador**, no del cliente: la luz llega a una
+-- casa, y quien la paga puede cambiar sin que cambie el punto. Hace el mismo
+-- trabajo que los cuatro últimos de la cuenta en el banco, la póliza en la
+-- aseguradora y el número de historia en la clínica — es **el dato con el que
+-- el titular reconoce de qué relación se le habla** cuando le suena el teléfono
+-- y alguien dice llamar de su comercializadora.
+--
+-- Y es justamente el sector donde eso más falta hace: la llamada que dice «le
+-- llamo de su compañía de la luz, tenemos que cambiarle la tarifa» es de las
+-- estafas telefónicas más repetidas que hay, y contra ella el identificador de
+-- llamada no vale nada. Que el número desde el que llaman esté DENTRO de una
+-- credencial que la empresa firmó, sí.
+--
+-- ── Lo que esta migración NO hace ─────────────────────────────────────────
+--
+-- No toca ni una fila. La columna nace `null`, así que las fichas de las otras
+-- tres organizaciones quedan exactamente como estaban y sus credenciales siguen
+-- llevando lo mismo. `resolveCredentialType` descarta los atributos que la
+-- ficha no rellena, así que al agente del banco no le aparece «Punto de
+-- suministro» sin que nadie haya escrito un `if` por organización.
+--
+-- Sembrar es otra cosa y va por `npm run db:seed`, fuera de las migraciones y a
+-- propósito: una fila sembrada en un fichero versionado es un dato de prueba
+-- que se despliega solo.
+
+-- Sin `check` de formato, por lo mismo que la póliza: cada país y cada mercado
+-- numeran sus puntos de suministro a su manera —el CUPS español tiene 20 o 22
+-- caracteres, el MPAN británico 13 dígitos— y una expresión regular inventada
+-- aquí rechazaría suministros legítimos el día que entre la segunda
+-- comercializadora. El largo y el juego de caracteres sí se comprueban, en
+-- `validateCustomerInput`, y por lo que rompe al viajar dentro de un JWT.
+alter table customer
+  add column if not exists supply_point_number text;

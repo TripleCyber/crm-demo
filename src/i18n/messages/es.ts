@@ -66,6 +66,8 @@ export const es: PartialMessages = {
     policyNumberShort: 'Póliza',
     medicalRecordNumber: 'Número de historia',
     medicalRecordNumberShort: 'Historia',
+    supplyPointNumber: 'Punto de suministro',
+    supplyPointNumberShort: 'Suministro',
     customerSince: 'Cliente desde',
   },
 
@@ -160,6 +162,7 @@ export const es: PartialMessages = {
     customerSince: 'Cliente desde',
     policyNumber: 'Número de póliza',
     medicalRecordNumber: 'Número de historia',
+    supplyPointNumber: 'Punto de suministro',
     givenNameExample: 'Juan',
     familyNameExample: 'Pérez Molina',
     emailExample: 'juan@example.com',
@@ -513,10 +516,12 @@ export const es: PartialMessages = {
     verifierBase: 'te-api (verificación)',
     customerPortal: 'Portal del cliente',
     portalUndeclared: 'sin aplicación declarada · ',
+    brand: 'Marca',
+    brandNone: 'la paleta por defecto · se declara con ',
     orgChoiceTitle: 'Cómo se elige la organización',
     whoChooses: 'Quién elige',
     whoChoosesDetail:
-      'El dominio por el que entró la petición. Cada organización declara el suyo en <code>CRM_ORG_<SLUG>_DOMAIN</code>, y un solo despliegue contesta en los tres.',
+      'El dominio por el que entró la petición. Cada organización declara el suyo en <code>CRM_ORG_<SLUG>_DOMAIN</code>, y un solo despliegue contesta en todos.',
     unknownDomain: 'Si el dominio no es de nadie',
     unknownDomainDetail:
       'Se usa <code>CRM_ACTIVE_ORG_ID</code>, que es una decisión escrita por quien despliega. En producción no se pone: sin ella, una dirección que no corresponde a ninguna organización lo dice en vez de enseñar el padrón de la primera.',

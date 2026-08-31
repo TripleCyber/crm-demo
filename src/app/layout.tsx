@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { LocaleProvider } from '@/i18n/client';
 import { getLocale, getTranslator } from '@/i18n/server';
+import { brandStyleOf } from '@/lib/brand';
 import { getRequestOrganization } from '@/lib/request-organization';
 
 import './globals.css';
@@ -9,8 +10,8 @@ import './globals.css';
 /**
  * El título de la pestaña, con el nombre de **la organización del dominio**.
  *
- * Era una constante con «Banco Demo» dentro, y con tres dominios sobre el mismo
- * despliegue eso pone el nombre del banco en la pestaña del portal de la
+ * Era una constante con «Banco Demo» dentro, y con cuatro dominios sobre el
+ * mismo despliegue eso pone el nombre del banco en la pestaña del portal de la
  * clínica. Es de las cosas que nadie mira hasta que la ve un cliente, y una
  * captura de pantalla la conserva.
  *
@@ -51,13 +52,28 @@ export async function generateMetadata(): Promise<Metadata> {
  * ortográfico del navegador y el lector de pantalla para elegir voz— y el
  * contexto que da el idioma a los componentes de navegador tiene que envolver
  * las dos secciones, porque las dos tienen.
+ *
+ * Y **la marca**, por lo mismo: los tokens de color de la organización del
+ * dominio se ponen en el `<body>`, que es el único elemento que envuelve a las
+ * dos secciones. Puestos aquí llegan pintados desde el servidor —sin
+ * JavaScript, y sin un primer fotograma con el color de otra empresa— y las
+ * reglas de `globals.css` no se enteran: siguen leyendo `var(--navy-deep)` y lo
+ * que cambia es lo que esa variable vale en esta petición. El porqué de cada
+ * token está en `src/lib/brand.ts`.
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
 
+  // Si la configuración está rota, la pantalla que lo explica tiene que poder
+  // pintarse. Sin marca es la paleta de la hoja, que es exactamente lo que
+  // había antes de que existiera esto.
+  const brandStyle = await getRequestOrganization()
+    .then(brandStyleOf)
+    .catch(() => undefined);
+
   return (
     <html lang={locale}>
-      <body>
+      <body style={brandStyle}>
         <LocaleProvider locale={locale}>{children}</LocaleProvider>
       </body>
     </html>

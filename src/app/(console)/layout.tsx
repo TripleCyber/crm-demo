@@ -1,6 +1,7 @@
 import { LocaleSwitch } from '@/components/LocaleSwitch';
 import { RailNav } from '@/components/RailNav';
 import { getTranslator } from '@/i18n/server';
+import { monogramOf } from '@/lib/brand';
 import { getEmployeeSession } from '@/lib/session';
 
 /**
@@ -44,12 +45,17 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   let orgId: string | undefined;
   let misconfigured = false;
   let agent: { id: string; displayName: string } | undefined;
+  // El monograma se queda vacío mientras no se sepa de quién es la pantalla, y
+  // entonces el disco no se pinta: dibujar una inicial cuando no se sabe de qué
+  // empresa es sería inventarse una marca.
+  let monogram = '';
 
   try {
     const session = await getEmployeeSession();
     bankName = session.organization.displayName;
     orgId = session.organization.orgId;
     agent = session.agent;
+    monogram = monogramOf(session.organization);
   } catch {
     // El mensaje del error **no se pinta aquí**, y es a propósito: nombra la
     // variable de entorno que falta, y quien tiene esta barra delante es un
@@ -63,6 +69,19 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
     <div className="console">
       <aside className="rail">
         <div className="rail-brand">
+          {/*
+            El monograma es el logotipo que esta consola puede tener el día que
+            una organización se da de alta: no hay fichero de imagen ninguno, y
+            hasta que lo haya la pantalla tiene que enseñar algo que se
+            reconozca de lejos. Es decorativo —el nombre está escrito al lado, y
+            en serif— así que sale del árbol de accesibilidad: un lector de
+            pantalla que dice «LE» antes de «Larkfield Energy» sólo estorba.
+          */}
+          {monogram !== '' && (
+            <span className="brand-mark" aria-hidden="true">
+              {monogram}
+            </span>
+          )}
           <strong>{bankName}</strong>
           {orgId === undefined ? (
             <span className="rail-org warn">{t('nav.unconfigured')}</span>
