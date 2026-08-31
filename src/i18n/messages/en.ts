@@ -557,7 +557,7 @@ export const en = {
     orgChoiceTitle: 'How the organisation is chosen',
     whoChooses: 'Who chooses',
     whoChoosesDetail:
-      'The domain the request came in on. Each organisation declares its own in <code>CRM_ORG_&lt;SLUG&gt;_DOMAIN</code>, and a single deployment answers on all three.',
+      'The domain the request came in on. Each organisation declares its own in <code>CRM_ORG_<SLUG>_DOMAIN</code>, and a single deployment answers on all three.',
     unknownDomain: 'If the domain belongs to nobody',
     unknownDomainDetail:
       '<code>CRM_ACTIVE_ORG_ID</code> is used, which is a decision written by whoever deploys. In production it is not set: without it, an address that matches no organisation says so instead of showing the first one’s roster.',

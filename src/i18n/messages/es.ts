@@ -516,7 +516,7 @@ export const es: PartialMessages = {
     orgChoiceTitle: 'Cómo se elige la organización',
     whoChooses: 'Quién elige',
     whoChoosesDetail:
-      'El dominio por el que entró la petición. Cada organización declara el suyo en <code>CRM_ORG_&lt;SLUG&gt;_DOMAIN</code>, y un solo despliegue contesta en los tres.',
+      'El dominio por el que entró la petición. Cada organización declara el suyo en <code>CRM_ORG_<SLUG>_DOMAIN</code>, y un solo despliegue contesta en los tres.',
     unknownDomain: 'Si el dominio no es de nadie',
     unknownDomainDetail:
       'Se usa <code>CRM_ACTIVE_ORG_ID</code>, que es una decisión escrita por quien despliega. En producción no se pone: sin ella, una dirección que no corresponde a ninguna organización lo dice en vez de enseñar el padrón de la primera.',
