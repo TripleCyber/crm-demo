@@ -80,10 +80,11 @@ COPY --from=build /app/scripts ./scripts
 # (`src/app/.well-known/did.json/route.ts`) componiéndolo con `CRM_ORG_DOMAIN`,
 # así que va dentro del bundle que copia `standalone` y no hay nada que montar.
 #
-# ⚠ CONDICIÓN DE DESPLIEGUE: sin `CRM_ORG_DOMAIN` **el proceso no arranca**, y
-#   eso es mejor que lo que hacía antes —arrancar y no publicar documento DID—,
-#   porque aquel síntoma llegaba al teléfono del titular como «no podemos
-#   verificar quién emite esto», que no se parece a «falta una variable».
+# ⚠ LA ÚNICA VARIABLE OBLIGATORIA ES `DATABASE_URL`.
+#
+# Todo lo demás —la organización, su dominio, su marca, sus secretos— se escribe
+# desde la pantalla `/settings` de la propia instalación y vive en su base. El
+# entorno sólo siembra la fila la primera vez. Ver `src/lib/tenant-settings.ts`.
 
 # Sin privilegios. La imagen de node ya trae el usuario `node`.
 USER node
@@ -93,4 +94,20 @@ EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "server.js"]
+# ─────────────────────────────────────────────────────────────────────────────
+#  MIGRA AL ARRANCAR, COMO te-api
+#
+#  Antes el contenedor arrancaba con la base vacía y la consola enseñaba «no se
+#  pudieron leer los ajustes… ejecuta las migraciones». Cierto y bien dicho,
+#  pero dejaba una instalación nueva inservible hasta que alguien entrara por
+#  una consola de servidor — justo la operación manual que esta pantalla existe
+#  para eliminar. Publicar la imagen tiene que bastar.
+#
+#  Va encadenado con `&&`: si el migrador falla, el proceso NO arranca. Es lo
+#  que se quiere. Un CRM sirviendo sobre un esquema a medio aplicar falla más
+#  tarde, en una pantalla cualquiera, y con un error que no menciona la base.
+#
+#  El migrador es idempotente —anota cada `.sql` en `crm_migration` y salta lo
+#  aplicado—, así que reiniciar el contenedor cien veces no hace nada la segunda.
+# ─────────────────────────────────────────────────────────────────────────────
+CMD ["sh", "-c", "node scripts/migrate.mjs && exec node server.js"]
