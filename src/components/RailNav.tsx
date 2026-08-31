@@ -36,6 +36,10 @@ const LINKS: readonly RailLink[] = [
   { href: '/customers', labelKey: 'nav.customers', groupKey: 'nav.groupService' },
   { href: '/verifications', labelKey: 'nav.verifications' },
   { href: '/diagnostics', labelKey: 'nav.diagnostics', groupKey: 'nav.groupIntegration' },
+  // Los eventos van DEBAJO de Diagnóstico y en el mismo grupo. El orden no es
+  // alfabético: Diagnóstico contesta «¿está bien montado?» y esto contesta «¿qué
+  // ha llegado?», y la segunda pregunta sólo tiene sentido después de la primera.
+  { href: '/events', labelKey: 'nav.events' },
 ];
 
 export function RailNav() {

@@ -6,7 +6,7 @@ import {
   newAuthorizationRequest,
 } from '@/lib/portal-oidc';
 import { saveAuthorizationRequest } from '@/lib/portal-session';
-import { getRequestOrganization } from '@/lib/request-organization';
+import { getOrganization } from '@/lib/organization';
 
 /**
  * `GET /portal/login` — arranca el login OIDC contra Logto.
@@ -22,7 +22,7 @@ import { getRequestOrganization } from '@/lib/request-organization';
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
-  const organization = await getRequestOrganization();
+  const organization = getOrganization();
 
   if (organization.portal === undefined) {
     // Sin aplicación de portal declarada no hay login que empezar. Se manda a

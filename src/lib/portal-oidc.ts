@@ -7,7 +7,7 @@ import {
   getLogtoConfig,
   type OrganizationConfig,
   type PortalAppConfig,
-} from './organizations';
+} from './organization';
 
 /**
  * El login OIDC del **portal de clientes** — el paso del que nace el vínculo.
@@ -93,28 +93,24 @@ function getJwks(): ReturnType<typeof createRemoteJWKSet> {
 }
 
 /**
- * La URL pública del portal **de esta organización**. De ella sale el
- * `redirect_uri`.
+ * La URL pública del portal. De ella sale el `redirect_uri`.
  *
- * Es por organización y no global desde que un despliegue sirve tres dominios:
- * cada organización tiene su propia aplicación en Logto con su propio
- * `redirect_uri` declarado, y una URL global mandaría al titular de Seguros
- * Aurora a `bank.demo-te.com` — donde su cookie no existe y donde el vínculo se
- * pediría contra el padrón del banco.
+ * Sale de `CRM_PORTAL_BASE_URL` y **nunca de la cabecera `Host`**, que la
+ * escribe quien llama: Logto compara el `redirect_uri` carácter a carácter con
+ * el declarado en la aplicación, así que componerlo con algo de la petición sólo
+ * puede producir un `invalid_grant` que no nombra la causa.
  *
- * `CRM_PORTAL_BASE_URL` sigue siendo el respaldo, y sigue siendo lo que se usa
- * en local: ahí las tres viven en `http://localhost:3000` y no hay nada que
- * separar.
+ * En local es `http://localhost:3000`; en producción, la dirección del dominio
+ * de esta instalación.
  */
 export function getPortalBaseUrl(organization: OrganizationConfig): string {
-  const raw = organization.portalBaseUrl ?? process.env.CRM_PORTAL_BASE_URL?.trim();
+  const raw = organization.portalBaseUrl;
   if (raw === undefined || raw === '') {
     throw new Error(
-      'the portal does not know its own address: CRM_ORG_<SLUG>_PORTAL_BASE_URL is missing ' +
-        '(or CRM_PORTAL_BASE_URL for all of them)',
+      'the portal does not know its own address: CRM_PORTAL_BASE_URL is missing',
     );
   }
-  return raw.replace(/\/+$/, '');
+  return raw;
 }
 
 /**
@@ -147,9 +143,8 @@ export function newAuthorizationRequest(): AuthorizationRequest {
  * A dónde se manda el navegador para que la persona se autentique.
  *
  * Lleva la organización además de su aplicación de portal porque el
- * `redirect_uri` es **suyo**: cada una tiene su dominio y su aplicación en
- * Logto, y el que se manda aquí tiene que ser el mismo que el declarado allí y
- * el mismo que se manda al canjear el código.
+ * `redirect_uri` sale de ella, y el que se manda aquí tiene que ser el mismo que
+ * el declarado en Logto y el mismo que se manda al canjear el código.
  */
 export function buildAuthorizationUrl(
   organization: OrganizationConfig,

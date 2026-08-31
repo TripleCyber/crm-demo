@@ -2,35 +2,33 @@ import 'server-only';
 
 import type { CSSProperties } from 'react';
 
-import type { OrganizationConfig } from './organizations';
+import type { OrganizationConfig } from './organization';
 
 /**
- * De la marca de una organización a los tokens CSS de su pantalla.
+ * De la marca de la organización a los tokens CSS de su pantalla.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  UN DESPLIEGUE, CUATRO EMPRESAS, Y HASTA HOY UNA SOLA PALETA
+ *  UNA INSTALACIÓN, UNA EMPRESA, Y SU COLOR
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * `globals.css` tiene una familia de azules —`--navy`, `--navy-deep`,
- * `--navy-line`, `--navy-ink`, `--navy-tint`— que se llama «la marca del
- * banco» desde que la escribió alguien que servía a un solo inquilino. Con
- * cuatro dominios sobre el mismo despliegue eso deja de ser una marca y pasa a
- * ser un error: en una demostración se ven cuatro consolas idénticas con cuatro
- * nombres distintos, que es exactamente la impresión contraria a la que hay que
- * dar. Son empresas distintas, no cuatro pestañas del mismo producto.
+ * `--navy-line`, `--navy-ink`, `--navy-tint`— que se llama «la marca del banco»
+ * desde que la escribió alguien que servía a un solo inquilino. Sigue habiendo
+ * un solo inquilino por instalación, pero **ya no es siempre un banco**: en una
+ * demostración con dos empresas, dos consolas idénticas con dos nombres
+ * distintos dan exactamente la impresión contraria a la que hay que dar.
  *
- * Lo que hace este fichero es traducir los dos colores que declara una
- * organización (`CRM_ORG_<SLUG>_BRAND_COLOR` y `_BRAND_SURFACE`) a **los cinco
- * tokens que la hoja ya usaba**. Ni una regla de CSS cambia de sitio: se
- * redefinen las variables en el `<body>` y la cascada hace el resto.
+ * Lo que hace este fichero es traducir los dos colores que declara la
+ * organización (`CRM_BRAND_COLOR` y `CRM_BRAND_SURFACE`) a **los cinco tokens
+ * que la hoja ya usaba**. Ni una regla de CSS cambia de sitio: se redefinen las
+ * variables en el `<body>` y la cascada hace el resto.
  *
- * ## Por qué en el `<body>` y no en un fichero por organización
+ * ## Por qué en el `<body>` y no en un fichero por empresa
  *
- * Porque el que elige es el `Host` de la petición, y eso se sabe **en tiempo de
- * petición**. Una hoja por inquilino habría que servirla desde una ruta, con su
- * caché y su parpadeo; un atributo `style` en el documento que ya se está
- * componiendo llega pintado desde el servidor, sin JavaScript y sin un primer
- * fotograma con el color del banco.
+ * Porque el color sale del entorno del proceso, y una hoja por empresa habría
+ * que servirla desde una ruta, con su caché y su parpadeo; un atributo `style`
+ * en el documento que ya se está componiendo llega pintado desde el servidor,
+ * sin JavaScript y sin un primer fotograma con el color de otro.
  *
  * ## Por qué se derivan tres de los cinco
  *
@@ -45,20 +43,20 @@ import type { OrganizationConfig } from './organizations';
  * ## Lo que este fichero NO toca, y no es un olvido
  *
  * **Los cuatro colores de estado.** Rojo = fraude, ámbar = ha ido mal, verde =
- * comprobado, azul = en curso (`globals.css`, nota 2). Ésos valen para las
- * cuatro organizaciones y para las que vengan: un agente que cambia de consola
- * tiene que poder seguir leyendo el color, y una marca corporativa que pudiera
- * repintar el rojo del fraude convertiría la única señal inequívoca de esta
- * pantalla en una cuestión de gusto.
+ * comprobado, azul = en curso (`globals.css`, nota 2). Ésos valen para toda
+ * instalación: un agente que ha usado la consola de otra empresa tiene que poder
+ * seguir leyendo el color, y una marca corporativa que pudiera repintar el rojo
+ * del fraude convertiría la única señal inequívoca de esta pantalla en una
+ * cuestión de gusto.
  */
 
 /**
- * Los tokens de marca de una organización, o `undefined` si no declara ninguna.
+ * Los tokens de marca de la organización, o `undefined` si no declara ninguna.
  *
  * `undefined` es lo correcto y no un caso a evitar: sin marca declarada no se
- * escribe ningún `style`, la hoja manda, y la pantalla sale **idéntica** a como
- * salía antes de que esto existiera. Las tres organizaciones que había el
- * 2026-08-31 no declaran marca, así que ninguna cambió.
+ * escribe ningún `style`, la hoja manda, y la pantalla sale con el azul de
+ * siempre. Es el aspecto por defecto y no una rama muerta — una instalación sin
+ * color propio arranca igual.
  */
 export function brandStyleOf(organization: OrganizationConfig): CSSProperties | undefined {
   const brand = organization.brand;
@@ -102,16 +100,15 @@ export function brandStyleOf(organization: OrganizationConfig): CSSProperties | 
 /**
  * El monograma de una organización: su logotipo cuando no hay logotipo.
  *
- * Un CRM multiinquilino no puede pedir un fichero de imagen por empresa —no lo
- * hay el día del alta, y hasta que lo haya la consola tiene que enseñar algo—,
- * así que la marca gráfica se compone: una o dos letras dentro de un disco del
- * color de la empresa. Es lo mismo que hace cualquier herramienta que da de
- * alta organizaciones, y por la misma razón.
+ * El día que se despliega no hay ningún fichero de imagen, y hasta que lo haya
+ * la consola tiene que enseñar algo, así que la marca gráfica se compone: una o
+ * dos letras dentro de un disco del color de la empresa. Es lo mismo que hace
+ * cualquier herramienta que da de alta organizaciones, y por la misma razón.
  *
- * Se declara (`CRM_ORG_<SLUG>_BRAND_MONOGRAM`) o se compone con las iniciales
- * de las dos primeras palabras del nombre. Se puede declarar porque las
- * iniciales no siempre son la marca: «Clínica San Rafael, S.L.» da «CS», y a
- * esa clínica la conoce todo el mundo por «San Rafael».
+ * Se declara (`CRM_BRAND_MONOGRAM`) o se compone con las iniciales de las dos
+ * primeras palabras del nombre. Se puede declarar porque las iniciales no
+ * siempre son la marca: «Northgate Building Society» da «NB», y a esa entidad la
+ * conoce todo el mundo por «Northgate».
  *
  * Se toman **palabras** y no caracteres para que «Larkfield Energy Ltd.» dé
  * «LE» y no «LA», y como mucho dos: en un disco de 32 píxeles la tercera letra

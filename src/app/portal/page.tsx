@@ -2,11 +2,10 @@ import { getTranslator } from '@/i18n/server';
 import type { MessageKey, Translator } from '@/i18n/translate';
 import { findPendingOffer } from '@/lib/credential-offers';
 import { findCustomer } from '@/lib/customers';
-import type { OrganizationConfig } from '@/lib/organizations';
+import { getOrganization, type OrganizationConfig } from '@/lib/organization';
 import { getRedirectUri } from '@/lib/portal-oidc';
 import { getSession, type PortalSession } from '@/lib/portal-session';
 import { formatDateTime } from '@/lib/format';
-import { getRequestOrganization } from '@/lib/request-organization';
 
 /**
  * La pantalla del portal del cliente. Tiene exactamente tres estados:
@@ -40,9 +39,9 @@ export const dynamic = 'force-dynamic';
  *  AQUÍ NO SE NOMBRA NI UNA VARIABLE DE ENTORNO
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Quien lee esta pantalla es un CLIENTE. `CRM_ORG_<SLUG>_PORTAL_CLIENT_ID` no
- * le dice qué hacer, le dice que su banco está a medio montar — y además no lo
- * puede arreglar él ni la persona a la que va a llamar. Se le dice qué no
+ * Quien lee esta pantalla es un CLIENTE. `CRM_PORTAL_CLIENT_ID` no le dice qué
+ * hacer, le dice que su banco está a medio montar — y además no lo puede
+ * arreglar él ni la persona a la que va a llamar. Se le dice qué no
  * funciona y a quién preguntar; el nombre de la variable vive en Diagnóstico,
  * que es la pantalla de quien sí puede ponerla.
  */
@@ -76,7 +75,7 @@ export default async function PortalPage({
   let organization: OrganizationConfig | undefined;
   let configurationProblem: string | null = null;
   try {
-    organization = await getRequestOrganization();
+    organization = getOrganization();
     if (organization.portal === undefined) {
       configurationProblem = t('portal.errorNoPortal');
     } else {
@@ -95,13 +94,13 @@ export default async function PortalPage({
   return (
     <>
       {/*
-        El nombre sale de la organización del dominio por el que entró la
-        petición, no está escrito aquí: `seguros.demo-te.com` y
-        `bank.demo-te.com` son el mismo despliegue, y un rótulo fijo le diría al
-        asegurado de Seguros Aurora que ésta es su cuenta del banco.
+        El nombre sale de la configuración de esta instalación y no está
+        escrito aquí: un rótulo fijo con «Banco Demo» dentro le diría al cliente
+        de cualquier otra empresa que despliegue este CRM que ésta es su cuenta
+        del banco.
 
-        Sin organización resuelta se cae a «tu cuenta», que es verdad sin
-        nombrar a nadie: afirmar el nombre del primer partner que hubo sería
+        Sin configuración legible se cae a «tu cuenta», que es verdad sin nombrar
+        a nadie: afirmar un nombre de empresa que no se ha podido leer sería
         justo la clase de dato inventado que este proyecto no pone.
       */}
       <h1>

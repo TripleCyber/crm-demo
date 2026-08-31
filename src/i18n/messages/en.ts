@@ -39,6 +39,7 @@ export const en = {
     customers: 'Customers',
     verifications: 'Verifications',
     diagnostics: 'Diagnostics',
+    events: 'Events',
     consoleFallbackName: 'Agent console',
     unconfigured: 'not configured',
     unconfiguredAgent: 'Console not configured. The detail is in Diagnostics.',
@@ -73,10 +74,6 @@ export const en = {
     familyName: 'Surname',
     accountLast4: 'Last four of the account',
     accountLast4Short: 'Account',
-    policyNumber: 'Policy number',
-    policyNumberShort: 'Policy',
-    medicalRecordNumber: 'Medical record number',
-    medicalRecordNumberShort: 'Record',
     supplyPointNumber: 'Supply point number',
     supplyPointNumberShort: 'Supply point',
     customerSince: 'Customer since',
@@ -91,8 +88,8 @@ export const en = {
    */
   credentialTypes: {
     cliente: 'Bank customer',
-    asegurado: 'Policyholder',
-    paciente: 'Patient',
+    kyc: 'Identity check',
+    customer: 'Account holder',
   },
 
   /** Los cuatro canales de entrega (`lib/delivery.ts`). */
@@ -191,9 +188,8 @@ export const en = {
     phone: 'Phone',
     accountLast4: 'Last four of the account',
     customerSince: 'Customer since',
-    policyNumber: 'Policy number',
-    medicalRecordNumber: 'Medical record number',
     supplyPointNumber: 'Supply point number',
+    externalIdExample: 'AC-40218804',
     givenNameExample: 'Emma',
     familyNameExample: 'Whitfield',
     emailExample: 'emma@example.com',
@@ -376,6 +372,46 @@ export const en = {
   },
 
   /** El listado de comprobaciones. */
+  /**
+   * Los eventos recibidos por webhook (`/events`).
+   *
+   * ⚠ Los códigos de fallo de firma —`bad_signature`, `stale_timestamp`— NO
+   *   están aquí y no van a estarlo: se guardan en la base y los lee quien
+   *   opera, que es la misma persona que los va a buscar en el registro de
+   *   te-api. Traducirlos obligaría a mantener un catálogo por cada motivo que
+   *   añada la comprobación, y a que el de la pantalla y el de la base
+   *   discreparan el día que se añada uno.
+   */
+  events: {
+    eyebrow: 'Integration',
+    title: 'Events received',
+    subtitle:
+      'What TripleEnable has pushed to this CRM, and whether its signature checked out. It is the half of the integration that happens with nobody watching.',
+    loadFailed: 'The event log could not be read: {reason}',
+    endpointTitle: 'This CRM receives at',
+    endpointUrl: 'Webhook URL',
+    endpointSecret: 'Signing secret',
+    endpointSecretSet: 'Declared. Every delivery is checked against it.',
+    endpointSecretMissing: 'Not declared, so every delivery is refused. Set',
+    endpointNote:
+      'Register the URL in the TripleEnable console, under Credentials → Webhook. It hands back the signing secret at that moment, and that is the only time it is shown in full.',
+    emptyTitle: 'Nothing has arrived yet',
+    emptyBody:
+      'Once the URL above is registered in the console, a test event from there is the fastest way to confirm the address and the secret are the right ones.',
+    emptyAction: 'Check the wiring',
+    columnReceived: 'Received',
+    columnType: 'Event',
+    columnCustomer: 'Customer',
+    columnSignature: 'Signature',
+    columnPayload: 'Body',
+    occurredAt: 'raised at {time}',
+    outcome: 'outcome: {status}',
+    signatureOk: 'Checked',
+    signatureBad: 'Refused',
+    eventId: 'Event id',
+    deliveryId: 'Delivery id',
+  },
+
   verifications: {
     eyebrow: 'Customer service',
     title: 'Verifications',
@@ -548,9 +584,8 @@ export const en = {
     organization: 'Organisation',
     name: 'Name',
     domain: 'Domain',
-    domainMissing: 'not declared · CRM_ORG_<SLUG>_DOMAIN is missing',
     didPublished: 'did:web published',
-    didNone: 'none · /.well-known/did.json answers 404',
+    didNone: 'none yet · te-api holds no key for this organisation, so /.well-known/did.json answers 404',
     officialNumbers: 'Official numbers',
     officialNumbersNone: 'none declared · ',
     issuerBase: 'te-api (issuing)',
@@ -559,16 +594,27 @@ export const en = {
     portalUndeclared: 'no application declared · ',
     brand: 'Brand',
     brandNone: 'the default palette · declare ',
-    orgChoiceTitle: 'How the organisation is chosen',
-    whoChooses: 'Who chooses',
+    orgChoiceTitle: 'One installation, one organisation',
+    whoChooses: 'Where it comes from',
     whoChoosesDetail:
-      'The domain the request came in on. Each organisation declares its own in <code>CRM_ORG_<SLUG>_DOMAIN</code>, and a single deployment answers on all of them.',
-    unknownDomain: 'If the domain belongs to nobody',
-    unknownDomainDetail:
-      '<code>CRM_ACTIVE_ORG_ID</code> is used, which is a decision written by whoever deploys. In production it is not set: without it, an address that matches no organisation says so instead of showing the first one’s roster.',
-    didNoFallback: 'The DID document has no fallback',
+      'From this process’s own environment — <code>CRM_ORG_ID</code> and the flat variables beside it. The request cannot change it: the <code>Host</code> header decides nothing here, which is what makes the answer to “whose screen is this?” the same on every request.',
+    twoTenants: 'To serve a second company',
+    twoTenantsDetail:
+      'Publish the application a second time with a different configuration. It is the same image: what changes is the environment, its domain and its database. Nothing is shared, so nothing one company does can reach the other.',
+    didNoFallback: 'The DID document',
     didNoFallbackDetail:
-      '<code>/.well-known/did.json</code> answers <b>404</b> on a domain that belongs to no organisation. Serving another organisation’s document would publish its identity on a domain that is not its own.',
+      '<code>/.well-known/did.json</code> is always composed with <code>CRM_ORG_DOMAIN</code>, so its <code>id</code> is the same DID whatever the request says. It answers <b>404</b> while te-api holds no key: an organisation that has not switched on issuing has no issuer identity to publish.',
+    webhookTitle: 'Events pushed to this CRM',
+    webhookUrl: 'Webhook URL',
+    webhookUrlNote: 'Register it in the console, under Credentials → Webhook.',
+    webhookSecret: 'Signing secret',
+    webhookSecretSet: 'declared · every delivery is checked against it',
+    webhookSecretMissing: 'not declared, so every delivery is refused · ',
+    webhookReceived: 'Received',
+    webhookTally: '{total} in total, {rejected} refused',
+    webhookNever: 'none yet',
+    webhookLast: 'last one {time}',
+    webhookLink: 'See the events',
     databaseTitle: 'The CRM database',
     connection: 'Connection',
     connectionOk: 'It answers.',
@@ -581,7 +627,7 @@ export const en = {
     localeTitle: 'Interface language',
     localeChosenBy: 'Who chooses',
     localeChosenByDetail:
-      'Whoever is looking at the screen, from the sidebar. It is stored in the <code>crm_locale</code> cookie and applies to this browser only: it does not depend on the domain, which is what identifies the organisation, and it does not need a redeploy.',
+      'Whoever is looking at the screen, from the sidebar. It is stored in the <code>crm_locale</code> cookie and applies to this browser only: it is not an environment variable, so changing it needs neither a rebuild nor a redeploy.',
     localeActive: 'Active language',
     localeFallback: 'Fallback',
     localeFallbackDetail:

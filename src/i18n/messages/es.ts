@@ -32,6 +32,7 @@ export const es: PartialMessages = {
     customers: 'Clientes',
     verifications: 'Verificaciones',
     diagnostics: 'Diagnóstico',
+    events: 'Eventos',
     consoleFallbackName: 'Consola de agentes',
     unconfigured: 'sin configurar',
     unconfiguredAgent: 'Consola sin configurar. El detalle está en Diagnóstico.',
@@ -62,10 +63,6 @@ export const es: PartialMessages = {
     familyName: 'Apellidos',
     accountLast4: 'Últimos cuatro de la cuenta',
     accountLast4Short: 'Cuenta',
-    policyNumber: 'Número de póliza',
-    policyNumberShort: 'Póliza',
-    medicalRecordNumber: 'Número de historia',
-    medicalRecordNumberShort: 'Historia',
     supplyPointNumber: 'Punto de suministro',
     supplyPointNumberShort: 'Suministro',
     customerSince: 'Cliente desde',
@@ -73,8 +70,8 @@ export const es: PartialMessages = {
 
   credentialTypes: {
     cliente: 'Cliente del banco',
-    asegurado: 'Asegurado',
-    paciente: 'Paciente',
+    kyc: 'Comprobación de identidad',
+    customer: 'Titular del contrato',
   },
 
   delivery: {
@@ -160,9 +157,8 @@ export const es: PartialMessages = {
     phone: 'Teléfono',
     accountLast4: 'Últimos cuatro de la cuenta',
     customerSince: 'Cliente desde',
-    policyNumber: 'Número de póliza',
-    medicalRecordNumber: 'Número de historia',
     supplyPointNumber: 'Punto de suministro',
+    externalIdExample: 'AC-40218804',
     givenNameExample: 'Juan',
     familyNameExample: 'Pérez Molina',
     emailExample: 'juan@example.com',
@@ -340,6 +336,46 @@ export const es: PartialMessages = {
       'El timbre no lleva importe ni destinatario. Sin ellos no hay nada que resumir dentro del <code>transaction_data</code>.',
   },
 
+  /**
+   * Los eventos recibidos por webhook (`/events`).
+   *
+   * ⚠ Los códigos de fallo de firma —`bad_signature`, `stale_timestamp`— NO
+   *   están aquí y no van a estarlo: se guardan en la base y los lee quien
+   *   opera, que es la misma persona que los va a buscar en el registro de
+   *   te-api. Traducirlos obligaría a mantener un catálogo por cada motivo que
+   *   añada la comprobación, y a que el de la pantalla y el de la base
+   *   discreparan el día que se añada uno.
+   */
+  events: {
+    eyebrow: 'Integración',
+    title: 'Eventos recibidos',
+    subtitle:
+      'Lo que TripleEnable ha enviado a este CRM, y si su firma cuadró. Es la mitad de la integración que ocurre sin que nadie esté mirando.',
+    loadFailed: 'No se ha podido leer el registro de eventos: {reason}',
+    endpointTitle: 'Este CRM recibe en',
+    endpointUrl: 'Dirección del webhook',
+    endpointSecret: 'Secreto de firma',
+    endpointSecretSet: 'Declarado. Cada entrega se comprueba contra él.',
+    endpointSecretMissing: 'Sin declarar, así que se rechaza toda entrega. Falta',
+    endpointNote:
+      'La dirección se registra en la consola de TripleEnable, en Credentials → Webhook. Al registrarla devuelve el secreto de firma, y ésa es la única vez que se enseña entero.',
+    emptyTitle: 'Todavía no ha llegado nada',
+    emptyBody:
+      'Una vez registrada la dirección de arriba en la consola, un evento de prueba desde allí es la forma más rápida de confirmar que la dirección y el secreto son los buenos.',
+    emptyAction: 'Ver el montaje',
+    columnReceived: 'Recibido',
+    columnType: 'Evento',
+    columnCustomer: 'Cliente',
+    columnSignature: 'Firma',
+    columnPayload: 'Cuerpo',
+    occurredAt: 'ocurrió a las {time}',
+    outcome: 'desenlace: {status}',
+    signatureOk: 'Comprobada',
+    signatureBad: 'Rechazada',
+    eventId: 'Id del evento',
+    deliveryId: 'Id de la entrega',
+  },
+
   verifications: {
     eyebrow: 'Atención al cliente',
     title: 'Verificaciones',
@@ -507,9 +543,8 @@ export const es: PartialMessages = {
     organization: 'Organización',
     name: 'Nombre',
     domain: 'Dominio',
-    domainMissing: 'sin declarar · falta CRM_ORG_<SLUG>_DOMAIN',
     didPublished: 'did:web publicado',
-    didNone: 'ninguno · /.well-known/did.json responde 404',
+    didNone: 'todavía ninguno · te-api no tiene clave de esta organización, así que /.well-known/did.json contesta 404',
     officialNumbers: 'Números oficiales',
     officialNumbersNone: 'ninguno declarado · ',
     issuerBase: 'te-api (emisión)',
@@ -518,16 +553,27 @@ export const es: PartialMessages = {
     portalUndeclared: 'sin aplicación declarada · ',
     brand: 'Marca',
     brandNone: 'la paleta por defecto · se declara con ',
-    orgChoiceTitle: 'Cómo se elige la organización',
-    whoChooses: 'Quién elige',
+    orgChoiceTitle: 'Una instalación, una organización',
+    whoChooses: 'De dónde sale',
     whoChoosesDetail:
-      'El dominio por el que entró la petición. Cada organización declara el suyo en <code>CRM_ORG_<SLUG>_DOMAIN</code>, y un solo despliegue contesta en todos.',
-    unknownDomain: 'Si el dominio no es de nadie',
-    unknownDomainDetail:
-      'Se usa <code>CRM_ACTIVE_ORG_ID</code>, que es una decisión escrita por quien despliega. En producción no se pone: sin ella, una dirección que no corresponde a ninguna organización lo dice en vez de enseñar el padrón de la primera.',
-    didNoFallback: 'El documento DID no tiene respaldo',
+      'Del entorno de este proceso — <code>CRM_ORG_ID</code> y las variables planas de al lado. La petición no puede cambiarlo: la cabecera <code>Host</code> aquí no decide nada, que es lo que hace que la respuesta a «¿de quién es esta pantalla?» sea la misma en todas las peticiones.',
+    twoTenants: 'Para servir a una segunda empresa',
+    twoTenantsDetail:
+      'Se publica la aplicación otra vez con otra configuración. Es la misma imagen: lo que cambia es el entorno, su dominio y su base. No se comparte nada, así que nada de lo que haga una empresa puede llegar a la otra.',
+    didNoFallback: 'El documento DID',
     didNoFallbackDetail:
-      '<code>/.well-known/did.json</code> responde <b>404</b> en un dominio que no es de ninguna organización. Servir el de otra sería publicar su identidad en un dominio que no le corresponde.',
+      '<code>/.well-known/did.json</code> se compone siempre con <code>CRM_ORG_DOMAIN</code>, así que su <code>id</code> es el mismo DID diga lo que diga la petición. Responde <b>404</b> mientras te-api no tenga clave: una organización que no ha encendido su emisión no tiene identidad de emisor que publicar.',
+    webhookTitle: 'Los eventos que llegan a este CRM',
+    webhookUrl: 'Dirección del webhook',
+    webhookUrlNote: 'Se registra en la consola, en Credentials → Webhook.',
+    webhookSecret: 'Secreto de firma',
+    webhookSecretSet: 'declarado · cada entrega se comprueba contra él',
+    webhookSecretMissing: 'sin declarar, así que se rechaza toda entrega · ',
+    webhookReceived: 'Recibidos',
+    webhookTally: '{total} en total, {rejected} rechazados',
+    webhookNever: 'todavía ninguno',
+    webhookLast: 'el último {time}',
+    webhookLink: 'Ver los eventos',
     databaseTitle: 'La base del CRM',
     connection: 'Conexión',
     connectionOk: 'Responde.',
@@ -540,7 +586,7 @@ export const es: PartialMessages = {
     localeTitle: 'Idioma de la interfaz',
     localeChosenBy: 'Quién elige',
     localeChosenByDetail:
-      'Quien mira la pantalla, desde la barra lateral. Se guarda en la cookie <code>crm_locale</code> y vale sólo para ese navegador: no depende del dominio, que es lo que identifica a la organización, y no hace falta volver a desplegar.',
+      'Quien mira la pantalla, desde la barra lateral. Se guarda en la cookie <code>crm_locale</code> y vale sólo para ese navegador: no es una variable de entorno, así que cambiarlo no obliga a reconstruir la imagen ni a volver a desplegar.',
     localeActive: 'Idioma activo',
     localeFallback: 'Respaldo',
     localeFallbackDetail:

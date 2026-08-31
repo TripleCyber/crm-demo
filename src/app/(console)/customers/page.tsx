@@ -90,10 +90,10 @@ export default async function CustomersPage({
             contrario de lo que la frase pretende.
           */}
           {/*
-            «De esta organización» y no «del banco»: los tres dominios los sirve
-            el mismo despliegue, y esta frase la lee también el agente de la
-            aseguradora y el de la clínica. La idea —los datos no salen de aquí—
-            es la misma para los tres y es de las mejores que tiene el producto.
+            «De esta organización» y no «del banco»: la misma imagen la despliega
+            una comercializadora de energía, y esta frase la lee también su
+            agente. La idea —los datos no salen de aquí— es la misma en los dos
+            sectores y es de las mejores que tiene el producto.
           */}
           <p className="page-sub">{t('customers.subtitle')}</p>
         </div>

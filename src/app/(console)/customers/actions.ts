@@ -45,8 +45,6 @@ export async function createCustomerAction(
     email: read('email'),
     phone: read('phone'),
     accountLast4: read('accountLast4'),
-    policyNumber: read('policyNumber'),
-    medicalRecordNumber: read('medicalRecordNumber'),
     supplyPointNumber: read('supplyPointNumber'),
     customerSince: read('customerSince'),
   });

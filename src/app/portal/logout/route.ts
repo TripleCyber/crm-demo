@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { buildEndSessionUrl } from '@/lib/portal-oidc';
-import { getRequestOrganization } from '@/lib/request-organization';
 import { clearSession } from '@/lib/portal-session';
+import { getOrganization } from '@/lib/organization';
 
 /**
  * `GET /portal/logout` — cierra la sesión del portal **y la de Logto**.
@@ -23,5 +23,5 @@ export async function GET(): Promise<NextResponse> {
   // La organización sale del dominio por el que se entró, igual que en el
   // login: el `post_logout_redirect_uri` tiene que devolver al titular al
   // portal DE SU organización, no al del primero que hubiera declarado.
-  return NextResponse.redirect(buildEndSessionUrl(await getRequestOrganization()));
+  return NextResponse.redirect(buildEndSessionUrl(getOrganization()));
 }

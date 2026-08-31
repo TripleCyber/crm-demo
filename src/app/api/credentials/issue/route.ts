@@ -241,9 +241,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       mail: delivery === 'email' ? composeMailDraft(t, customer, offer.offerUri) : undefined,
       // Dónde va el titular a recogerla. Sólo en su canal, y es una dirección
       // pública: no lleva la oferta dentro.
-      // La dirección es la de ESTA organización: con tres dominios sobre el
-      // mismo despliegue, una global mandaría al asegurado de Seguros Aurora al
-      // portal del banco, donde no tiene ficha.
+      // La dirección sale de `CRM_PORTAL_BASE_URL` y nunca del `Host` de la
+      // petición: es a donde va el titular a recoger su credencial, y componerla
+      // con algo que escribe quien llama sería dejar que un tercero decida a
+      // dónde manda este banco a sus clientes.
       portalUrl: delivery === 'app' ? `${getPortalBaseUrl(session.organization)}/portal` : undefined,
     });
   } catch (error) {

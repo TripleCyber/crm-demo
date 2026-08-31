@@ -51,9 +51,9 @@
 
      Estos seis valores son la marca **por defecto**, y desde el 2026-08-31
      una organización puede traer la suya: `src/lib/brand.ts` redefine estas
-     mismas variables en el `<body>` con lo que declare su
-     `CRM_ORG_<SLUG>_BRAND_COLOR` y `_BRAND_SURFACE`, y ni una regla de esta
-     hoja se entera — siguen leyendo `var(--navy-deep)`.
+     mismas variables en el `<body>` con lo que declaren `CRM_BRAND_COLOR` y
+     `CRM_BRAND_SURFACE`, y ni una regla de esta hoja se entera — siguen leyendo
+     `var(--navy-deep)`.
 
      Se conserva el nombre `--navy` a propósito, aunque para Larkfield Energy
      valga un violeta: renombrarlas a `--brand-*` son ciento y pico

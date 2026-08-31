@@ -25,9 +25,9 @@ import { createTranslator, type Translator } from './translate';
  *    declara, no una suposición nuestra.
  * 3. **Inglés**, que es el idioma del catálogo.
  *
- * El dominio **no** entra: es la identidad de la organización
- * (`lib/request-organization.ts`), y son dos preguntas distintas — de quién es
- * esta consola, y en qué idioma la lee quien la tiene delante.
+ * Ni el dominio ni el entorno entran: aquéllos dicen de quién es esta consola
+ * (`lib/organization.ts`), y esto en qué idioma la lee quien la tiene delante.
+ * Son dos preguntas distintas y tienen dos respuestas distintas.
  *
  * Es `server-only` porque lee cookies y cabeceras. Los componentes de navegador
  * reciben el idioma por contexto (`./client.tsx`) y no vuelven a resolverlo:

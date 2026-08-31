@@ -201,7 +201,21 @@ export async function settleVerification(
   await query(
     `update verification
         set status = $3,
-            disclosed_claims = $4,
+            -- coalesce y no una asignación a secas, POR EL WEBHOOK.
+            --
+            -- Este diario se cierra ahora por dos caminos: el sondeo de la
+            -- pantalla, que trae los claims que enseñó el titular, y el evento
+            -- de te-api, que trae el veredicto y a propósito NO trae los claims
+            -- (minimiza el dato personal que sale por un canal saliente). Con
+            -- una asignación normal, el que llegara segundo con null borraría lo
+            -- que hubiera escrito el primero.
+            --
+            -- Hoy no puede pasar -- el where exige pending y el primero en
+            -- llegar cierra la fila -- pero eso hace que los claims dependan de
+            -- QUIEN llegue antes, y eso si es una carrera de verdad: el webhook
+            -- gana siempre que el agente no tenga la pestaña abierta. Preservar
+            -- lo que ya hubiera es lo correcto en los dos ordenes.
+            disclosed_claims = coalesce($4, disclosed_claims),
             settled_at = now()
       where org_id = $1 and presentation_id = $2 and status = 'pending'`,
     [orgId, presentationId, status, disclosedClaims === null ? null : JSON.stringify(disclosedClaims)],

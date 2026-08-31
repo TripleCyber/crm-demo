@@ -1,6 +1,33 @@
 -- 005_sector_reference · el padrón deja de ser el de un banco.
 --
 -- ═══════════════════════════════════════════════════════════════════════════
+--  NOTA POSTERIOR (2026-08-31): DOS DE ESTAS COLUMNAS YA NO LAS LEE NADIE
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- `policy_number` y `medical_record_number` entraron para Seguros Aurora y
+-- Clínica San Rafael, que **se retiraron** al pasar el CRM a una instalación por
+-- empresa: quedan Banco Demo (`account_last4`) y Larkfield Energy
+-- (`supply_point_number`), y ningún camino del código nombra ya las otras dos.
+-- Se fueron del catálogo de atributos, del formulario de alta, del buscador y de
+-- los rótulos.
+--
+-- **Las columnas se quedan, y es una decisión, no un olvido.** Tres razones, en
+-- orden de peso:
+--
+--  1. Esta migración **está aplicada** y tiene filas dentro. Quitar las columnas
+--     sería una migración destructiva —`drop column` no se deshace— para ganar
+--     dos columnas nulas que ya no lee nadie.
+--  2. Un `drop` aquí y un `alter` allí dejan dos bases distintas según cuándo se
+--     creara cada una. Editar el DDL de una migración ya aplicada es exactamente
+--     lo que el registro de migraciones existe para impedir.
+--  3. No cuestan nada: son `text` nulo, no entran en ningún índice y ninguna
+--     consulta las selecciona.
+--
+-- Lo que NO se hace es dejarlas a medias: no hay código que las escriba ni que
+-- las lea. Si algún día vuelve un sector con póliza, la columna está y lo que
+-- hay que añadir es lo de arriba.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
 --  POR QUÉ HACE FALTA UNA COLUMNA Y NO VALE UNA VARIABLE DE ENTORNO
 -- ═══════════════════════════════════════════════════════════════════════════
 --

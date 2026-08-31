@@ -1,10 +1,10 @@
 import 'server-only';
 
 import { fetchOrgDidKeys } from './te-api';
-import type { OrganizationConfig } from './organizations';
+import type { OrganizationConfig } from './organization';
 
 /**
- * El documento DID que cada organización publica en `/.well-known/did.json`.
+ * El documento DID que esta instalación publica en `/.well-known/did.json`.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  *  LAS CLAVES SALEN DE te-api, Y DE NINGÚN OTRO SITIO
@@ -155,34 +155,34 @@ interface CacheEntry {
 }
 
 /**
- * Una entrada por organización. Vive en el proceso, como el token M2M.
+ * La entrada de caché. **Una sola**, porque una instalación es de una empresa.
  *
- * No es estado compartido entre despliegues: en Next el módulo se evalúa en
- * cada trabajador, así que lo peor que puede pasar es que dos trabajadores
- * pregunten a te-api por separado.
+ * Era un `Map` por `orgId` cuando el despliegue servía a cuatro. No es estado
+ * compartido entre despliegues: en Next el módulo se evalúa en cada trabajador,
+ * así que lo peor que puede pasar es que dos trabajadores pregunten a te-api por
+ * separado.
  */
-const documentCache = new Map<string, CacheEntry>();
+let documentCache: CacheEntry | undefined;
 
 /**
- * Peticiones en vuelo, por organización.
+ * La petición en vuelo, si la hay.
  *
  * Sin esto, el instante en que caduca la caché convierte cada cartera que esté
  * verificando en ese momento en una llamada a te-api. `did.json` es la ruta más
  * pública que tiene este servidor: es el único sitio donde la estampida es un
  * escenario real y no una precaución.
  */
-const inFlight = new Map<string, Promise<readonly PublicJwk[] | null>>();
+let inFlight: Promise<readonly PublicJwk[] | null> | undefined;
 
 /**
- * **El documento DID de una organización, con su respaldo.** Es lo que sirve la
+ * **El documento DID de esta instalación, con su respaldo.** Es lo que sirve la
  * ruta.
  *
- * El dominio entra por parámetro y sale de `CRM_ORG_<SLUG>_DOMAIN`, nunca de la
- * cabecera `Host`: la ruta busca primero qué organización vive en ese host y
- * después compone con lo que esa organización tiene declarado. Si se compusiera
- * con el `Host`, cualquiera que apuntase un DNS a esta máquina se fabricaría un
- * `did:web` en su dominio respaldado por nuestras claves. Ese mismo dominio es
- * el que se le pide a te-api y el que se exige de vuelta en el `id`.
+ * El dominio sale de `CRM_ORG_DOMAIN` y **nunca de la cabecera `Host`**: si se
+ * compusiera con el `Host`, cualquiera que apuntase un DNS a esta máquina se
+ * fabricaría un `did:web` en su dominio respaldado por nuestras claves. Ese
+ * mismo dominio es el que se le pide a te-api y el que se exige de vuelta en el
+ * `id`.
  *
  * **No lanza nunca**, pero **sí puede devolver `null`**: cuando te-api no tiene
  * claves para esta organización y no hay caché. Quien llama lo traduce en un
@@ -191,21 +191,20 @@ const inFlight = new Map<string, Promise<readonly PublicJwk[] | null>>();
  */
 export async function resolveDidDocument(
   organization: OrganizationConfig,
-  domain: string,
 ): Promise<ResolvedDidDocument | null> {
-  const did = didWebOf(domain);
-  const cached = documentCache.get(organization.orgId);
+  const did = didWebOf(organization.domain);
+  const cached = documentCache;
 
   if (cached !== undefined && Date.now() < cached.nextAskAtMs) {
     return serve(cached, did, false);
   }
 
-  const fromApi = await askTeApi(organization, did, domain);
+  const fromApi = await askTeApi(organization, did);
   const now = Date.now();
 
   if (fromApi !== null) {
-    // El orden de te-api se respeta: su primera clave es la activa, y la
-    // cartera prueba `keys.first()` cuando el `kid` no le casa con ninguna
+    // El orden de te-api se respeta: su primera clave es la activa, y la cartera
+    // prueba `keys.first()` cuando el `kid` no le casa con ninguna
     // (`VerificationKeys.kt`).
     const entry: CacheEntry = {
       keys: fromApi,
@@ -213,7 +212,7 @@ export async function resolveDidDocument(
       storedAtMs: now,
       nextAskAtMs: now + FRESH_TE_API_MS,
     };
-    documentCache.set(organization.orgId, entry);
+    documentCache = entry;
     return serve(entry, did, true);
   }
 
@@ -223,27 +222,25 @@ export async function resolveDidDocument(
   // la verdad sobre lo vieja que es.
   if (cached !== undefined) {
     const kept: CacheEntry = { ...cached, nextAskAtMs: now + RETRY_AFTER_NO_ANSWER_MS };
-    documentCache.set(organization.orgId, kept);
+    documentCache = kept;
     return serve(kept, did, false);
   }
 
   // Ni te-api ni caché. **No hay documento**, y eso es una respuesta: esta
   // organización todavía no tiene identidad de emisor. Devolver una lista vacía
-  // sería peor —la cartera la tomaría por buena— y devolver claves de relleno
-  // es justo lo que este fichero dejó de hacer.
+  // sería peor —la cartera la tomaría por buena— y devolver claves de relleno es
+  // justo lo que este fichero dejó de hacer.
   return null;
 }
 
-/** Una llamada a te-api por organización, aunque pregunten diez a la vez. */
+/** Una sola llamada a te-api, aunque pregunten diez carteras a la vez. */
 async function askTeApi(
   organization: OrganizationConfig,
   did: string,
-  domain: string,
 ): Promise<readonly PublicJwk[] | null> {
-  const pending = inFlight.get(organization.orgId);
-  if (pending !== undefined) return pending;
+  if (inFlight !== undefined) return inFlight;
 
-  const request = fetchOrgDidKeys(organization, did, domain)
+  const request = fetchOrgDidKeys(organization, did, organization.domain)
     .catch((error: unknown) => {
       // `fetchOrgDidKeys` ya devuelve `null` en vez de lanzar para todo lo
       // previsto. Esto es el cinturón: un fallo inesperado ahí NO puede dejar
@@ -255,10 +252,10 @@ async function askTeApi(
       return null;
     })
     .finally(() => {
-      inFlight.delete(organization.orgId);
+      inFlight = undefined;
     });
 
-  inFlight.set(organization.orgId, request);
+  inFlight = request;
   return request;
 }
 
@@ -279,11 +276,8 @@ function serve(entry: CacheEntry, did: string, justFetched: boolean): ResolvedDi
  * El documento DID de un dominio con las claves dadas, **en el orden dado**.
  *
  * Es el mismo montaje que hace te-api (`src/trust/did-document.ts`), y tiene
- * que seguir siéndolo: su ruta devuelve el documento entero justamente para que
- * nadie lo componga dos veces, y aquí se compone igualmente porque la unión con
- * el suelo obliga. Cualquier campo que te-api añada a su documento hay que
- * añadirlo aquí el mismo día, o el `did.json` de estos tres dominios se queda
- * atrás.
+ * que seguir siéndolo. Cualquier campo que te-api añada a su documento hay que
+ * añadirlo aquí el mismo día, o el `did.json` de este dominio se queda atrás.
  *
  * Se exporta para poder montarlo sin pasar por la red, que es como se prueba.
  */

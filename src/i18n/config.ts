@@ -2,15 +2,17 @@
  * Los idiomas de la consola, y **cómo se elige uno**.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  EL IDIOMA NO CUELGA DEL DOMINIO, Y ESO ES DELIBERADO
+ *  EL IDIOMA NO CUELGA NI DEL DOMINIO NI DEL ENTORNO, Y ESO ES DELIBERADO
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * En este despliegue **el dominio es la identidad de la organización**
- * (`src/lib/request-organization.ts`): `bank.demo-te.com` decide qué padrón se
- * enseña y qué `did:web` se publica. Colgar de ahí también el idioma haría dos
- * cosas malas a la vez —obligaría a un dominio por idioma, y ataría el idioma
- * de un empleado a la entidad para la que trabaja— cuando lo que de verdad
- * varía es quién mira la pantalla, no de quién es.
+ * **El dominio es la identidad de la organización** (`src/lib/organization.ts`):
+ * de `CRM_ORG_DOMAIN` sale el `did:web` que se publica. Colgar de ahí también el
+ * idioma obligaría a un dominio por idioma.
+ *
+ * Y tampoco es una variable de entorno, que sería lo fácil ahora que hay una
+ * instalación por empresa: eso ataría el idioma de un empleado a la entidad para
+ * la que trabaja, y en un mostrador se sientan personas distintas. Lo que de
+ * verdad varía es **quién mira la pantalla**, no de quién es.
  *
  * Tampoco va en la ruta (`/en/customers`). Meter un segmento de idioma delante
  * cambiaría **todas** las direcciones del producto: los enlaces que un agente

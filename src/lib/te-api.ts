@@ -4,7 +4,7 @@ import type { MessageKey, Translator } from '@/i18n/translate';
 
 import { getB2bToken, invalidateB2bToken } from './b2b-token';
 import type { PublicJwk } from './did-document';
-import type { OrganizationConfig } from './organizations';
+import type { OrganizationConfig } from './organization';
 
 /**
  * El cliente de te-api.

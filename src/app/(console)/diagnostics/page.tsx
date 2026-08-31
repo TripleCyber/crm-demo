@@ -1,11 +1,15 @@
+import Link from 'next/link';
+
 import { LOCALE_NAMES } from '@/i18n/config';
 import { getTranslator } from '@/i18n/server';
 import type { Translator } from '@/i18n/translate';
 import { monogramOf } from '@/lib/brand';
 import { query } from '@/lib/db';
 import { didWebOf } from '@/lib/did-document';
+import { formatTimestamp } from '@/lib/format';
 import { getEmployeeSession } from '@/lib/session';
 import { describeTeApiError, fetchB2bOrganization, TeApiError } from '@/lib/te-api';
+import { countWebhookEvents, type WebhookEventTally } from '@/lib/webhook-events';
 
 /**
  * Diagnóstico de la integración: `GET /v1/b2b/organization` y lo que contesta.
@@ -24,7 +28,7 @@ import { describeTeApiError, fetchB2bOrganization, TeApiError } from '@/lib/te-a
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Estaban repartidos por las pantallas de atención al cliente —la de emisión
- * decía «se declaran en `CRM_ORG_<SLUG>_OFFICIAL_NUMBERS`»— y ahí no sirven
+ * decía «se declaran en `CRM_OFFICIAL_NUMBERS`»— y ahí no sirven
  * para nada: quien las lee tiene un cliente al teléfono y no puede tocar la
  * configuración del despliegue. Aquí sí sirven, porque esta pantalla la mira
  * quien puede ponerlas.
@@ -62,6 +66,15 @@ export default async function DiagnosticsPage() {
   // no supiera contestar por la base, «el detalle está en Diagnóstico» sería
   // una frase que no se cumple, y un aviso no sustituye a la comprobación.
   const database = await checkDatabase(t, session.organization.orgId);
+
+  // El recuento de webhooks va aparte del `checkDatabase` de arriba porque
+  // fallan por cosas distintas: aquélla contesta «¿hay base y migraciones?» y
+  // ésta puede fallar sola si `007_webhook_event` no está aplicada. Se traga el
+  // error y se enseña como «no se sabe» — una pantalla de diagnóstico que se cae
+  // por no poder contar es la que menos puede caerse.
+  const webhooks: WebhookEventTally | undefined = await countWebhookEvents(
+    session.organization.orgId,
+  ).catch(() => undefined);
 
   try {
     organization = await fetchB2bOrganization(session.organization);
@@ -124,35 +137,21 @@ export default async function DiagnosticsPage() {
           <dt>{t('diagnostics.name')}</dt>
           <dd>{session.organization.displayName}</dd>
           {/*
-            El dominio, porque es lo que ELIGE esta organización. Los cuatro
-            dominios los sirve el mismo despliegue, así que «¿por qué veo el
-            padrón de éstos?» se contesta aquí y no adivinando.
+            El dominio, porque es la IDENTIDAD de esta instalación: de él sale el
+            `did:web` con el que se firma todo lo que emite. Es obligatorio desde
+            que una instalación sirve a una sola empresa —sin él no se arranca—,
+            así que aquí ya no hay rama de «sin declarar».
           */}
           <dt>{t('diagnostics.domain')}</dt>
-          <dd className="mono">
-            {session.organization.domain ?? (
-              <span className="warn">{t('diagnostics.domainMissing')}</span>
-            )}
-          </dd>
+          <dd className="mono">{session.organization.domain}</dd>
           <dt>{t('diagnostics.didPublished')}</dt>
-          <dd className="mono">
-            {session.organization.domain === undefined ? (
-              // Sin dominio no hay documento DID que publicar, y la ruta
-              // devuelve 404. Decirlo aquí ahorra el ciclo de depuración de
-              // «la cartera rechaza mis credenciales y no sé por qué»: el
-              // síntoma en el teléfono es «no podemos verificar quién emite
-              // esto», que no se parece a «falta una variable».
-              <span className="warn">{t('diagnostics.didNone')}</span>
-            ) : (
-              didWebOf(session.organization.domain)
-            )}
-          </dd>
+          <dd className="mono">{didWebOf(session.organization.domain)}</dd>
           <dt>{t('diagnostics.officialNumbers')}</dt>
           <dd>
             {session.organization.officialNumbers.length === 0 ? (
               <span className="warn">
                 {t('diagnostics.officialNumbersNone')}
-                <span className="mono">CRM_ORG_&lt;SLUG&gt;_OFFICIAL_NUMBERS</span>
+                <span className="mono">CRM_OFFICIAL_NUMBERS</span>
               </span>
             ) : (
               <span className="mono">{session.organization.officialNumbers.join(' · ')}</span>
@@ -172,8 +171,8 @@ export default async function DiagnosticsPage() {
             {session.organization.brand === undefined ? (
               <span className="warn">
                 {t('diagnostics.brandNone')}
-                <span className="mono">CRM_ORG_&lt;SLUG&gt;_BRAND_COLOR</span> y{' '}
-                <span className="mono">CRM_ORG_&lt;SLUG&gt;_BRAND_SURFACE</span>
+                <span className="mono">CRM_BRAND_COLOR</span> y{' '}
+                <span className="mono">CRM_BRAND_SURFACE</span>
               </span>
             ) : (
               <span className="mono">
@@ -193,13 +192,8 @@ export default async function DiagnosticsPage() {
             {session.organization.portal === undefined ? (
               <span className="warn">
                 {t('diagnostics.portalUndeclared')}
-                <span className="mono">
-                  CRM_ORG_&lt;SLUG&gt;_PORTAL_CLIENT_ID
-                </span>{' '}
-                y{' '}
-                <span className="mono">
-                  CRM_ORG_&lt;SLUG&gt;_PORTAL_CLIENT_SECRET
-                </span>
+                <span className="mono">CRM_PORTAL_CLIENT_ID</span> y{' '}
+                <span className="mono">CRM_PORTAL_CLIENT_SECRET</span>
               </span>
             ) : (
               // El `client_id` del portal sí se enseña, y el M2M no. No es una
@@ -218,21 +212,90 @@ export default async function DiagnosticsPage() {
          DE QUIÉN ES ESTA PANTALLA, Y POR QUÉ
         ═══════════════════════════════════════════════════════════════════════
 
-        Un solo despliegue contesta en los tres dominios, así que «¿por qué veo
-        el padrón de esta organización?» es una pregunta legítima y la contesta
-        el dominio de la petición. Está escrito aquí para que no haya que
-        deducirlo de la barra lateral.
+        La pregunta se contestaba con el dominio de la petición, porque un
+        despliegue servía a cuatro empresas. Ahora se contesta con el entorno del
+        proceso, y sigue mereciendo su tarjeta: quien despliega la segunda
+        instalación tiene que leer en algún sitio que **es otra publicación de la
+        misma imagen** y no una organización más dentro de ésta.
       */}
       <div className="card">
         <h2>{t('diagnostics.orgChoiceTitle')}</h2>
         <dl className="facts">
           <dt>{t('diagnostics.whoChooses')}</dt>
           <dd>{t.rich('diagnostics.whoChoosesDetail')}</dd>
-          <dt>{t('diagnostics.unknownDomain')}</dt>
-          <dd>{t.rich('diagnostics.unknownDomainDetail')}</dd>
+          <dt>{t('diagnostics.twoTenants')}</dt>
+          <dd>{t.rich('diagnostics.twoTenantsDetail')}</dd>
           <dt>{t('diagnostics.didNoFallback')}</dt>
           <dd>{t.rich('diagnostics.didNoFallbackDetail')}</dd>
         </dl>
+      </div>
+
+      {/*
+        ═══════════════════════════════════════════════════════════════════════
+         EL WEBHOOK, QUE ES LO ÚNICO QUE ENTRA EN VEZ DE SALIR
+        ═══════════════════════════════════════════════════════════════════════
+
+        Todo lo demás de esta pantalla comprueba llamadas que hace el CRM. Ésta
+        es la única dirección en la que TripleEnable llama al CRM, así que es la
+        única que **no se puede comprobar desde aquí**: la prueba real es un
+        evento de prueba lanzado desde la consola. Lo que sí se puede decir es
+        qué dirección hay que pegar allí, si hay secreto con el que comprobar la
+        firma, y cuántas entregas han llegado y cuántas se han rechazado.
+
+        El número de rechazadas es el que importa y por eso está aquí y no sólo
+        en la pantalla de eventos: si no es cero, o alguien está inventando
+        eventos o el secreto se rotó y aquí no se actualizó.
+      */}
+      <div className="card">
+        <h2>{t('diagnostics.webhookTitle')}</h2>
+        <dl className="facts">
+          <dt>{t('diagnostics.webhookUrl')}</dt>
+          <dd>
+            <span className="mono">
+              https://{session.organization.domain}/api/webhooks/te-api
+            </span>
+            <span className="sub">{t('diagnostics.webhookUrlNote')}</span>
+          </dd>
+          <dt>{t('diagnostics.webhookSecret')}</dt>
+          <dd>
+            {session.organization.webhookSecret === undefined ? (
+              <span className="warn">
+                {t('diagnostics.webhookSecretMissing')}
+                <span className="mono">CRM_WEBHOOK_SECRET</span>
+              </span>
+            ) : (
+              // Que LO HAY, nunca cuál. Esta pantalla acaba en capturas.
+              t('diagnostics.webhookSecretSet')
+            )}
+          </dd>
+          <dt>{t('diagnostics.webhookReceived')}</dt>
+          <dd>
+            {webhooks === undefined ? (
+              <span className="warn">{t('diagnostics.connectionUnknownError')}</span>
+            ) : webhooks.total === 0 ? (
+              t('diagnostics.webhookNever')
+            ) : (
+              <>
+                <span className={webhooks.rejected > 0 ? 'warn' : undefined}>
+                  {t('diagnostics.webhookTally', {
+                    total: webhooks.total,
+                    rejected: webhooks.rejected,
+                  })}
+                </span>
+                {webhooks.lastReceivedAt !== null && (
+                  <span className="sub">
+                    {t('diagnostics.webhookLast', {
+                      time: formatTimestamp(webhooks.lastReceivedAt, t.locale),
+                    })}
+                  </span>
+                )}
+              </>
+            )}
+          </dd>
+        </dl>
+        <p style={{ marginBottom: 0 }}>
+          <Link href="/events">{t('diagnostics.webhookLink')}</Link>
+        </p>
       </div>
 
       {/*

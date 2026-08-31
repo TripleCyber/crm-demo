@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { getLogtoConfig, type OrganizationConfig } from './organizations';
+import { getLogtoConfig, type OrganizationConfig } from './organization';
 
 /**
  * El token M2M de organización — lo único que autentica al CRM contra te-api.

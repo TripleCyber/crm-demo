@@ -1,24 +1,32 @@
 # crm-demo · el CRM de demostración
 
-La consola de agentes de **cuatro organizaciones de mentira** —un banco, una
-aseguradora, una clínica y una comercializadora de energía— que emiten
-credenciales de verdad. Es la pieza de
-[`F4`](../docs/fases/F4-crm.md) y **es la única maqueta del proyecto** — pero la
-mitad que habla con nosotros no lo es: el token B2B y la emisión son los de
-producción.
+La consola de agentes de **una empresa de mentira** que emite credenciales de
+verdad. Es la pieza de [`F4`](../docs/fases/F4-crm.md) y **es la única maqueta
+del proyecto** — pero la mitad que habla con nosotros no lo es: el token B2B y la
+emisión son los de producción.
 
 > **Sus empleados son reales; sus clientes son locales.**
-> Los clientes son filas en la base de este proyecto. Ni te-api ni Logto las
-> leen nunca, igual que no leemos el núcleo bancario de un banco de verdad.
+> Los clientes son filas en la base de este proyecto. Ni te-api ni Logto las leen
+> nunca, igual que no leemos el núcleo bancario de un banco de verdad.
 
-> **Un despliegue, cuatro dominios, y el dominio elige.**
-> `bank.demo-te.com`, `seguros.demo-te.com`, `clinica.demo-te.com` y
-> `energy.demo-te.com` están declarados en Coolify contra **esta misma
-> aplicación**. La organización de
-> cada petición sale de su `Host` (`src/lib/request-organization.ts`), y de ahí
-> salen las dos cosas que no pueden discrepar: qué padrón se enseña y qué
-> `did:web` se publica. `CRM_ACTIVE_ORG_ID` es sólo el respaldo para los hosts
-> que no son de nadie — `localhost` en desarrollo.
+> **UNA INSTALACIÓN, UN INQUILINO.**
+> Toda la identidad de la empresa sale del entorno del proceso —`CRM_ORG_ID`,
+> `CRM_ORG_DOMAIN`, `CRM_M2M_*`— y **la cabecera `Host` no decide nada**. Para
+> servir a una segunda empresa se publica la misma imagen otra vez con otro
+> entorno, otro dominio y otra base.
+>
+> Hasta el 2026-08-31 esto era al revés: un despliegue servía a cuatro empresas y
+> el `Host` de la petición elegía de cuál era cada pantalla. Se retiró entero por
+> decisión del dueño, con el argumento de que **el CRM de una empresa es de esa
+> empresa**: un despliegue que multiplexa cuatro clientes por una cabecera no se
+> parece a nada que uno de ellos vaya a instalar. Con él se fueron el mapa de
+> organizaciones, los prefijos `CRM_ORG_<SLUG>_`, los alias de desarrollo y
+> `CRM_ACTIVE_ORG_ID`.
+
+> **Las dos instalaciones de la demostración** son **Banco Demo**
+> (`bank.demo-te.com`) y **Larkfield Energy** (`energy.demo-te.com`). Los dos
+> bloques de variables, completos y listos para pegar en Coolify, están en
+> [`.env.example`](.env.example).
 
 ## Lo que hay hoy y lo que no
 
@@ -26,11 +34,12 @@ producción.
 |---|---|
 | ✅ | Next.js (App Router, TypeScript) con el patrón de `tenant-admin`: proxy en el servidor, ni un secreto en el navegador |
 | ✅ | Base propia Postgres con `customer`, migración reproducible y siembra aparte |
-| ✅ | Listado de clientes con **buscador** (nombre, identificador, correo o la referencia del sector —los cuatro de la cuenta, la póliza o el número de historia—, sin acentos) y dos columnas de estado por cliente, y alta de cliente. La columna de referencia la elige **lo que el padrón rellena**, no una variable |
+| ✅ | Listado de clientes con **buscador** (nombre, identificador, correo o la referencia del sector —los cuatro de la cuenta o el punto de suministro—, sin acentos) y dos columnas de estado por cliente, y alta de cliente. La columna de referencia la elige **lo que el padrón rellena**, no una variable |
 | ✅ | Cliente del token B2B en el servidor: `client_credentials` + `resource` + `organization_id` + `scope`, cacheado y renovado antes de caducar |
 | ✅ | Botón «emitir credencial» → `POST /v1/b2b/credentials` de te-api → QR, enlace debajo y PIN aparte. **Probado de punta a punta el 2026-08-29**: la credencial se recogió con el flujo OID4VCI y salió con `iss = did:web:bank.demo-te.com`, `sub` = el `external_id` de la ficha y los cuatro claims como divulgaciones |
-| ✅ | Multi-organización **por dominio**: mapa `orgId → {…}` por variables de entorno, y el `Host` de la petición elige. Cuatro declaradas desde el 2026-08-31. Añadir otra del mismo sector es sólo variables; otro sector necesita además su columna en el padrón (`db/005_…`, `db/006_…`) |
-| ✅ | **Marca por organización**: dos colores y un monograma por variables de entorno (`src/lib/brand.ts`), aplicados como tokens CSS en el `<body>` desde el servidor. Sin declarar marca se queda la paleta de la hoja, así que las tres primeras no cambiaron. Los colores de **estado** —rojo/ámbar/verde/azul— no se repintan nunca |
+| ✅ | **Una instalación, un inquilino**, con la configuración plana en el entorno (`src/lib/organization.ts`). Servir a otra empresa es publicar la imagen otra vez; un sector nuevo necesita además su columna en el padrón (`db/005_…`, `db/006_…`) |
+| ✅ | **Marca por instalación**: dos colores y un monograma por variables de entorno (`src/lib/brand.ts`), aplicados como tokens CSS en el `<body>` desde el servidor. Sin declarar marca se queda la paleta de la hoja. Los colores de **estado** —rojo/ámbar/verde/azul— no se repintan nunca |
+| ✅ | **Receptor de webhooks** en `POST /api/webhooks/te-api`, con la firma comprobada (`te-signature-sha-256`, HMAC-SHA256 sobre `t.cuerpo`, hex, dos firmas durante una rotación) y **rechazo si no cuadra**. Lo recibido se guarda en `webhook_event` y se ve en `/events`, con la firma en su propia columna. Ver «El webhook» |
 | ⛔ | **Login de empleado con Logto OIDC.** Es la casilla que queda de F4a. Mientras no esté, esta consola **no está autenticada** y no puede publicarse donde llegue nadie de fuera |
 | ✅ | **Portal del cliente en `/portal`** (F4b): login OIDC del titular contra Logto y `POST /v1/b2b/links` desde el servidor. **Probado en el navegador el 2026-08-29**: Teófilo entró con su cuenta de TripleEnable y el vínculo quedó hecho — fila en `te.org_subject` de te-api, y volver a entrar es idempotente |
 | ✅ | **El diario del banco**: cada oferta emitida y cada comprobación lanzada quedan anotadas (`credential_offer`, `verification`), y la ficha las enseña con su hora y su autor. Es lo que permite que el listado tenga estado y que una verificación tenga dirección propia |
@@ -39,8 +48,8 @@ producción.
 | ✅ | **La vía telefónica**: «está al teléfono · avisar a su móvil» → la misma presentación **más `POST /v1/b2b/wakeups`**, el timbre. Es lo que hace que la comprobación sirva para una llamada, donde el cliente no ve la pantalla del agente. **Probado el 2026-08-29**: la llamada sale con `kind: identity` y el `actor` del empleado, te-api contesta `{ wakeupId, expiresAt }` y anota `b2b.wakeup_created`. **Ningún teléfono ha sonado todavía** — ver «Lo que falta para que suene un teléfono» |
 | ✅ | **Consola bilingüe.** El original está en **inglés** y el castellano es una traducción; lo elige quien mira la pantalla y no el dominio, se guarda en una cookie y **no hace falta reconstruir la imagen** para cambiarlo. Ver «El idioma» |
 | ⛔ | **Revocación** (la otra mitad de F4c) |
-| ✅ | `/.well-known/did.json`, **uno por organización y elegido por el `Host`** (`src/app/.well-known/did.json/route.ts`). Era un estático en `public/`, que se sirve por camino y no por `Host`: con cuatro dominios devolvía el documento del banco en los cuatro. Un `Host` que no es de ninguna organización devuelve **404**, nunca el de otra. Lleva **dos** claves, la del emisor desplegado y la del local, porque durante una rotación las dos tienen que valer; el porqué de cada campo está en `src/lib/did-document.ts` |
-| ⛔ | Que los documentos de **Seguros Aurora, Clínica San Rafael y Larkfield Energy** se descarguen de sus dominios. El documento ya lo sirve esta aplicación; lo que falta es **declarar los tres dominios en Coolify**, que es lo que dispara el certificado — ver [`DOMINIOS.md`](../docs/fases/DOMINIOS.md) §4. Larkfield además no tendrá documento hasta que encienda su emisión: te-api no tiene claves suyas y la ruta devuelve **404**, que es la verdad |
+| ✅ | `/.well-known/did.json`, compuesto **siempre con `CRM_ORG_DOMAIN`** (`src/app/.well-known/did.json/route.ts`). Las claves las da te-api y esta ruta no puede caerse por ello; si te-api no tiene ninguna, devuelve **404**, que es la verdad — esa empresa todavía no ha encendido su emisión. El `Host` ya no participa: el `id` del documento es el mismo diga lo que diga la petición, así que apuntar un DNS aquí no fabrica una identidad |
+| ⛔ | Que el documento de **Larkfield Energy** se descargue de su dominio. Faltan dos cosas: **declarar el dominio en Coolify**, que es lo que dispara el certificado (ver [`DOMINIOS.md`](../docs/fases/DOMINIOS.md) §4), y que encienda su emisión — sin claves suyas en te-api la ruta devuelve 404 |
 
 ## Dos secciones, no una
 
@@ -68,10 +77,13 @@ cae al inglés — no revienta y **no pinta nunca el nombre de la clave**.
 > castellano**. Son la traducción, no el original: por defecto la consola se ve
 > en inglés, y lo que sale ahí es lo que dice `messages/en.ts`.
 
-**Lo elige quien mira la pantalla, y no el dominio.** El dominio es la identidad
-de la organización (`src/lib/request-organization.ts`) y ésa es otra pregunta:
-de quién es esta consola, frente a en qué idioma la lee quien la tiene delante.
-Atarlas obligaría a un dominio por idioma. Tampoco va en la ruta —nada de
+**Lo elige quien mira la pantalla, y no el dominio ni el entorno.** El dominio es
+la identidad de la organización (`src/lib/organization.ts`) y ésa es otra
+pregunta: de quién es esta consola, frente a en qué idioma la lee quien la tiene
+delante. Atarlas obligaría a un dominio por idioma, y ponerlo en el entorno
+—fácil ahora que hay una instalación por empresa— ataría el idioma de un empleado
+a la entidad para la que trabaja, cuando en un mostrador se sientan personas
+distintas. Tampoco va en la ruta —nada de
 `/en/customers`—: un segmento delante cambiaría el enlace que un agente pega en
 un chat para pasar una verificación, el `redirect_uri` declarado en Logto y
 `/.well-known/did.json`, que tiene que responder en la raíz del dominio o la
@@ -97,7 +109,7 @@ lee junto a esos comentarios— y los errores de configuración que lanza `src/l
 («falta esta variable»), que están en inglés fijo porque los lee quien despliega
 y van al lado de lo que conteste Postgres, que también viene en inglés.
 
-## Las pantallas de la consola, y por qué son cinco y no una
+## Las pantallas de la consola, y por qué son varias y no una
 
 **Cada acción tiene su dirección.** Es la estructura que dibuja el artifact
 «Llamada Verificada» en «Lo que ve Pedro» —C0 en `…/credencial`, C1 en la ficha,
@@ -115,7 +127,8 @@ formulario largo donde lo que se leía era el desplegable.
 | `/verifications/<presentationId>` | **Seguir** una comprobación: el estado en grande —con el titular, su número de cliente y el plazo corriendo—, el QR o el enlace, la línea de tiempo y el recibo | C2 · C3 |
 | `/verifications` | El registro de comprobaciones de la organización | — |
 | `/customers/new` | Alta de cliente | — |
-| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, portal), cómo se elige la organización, **de dónde sale el idioma**, y una comprobación real de la base. **Es el único sitio donde se dice el nombre de una variable de entorno** | — |
+| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, marca, portal, **webhook**), de dónde sale el idioma, y una comprobación real de la base. **Es el único sitio donde se dice el nombre de una variable de entorno** | — |
+| `/events` | Los **eventos recibidos por webhook**: cuándo, de qué tipo, a qué cliente afectan y si la firma cuadró. Es la única parte de la integración que ocurre sin que nadie esté mirando, y por eso tiene pantalla | — |
 
 Que el seguimiento tenga dirección propia es lo que arregla tres cosas de golpe:
 recargar la pestaña ya no pierde la ceremonia en curso, el enlace se le puede
@@ -129,8 +142,8 @@ Navegador  (listado · alta · botón de emitir)
    │  fetch /api/credentials/issue        ← lo único que manda es el externalId
    ▼
 Next.js, en el servidor
-   │  1. Host → organización              src/lib/request-organization.ts
-   sesión → organización            src/lib/session.ts
+   │  1. entorno → organización           src/lib/organization.ts
+   │     sesión → organización            src/lib/session.ts
    │  2. ficha del cliente                src/lib/customers.ts   (base propia)
    │  3. el tipo, resuelto contra el padrón de te-api
    │  4. claims: los NOMBRES los dice el perfil del tipo,
@@ -187,8 +200,8 @@ Navegador  (ficha · casillas de qué se pide · los dos botones)
    │  fetch /api/credentials/present      ← externalId, tipo, atributos y canal
    ▼
 Next.js, en el servidor
-   │  1. Host → organización              src/lib/request-organization.ts
-   sesión → organización y EMPLEADO
+   │  1. entorno → organización           src/lib/organization.ts
+   │     sesión → organización y EMPLEADO
    │  2. ficha del cliente (con el org_id en el where)
    │  3. el TIPO, resuelto contra el padrón de te-api
    │  4. qué atributos lleva ese tipo EN ESTA FICHA
@@ -236,8 +249,8 @@ la respuesta no permite escribir.
 
 **2 · El `actor` es atribución, no autenticación.** te-api no lo verifica y no
 decide nada con él. Sirve para que en el móvil del titular ponga el nombre y el
-número del empleado que le está llamando —`CRM_ACTIVE_AGENT_NAME` y
-`CRM_ACTIVE_AGENT_ID`— y para el diario. La ficha lo pinta debajo de los botones a
+número del empleado que le está llamando —`CRM_AGENT_NAME` y `CRM_AGENT_ID`— y
+para el diario. La ficha lo pinta debajo de los botones a
 propósito: el agente tiene que poder decir en voz alta el mismo nombre que el
 cliente está viendo en la pantalla del móvil, que es lo que convierte la
 comprobación en algo que sirve contra quien llama diciendo que es del banco.
@@ -279,18 +292,34 @@ Pedirlo todo «ya que estamos» es exactamente lo que la divulgación selectiva
 existe para no tener que hacer, y lo que la cartera enseñe de más tampoco llega:
 te-api devuelve la intersección con lo que se pidió.
 
-**3 · Se sondea, no hay webhook.** te-api no acepta uno del partner, y no por
-falta de soporte en walt.id: el destino lo elegiría quien pide, y el verificador
-de TripleEnable —que vive dentro de su red y no tiene autenticación— acabaría
-haciendo peticiones salientes a donde le dijeran. El sondeo va a 3 s porque la
-consulta pasa por el cubo de tasa por organización de te-api, que comparte con
-la emisión.
+**3 · Se sondea Y se recibe, y las dos cosas hacen falta.** Aquí ponía «se
+sondea, no hay webhook», y era verdad hasta el 2026-08-31: lo que faltaba no era
+soporte en te-api —que tiene cola, reintentos y firma— sino **el receptor**.
+Tanto que el webhook de Banco Demo apuntaba a `webhook.site`, una dirección de
+prueba que no es de nadie.
 
-### Nada de una organización concreta está cableado
+Ahora hay las dos, y no compiten:
+
+| | Para qué | Cuándo gana |
+|---|---|---|
+| **El sondeo** (`GET /v1/b2b/presentations/:id`, cada 3 s) | El agente está mirando la pantalla con el cliente al teléfono | Siempre que la pestaña esté abierta |
+| **El webhook** (`POST /api/webhooks/te-api`) | El titular contesta media hora después y no hay nadie mirando | Siempre que no la esté |
+
+El primero en llegar cierra el diario (`settleVerification` sólo escribe si la
+fila sigue en `pending`). El sondeo va a 3 s porque la consulta pasa por el cubo
+de tasa por organización de te-api, que comparte con la emisión.
+
+Y **el barrido no se quita al añadir el receptor**: es el camino cuando la
+entrega se perdió, y es el único que trae los claims — el evento lleva el
+veredicto pero no el dato personal, a propósito. Ver «El webhook».
+
+### Nada de una empresa concreta está cableado
 
 `VerificationLauncher.tsx` y `VerificationTracker.tsx` no tienen escrito ni un
-`given_name` ni un `cliente`, y `session.ts` ya no compone «Agente de Banco
-Demo» a mano. Las tres
+`given_name` ni un `cliente`, `session.ts` ya no compone «Agente de Banco Demo» a
+mano, y el ejemplo del identificador en el alta salió del código al catálogo el
+2026-08-31 — era `BD-99120447`, que en la consola de una eléctrica es el mismo
+error que ofrecerle la casilla de otro sector. Las tres
 fuentes, en orden:
 
 | Qué | De dónde sale |
@@ -299,7 +328,7 @@ fuentes, en orden:
 | Los **atributos** de cada tipo, y sus rótulos | Configuración: `CRM_TYPE_<CLAVE>_CLAIMS` |
 | Qué va **marcado** al abrir | `CRM_TYPE_<CLAVE>_DEFAULT_CLAIMS`, o el mínimo de identidad del catálogo |
 | El **rótulo** de un tipo | El catálogo de mensajes (`credentialTypes.<type_key>`), luego `CRM_TYPE_<CLAVE>_LABEL`, y si no, el `type_key` tal cual |
-| El nombre del **banco** | `CRM_ORG_<SLUG>_NAME`, vía la organización del dominio de la petición |
+| El nombre de la **empresa** | `CRM_ORG_NAME`, del entorno del proceso |
 
 Los atributos salen de configuración **y no del padrón porque te-api no los
 tiene**. Se comprobó leyendo te-api el 2026-08-29: la respuesta por tipo es
@@ -551,21 +580,22 @@ Hace falta Node ≥ 20.12 (por `process.loadEnvFile`) y un Postgres.
 npm install
 cp .env.example .env.local          # y rellenarlo, ver la tabla de abajo
 npm run db:migrate                  # crea la tabla `customer`
-npm run db:seed                     # opcional: el padrón de prueba de cada organización
+npm run db:seed                     # opcional: el padrón de prueba
 npm run dev                         # http://localhost:3000
 ```
 
-`db:seed` siembra **todas** las organizaciones declaradas que tengan padrón de
-prueba (13 clientes de Banco Demo, 10 de Seguros Aurora, 10 de Clínica San
-Rafael y 10 de Larkfield Energy). Es idempotente. `CRM_SEED_ORG=<SLUG>` limita
-a una.
+`db:seed` siembra el padrón de **esta** instalación, con su `CRM_ORG_ID`. Cuál de
+los dos padrones toca lo deduce de `CRM_REFERENCE_CLAIM` —`account_last4` trae los
+13 clientes de Banco Demo, `supply_point_number` los 10 de Larkfield Energy— y no
+de una variable más: el padrón tiene que rellenar la columna que esta instalación
+usa, y esa columna ya está declarada. `CRM_SEED_ROSTER=<NOMBRE>` lo fuerza a mano.
+Es idempotente.
 
-Los nombres y los correos sembrados están **en inglés** desde el 2026-08-30; los
-identificadores, los teléfonos y las referencias de sector **no cambiaron**,
-porque el `external_id` viaja como `sub` dentro de cada credencial ya emitida.
-Como la siembra es `on conflict do nothing`, una base con el padrón viejo no se
-actualiza sola: hay que borrar esas filas por su `external_id` y volver a
-sembrar.
+Los nombres y los correos sembrados están **en inglés**; los identificadores, los
+teléfonos y las referencias **no se tocan**, porque el `external_id` viaja como
+`sub` dentro de cada credencial ya emitida. Como la siembra es `on conflict do
+nothing`, una base con el padrón viejo no se actualiza sola: hay que borrar esas
+filas por su `external_id` y volver a sembrar.
 
 Dos direcciones, no una:
 
@@ -578,30 +608,39 @@ Las dos abren **en inglés** salvo que el navegador pida otra cosa en
 `Accept-Language`. El selector de la barra lateral —y el de la cabecera del
 portal— cambian al castellano sin recargar nada más que la pantalla.
 
-**En `localhost` a secas la organización sale de `CRM_ACTIVE_ORG_ID`**, porque
-`localhost` no es el dominio de nadie. Para probar las cuatro sin reiniciar,
-declara sus alias de desarrollo (`CRM_ORG_<SLUG>_DEV_HOSTS`) — `*.localhost`
-resuelve a `127.0.0.1` sin tocar `/etc/hosts`:
+### Probar las DOS instalaciones en local
 
-```
-http://bank.localhost:3000/customers
-http://seguros.localhost:3000/customers
-http://clinica.localhost:3000/customers
-http://energy.localhost:3000/customers
-```
-
-Y es el sitio para comprobar la marca de un vistazo: las tres primeras salen
-azules y la cuarta violeta, con su monograma en el disco de la barra. Si sale
-azul, la que falta es una de las dos `CRM_ORG_<SLUG>_BRAND_…`, y
-**`/diagnostics` lo dice** en la fila «Marca», con las muestras de color al
-lado — un `#5b3ea6` escrito no le dice a nadie qué color es.
-
-Y el documento DID, que **no** tiene ese respaldo — en `localhost` a secas da
-404, a propósito:
+No conviven en un proceso, y ésa es exactamente la propiedad que se buscaba: un
+proceso es de una empresa. Se levantan dos, en dos puertos, con dos entornos —el
+segundo por delante de la orden, que gana sobre `.env.local`:
 
 ```bash
-curl -s -H "Host: bank.demo-te.com" http://127.0.0.1:3000/.well-known/did.json
+npm run dev                                    # Banco Demo, con .env.local
+
+env CRM_ORG_ID=bcl2seovm54p \
+    "CRM_ORG_NAME=Larkfield Energy Ltd." \
+    CRM_ORG_DOMAIN=energy.demo-te.com \
+    CRM_M2M_CLIENT_ID=… CRM_M2M_SECRET=… \
+    CRM_REFERENCE_CLAIM=supply_point_number \
+    CRM_BRAND_COLOR=5b3ea6 CRM_BRAND_SURFACE=2e1f4a CRM_BRAND_MONOGRAM=LE \
+    npx next dev -p 3200                       # Larkfield Energy
 ```
+
+Es el sitio para comprobar la marca de un vistazo: el banco sale azul y Larkfield
+violeta, con su monograma en el disco de la barra. Si sale azul cuando no
+debería, la que falta es una de las dos `CRM_BRAND_…`, y **`/diagnostics` lo
+dice** en la fila «Marca», con las muestras de color al lado — un `#5b3ea6`
+escrito no le dice a nadie qué color es.
+
+Y el documento DID, que ya **no** depende del `Host` — se compone siempre con
+`CRM_ORG_DOMAIN`, así que en `localhost` sale igual:
+
+```bash
+curl -s http://127.0.0.1:3000/.well-known/did.json
+```
+
+Un **404** aquí no es un fallo de configuración: significa que te-api todavía no
+tiene claves de esta organización, o sea que no ha encendido su emisión.
 
 El portal necesita además la aplicación de Logto y el `portal_client_id` en el
 padrón de te-api — ver «El portal del cliente» más arriba. Sin ellos el botón de
@@ -657,74 +696,181 @@ bien y no ha hecho falta emitirle una credencial a nadie para saberlo.
 Ninguna es `NEXT_PUBLIC_*`. Los módulos que las leen son `server-only`, así que
 importarlos desde un componente de cliente **no compila**.
 
+**Son planas: ni prefijos, ni slugs.** Una instalación es de una empresa, así que
+no hay nada que distinguir. Lo que falte o esté mal escrito **revienta al
+arrancar nombrando la variable**, en vez de degradarse en silencio.
+
+Los dos bloques completos, listos para pegar en Coolify —Banco Demo y Larkfield
+Energy—, están en [`.env.example`](.env.example).
+
+### Comunes a cualquier instalación
+
 | Variable | Qué es |
 |---|---|
-| `DATABASE_URL` | La base del CRM. Sólo del CRM |
+| `DATABASE_URL` | La base del CRM. Sólo del CRM, y **una por instalación** |
 | `LOGTO_ENDPOINT` | `https://auth.idp.tripleenable.com` — de donde sale el token M2M |
 | `TE_B2B_RESOURCE` | El indicador del recurso B2B. **Idéntico** al `TE_B2B_RESOURCE` de te-api, carácter a carácter |
-| `TE_B2B_SCOPE` | `credentials:issue` por defecto |
-| `TE_API_BASE_URL` | Base de te-api; respaldo del `ISSUER_URL`/`VERIFIER_URL` de cada organización |
-| `CRM_ORG_<SLUG>_ID` | El `organization_id` de Logto |
-| `CRM_ORG_<SLUG>_NAME` | Rótulo para la interfaz |
-| `CRM_ORG_<SLUG>_DOMAIN` | **Su dominio, que es su identidad.** De aquí salen el `did:web:<dominio>` que publica y qué padrón enseña la consola en ese dominio. Sin él no publica documento DID (la ruta da 404) y sólo se llega por `CRM_ACTIVE_ORG_ID` |
-| `CRM_ORG_<SLUG>_DEV_HOSTS` | Hosts que **además** encaminan aquí, sin ser su identidad. Sólo desarrollo (`seguros.localhost`). **No entra en ningún documento DID** |
-| `CRM_ORG_<SLUG>_OFFICIAL_NUMBERS` | Los teléfonos desde los que llama de verdad, separados **por comas**. No son adorno: van firmados dentro de la credencial como `official_numbers` |
-| `CRM_ORG_<SLUG>_REFERENCE_CLAIM` | Cuál de los cuatro datos de relación ofrece su **alta de cliente**: `account_last4`, `policy_number`, `medical_record_number` o `supply_point_number`. Sin él se ofrecen los cuatro, que es lo que tienen las tres primeras. Un valor que no sea uno de ésos **revienta al arrancar** en vez de caer en silencio a «los cuatro» |
-| `CRM_ORG_<SLUG>_BRAND_COLOR` | El acento de su marca sobre papel blanco: enlaces, foco, el filo de la tarjeta de oferta. Sólo hexadecimal (`#rgb`/`#rrggbb`); un valor que no encaje **revienta al arrancar** |
-| `CRM_ORG_<SLUG>_BRAND_SURFACE` | La superficie oscura de su marca: la barra de la consola y la cabecera del portal. Va **junta** con la anterior — media marca se lee como una pantalla a medio pintar |
-| `CRM_ORG_<SLUG>_BRAND_MONOGRAM` | Una o dos letras para el disco. Sin él, las iniciales de las dos primeras palabras del nombre |
-| `CRM_ORG_<SLUG>_M2M_CLIENT_ID` | La aplicación M2M de esa organización |
-| `CRM_ORG_<SLUG>_M2M_SECRET` | Su secreto. **Sólo en el servidor** |
-| `CRM_ORG_<SLUG>_ISSUER_URL` | Base de te-api para emitir. Opcional |
-| `CRM_ORG_<SLUG>_VERIFIER_URL` | Base de te-api para verificar. Opcional |
-| `CRM_TYPE_<CLAVE>_LABEL` | Cómo se rotula un tipo de credencial **que el catálogo de mensajes no conozca**. Para `cliente`, `asegurado` y `paciente` no hace nada: los rotula el catálogo, que es lo único que puede estar en dos idiomas. Sin ninguno de los dos, el `type_key` tal cual. `<CLAVE>` es el `type_key` en mayúsculas con `[^A-Z0-9]` → `_` |
-| `CRM_TYPE_<CLAVE>_CLAIMS` | Qué atributos lleva ese tipo, separados por espacios o comas. Sin él, todos los del catálogo del padrón |
+| `TE_B2B_SCOPE` | `credentials:issue verifications:request` por defecto |
+| `TE_API_BASE_URL` | Base de te-api; respaldo de `CRM_ISSUER_URL` y `CRM_VERIFIER_URL` |
+
+### La organización de esta instalación
+
+| Variable | Qué es |
+|---|---|
+| `CRM_ORG_ID` | El `organization_id` de Logto. **Obligatoria** |
+| `CRM_ORG_NAME` | Rótulo para la interfaz. Sin ella se enseña el `CRM_ORG_ID` |
+| `CRM_ORG_DOMAIN` | **Su dominio, que es su identidad.** De aquí sale el `did:web:<dominio>` que publica. **Obligatoria**: una instalación que emite credenciales sin saber su propio dominio publicaría un DID que no resuelve, así que se prefiere no arrancar. Va pelado — sin esquema, sin barra y sin puerto |
+| `CRM_M2M_CLIENT_ID` | La aplicación M2M de esta organización. **Obligatoria** |
+| `CRM_M2M_SECRET` | Su secreto. **Sólo en el servidor.** **Obligatoria** |
+| `CRM_ISSUER_URL` | Base de te-api para emitir. Opcional; cae en `TE_API_BASE_URL` |
+| `CRM_VERIFIER_URL` | Base de te-api para verificar. Opcional; cae en `TE_API_BASE_URL` |
+| `CRM_OFFICIAL_NUMBERS` | Los teléfonos desde los que llama de verdad, separados **por comas**. No son adorno: van firmados dentro de la credencial como `official_numbers` |
+| `CRM_REFERENCE_CLAIM` | Qué dato de relación ofrece su **alta de cliente**: `account_last4` o `supply_point_number`. **Obligatoria** desde el 2026-08-31 — antes, sin ella se ofrecían todas las casillas a la vez, y a un agente de una eléctrica le aparecía una de «número de historia clínica» |
+| `CRM_BRAND_COLOR` | El acento de su marca sobre papel blanco: enlaces, foco, el filo de la tarjeta de oferta. Sólo hexadecimal (`#rgb`/`#rrggbb`, o **sin almohadilla**, que es lo recomendado en un `.env`); un valor que no encaje **revienta al arrancar** |
+| `CRM_BRAND_SURFACE` | La superficie oscura de su marca: la barra de la consola y la cabecera del portal. Va **junta** con la anterior — media marca se lee como una pantalla a medio pintar |
+| `CRM_BRAND_MONOGRAM` | Una o dos letras para el disco. Sin él, las iniciales de las dos primeras palabras del nombre |
+
+### Los tipos de credencial
+
+La **lista** de tipos no está aquí: sale de `GET /v1/b2b/organization` de te-api,
+y conceder uno se hace en la consola. Lo que se declara aquí es qué lleva cada
+uno, porque te-api no lo sabe (ver más arriba).
+
+| Variable | Qué es |
+|---|---|
+| `CRM_TYPE_<CLAVE>_CLAIMS` | Qué atributos lleva ese tipo, separados por espacios o comas. Sin él, todos los del catálogo que la ficha rellene. **Es lo que hace que emitir dos tipos se note** |
 | `CRM_TYPE_<CLAVE>_DEFAULT_CLAIMS` | Cuáles van marcados al abrir la comprobación. Sin él, el mínimo de identidad del catálogo |
-| `CRM_SEED_ORG` | Sólo para `npm run db:seed`: limita la siembra a un slug. Sin él siembra todas las declaradas |
-| `CRM_ACTIVE_ORG_ID` | **El respaldo**, no el selector: la organización para las peticiones cuyo `Host` no es de ninguna. **En producción no se pone** — sin ella, un dominio ajeno lo dice en vez de enseñar el padrón de la primera. Se puede omitir si sólo hay una declarada |
-| `CRM_ACTIVE_ACTOR` | Etiqueta del operador para el diario, mientras no haya login de empleado |
-| `CRM_ACTIVE_AGENT_ID` | El número de agente que ve el **titular** en su móvil cuando suena el timbre. te-api **no lo verifica**: es atribución |
-| `CRM_ACTIVE_AGENT_NAME` | El nombre del agente, igual. Sin estas dos al titular le sale «Agente de \<la organización\>», compuesto con su nombre — no se inventa un nombre de persona |
-| `CRM_ORG_<SLUG>_PORTAL_CLIENT_ID` | La aplicación **Traditional Web** del portal de esa organización. Es además el `portal_client_id` que te-api tiene en su padrón |
-| `CRM_ORG_<SLUG>_PORTAL_CLIENT_SECRET` | Su secreto. **Sólo en el servidor.** Va junta con la de arriba: una sin la otra es un error de configuración y se ve al arrancar |
+| `CRM_TYPE_<CLAVE>_LABEL` | Cómo se rotula un tipo **que el catálogo de mensajes no conozca**. Para `cliente`, `kyc` y `customer` no hace nada: los rotula el catálogo, que es lo único que puede estar en dos idiomas. Sin ninguno de los dos, el `type_key` tal cual |
 
-**El idioma no está en esta tabla, y no falta:** no es una variable de entorno.
-Lo elige quien mira la pantalla, se guarda en la cookie `crm_locale` y por
-defecto se negocia con `Accept-Language`. Ver «El idioma».
-| `CRM_ORG_<SLUG>_PORTAL_LINK_TYPE` | El `type` que el portal declara al vincular (`cliente`). Opcional |
-| `CRM_ORG_<SLUG>_PORTAL_BASE_URL` | La dirección pública del portal **de esa organización**. De aquí sale su `redirect_uri`, que Logto compara carácter a carácter con el declarado en **su** aplicación. Con cuatro dominios hace falta por organización |
-| `CRM_PORTAL_BASE_URL` | El respaldo de la anterior, y lo que se usa en local (las cuatro viven en `localhost:3000`). **Nunca sale de la cabecera `Host`** |
-| `CRM_PORTAL_COOKIE_SECRET` | Firma la cookie de sesión del portal (HS256). 32 caracteres o más |
+`<CLAVE>` es el `type_key` en mayúsculas con `[^A-Z0-9]` → `_`
+(`poliza-hogar` → `CRM_TYPE_POLIZA_HOGAR_…`).
 
-## Dar de alta una organización nueva
+### El webhook
 
-Dentro de `crm-demo` es **un bloque de variables y reiniciar**. No se toca
-código: la configuración se descubre recorriendo el entorno. El slug va en
-**mayúsculas y sin guiones bajos** — el descubrimiento busca las claves que
-acaban en `_ID`, y con guiones bajos permitidos `CRM_ORG_X_M2M_CLIENT_ID` se
-leería como una organización llamada `X_M2M_CLIENT`.
+| Variable | Qué es |
+|---|---|
+| `CRM_WEBHOOK_SECRET` | El secreto de firma que devuelve la consola al registrar el endpoint. Se pega **tal cual, con el `whsec_` incluido**: es una cadena opaca, no material codificado. Sin él el receptor **rechaza toda entrega** |
 
-Lo que no se puede olvidar es **`CRM_ORG_<SLUG>_DOMAIN`**: sin él la
-organización existe pero no publica su documento DID —`/.well-known/did.json`
-devuelve 404 en su dominio— y la cartera no puede verificar sus credenciales. El
-síntoma en el teléfono es «no podemos verificar quién emite esto», que no se
-parece a «te falta una variable», y por eso Diagnóstico lo dice en una fila. Si
-además tiene portal, su `CRM_ORG_<SLUG>_PORTAL_BASE_URL`; y si quiere que su
-consola no sea la del banco repintada, sus dos `CRM_ORG_<SLUG>_BRAND_…`.
+### El empleado y el portal
 
-La otra que conviene no dejarse es **`CRM_ORG_<SLUG>_REFERENCE_CLAIM`**, y ésta
-no da ningún síntoma: sin ella el alta de clientes ofrece **las cuatro**
-referencias de sector, así que una comercializadora de luz enseña una casilla de
-«número de historia clínica» y una clínica enseña una de «punto de suministro».
-No rompe nada —son opcionales— pero en una demostración es de lo primero que se
-ve, y además invita a escribir el dato en la casilla que no toca.
+| Variable | Qué es |
+|---|---|
+| `CRM_AGENT_ACTOR` | Etiqueta del puesto para el diario, mientras no haya login de empleado |
+| `CRM_AGENT_ID` | El número de agente que ve el **titular** en su móvil cuando suena el timbre. te-api **no lo verifica**: es atribución |
+| `CRM_AGENT_NAME` | El nombre del agente, igual. Sin estas dos al titular le sale «Agente de \<la organización\>», compuesto con su nombre — no se inventa un nombre de persona |
+| `CRM_PORTAL_CLIENT_ID` | La aplicación **Traditional Web** del portal. Es además el `portal_client_id` que te-api tiene en su padrón |
+| `CRM_PORTAL_CLIENT_SECRET` | Su secreto. **Sólo en el servidor.** Va junta con la de arriba: una sin la otra es un error de configuración y se ve al arrancar |
+| `CRM_PORTAL_LINK_TYPE` | El `type` que el portal declara al vincular (`cliente`). Opcional |
+| `CRM_PORTAL_BASE_URL` | La dirección pública del portal. De aquí sale su `redirect_uri`, que Logto compara carácter a carácter con el declarado en su aplicación. **Nunca sale de la cabecera `Host`** |
+| `CRM_PORTAL_COOKIE_SECRET` | Firma la cookie de sesión del portal (HS256). 32 caracteres o más, y **una distinta por instalación** |
+
+### Sólo para la siembra
+
+| Variable | Qué es |
+|---|---|
+| `CRM_SEED_ROSTER` | Fuerza qué padrón de prueba se siembra (`BANCODEMO`, `LARKFIELDENERGY`). Sin él se deduce de `CRM_REFERENCE_CLAIM` |
+
+**El idioma no está en estas tablas, y no falta:** no es una variable de entorno.
+Lo elige quien mira la pantalla, se guarda en la cookie `crm_locale` y por defecto
+se negocia con `Accept-Language`. Ver «El idioma».
+
+## El webhook · por donde el CRM se entera sin preguntar
+
+**La dirección que se pega en la consola** (tenant-admin → Credentials → Webhook):
+
+```
+https://<CRM_ORG_DOMAIN>/api/webhooks/te-api
+```
+
+Al registrarla, la consola devuelve **el secreto de firma** —`whsec_` y 43
+caracteres— y ésa es la única vez que se enseña entero. Ese valor va en
+`CRM_WEBHOOK_SECRET`.
+
+### La firma se comprueba, y lo que no cuadra se rechaza
+
+Está leída del código que firma (`tripleenable-api/src/b2b/webhook-signature.ts`)
+y de la prueba que la reconstruye, no deducida de un nombre de variable:
+
+```
+te-signature-sha-256: t=<segundos>,v1=<hex>[,v1=<hex>]
+te-event-id:          <uuidv7>     ← la clave de idempotencia
+te-delivery-id:       <uuidv7>     ← cambia en cada reintento
+```
+
+HMAC-SHA256 sobre el UTF-8 de `` `${t}.${cuerpo_crudo}` ``, en hexadecimal. Tres
+cosas que cuestan una tarde si se ignoran:
+
+1. **El cuerpo tiene que ser los bytes crudos.** te-api serializa una vez y firma
+   esa misma cadena; reserializar lo que devuelva `JSON.parse` cambia espacios y
+   orden de claves y la firma deja de cuadrar sin decir por qué.
+2. **Puede haber DOS `v1=`.** Durante la ventana de gracia de una rotación te-api
+   firma con el nuevo secreto y con el anterior. Vale cualquiera de los dos; un
+   receptor que sólo mire el primero rechaza entregas legítimas durante un día.
+3. **El secreto NO se descodifica.** La clave del HMAC son los bytes UTF-8 de la
+   cadena entera, `whsec_` incluido. Quitar el prefijo o descodificar la cola como
+   base64 produce un MAC distinto y **todas** las entregas se rechazan.
+
+La ventana de tolerancia del sello de tiempo —cinco minutos— **la elegimos
+nosotros**: te-api no impone ninguna, sólo la recomienda en un comentario.
+
+### Qué llega dentro
+
+El cuerpo lleva **el veredicto**, así que el receptor cierra el caso sin volver a
+llamar. Dos tipos hoy, y el despacho es por `type`:
+
+| Tipo | Qué trae | Qué hace el CRM |
+|---|---|---|
+| `presentation.settled` | `presentationId`, `status`, `credentialType`, `requestedAt`, `expiresAt`, `settledAt` | Cierra la comprobación en su diario |
+| `webhook.test` | `presentationId: null` | Se archiva y se ve en `/events` |
+
+Un tipo que este CRM no conozca **se archiva y contesta 200**: un `500` haría que
+te-api reintentara ocho veces algo que nunca va a entrar, y a los veinte fallos
+suspendería el endpoint.
+
+Lo que el evento **no** lleva son los claims, el recibo firmado y la clave del
+titular — te-api minimiza el dato personal que sale por un canal saliente. Eso se
+lee por `GET /v1/b2b/presentations/:id`, que **no cambia**: es el barrido, y sigue
+siendo el camino cuando la entrega se perdió.
+
+### Y se ve en `/events`
+
+Cuándo llegó, qué tipo, a qué cliente afecta —cruzado contra el diario de
+comprobaciones— y **si la firma cuadró**, con el cuerpo entero plegado debajo.
+
+Lo que **no** cuadra también se guarda, y a propósito: una entrega mal firmada es
+o alguien inventando eventos, o **el secreto rotado sin actualizar aquí** —y
+entonces se están perdiendo entregas legítimas, que es el fallo caro porque no
+tiene ningún otro síntoma—. Sin esas filas la pantalla saldría vacía en los dos
+casos.
+
+## Publicar una segunda instalación
+
+Ya no se «da de alta una organización» dentro de este proyecto: **se publica la
+aplicación otra vez**. Es la misma imagen; lo que cambia es el entorno, el
+dominio y la base. No se comparte nada, así que un secreto mal puesto en una no
+puede tumbar a la otra — que es exactamente lo que pasaba cuando un despliegue
+servía a cuatro.
+
+Lo que no se puede olvidar:
+
+- **`CRM_ORG_DOMAIN`** — sin ella el proceso no arranca. Es mejor que lo de
+  antes, que era arrancar y no publicar documento DID: aquel síntoma llegaba al
+  teléfono del titular como «no podemos verificar quién emite esto», que no se
+  parece a «falta una variable».
+- **`CRM_REFERENCE_CLAIM`** — tampoco arranca sin ella, por lo mismo: antes se
+  degradaba a «ofrecerlas todas» y una comercializadora de luz acababa enseñando
+  la casilla de otro sector.
+- **Su propia `DATABASE_URL` y su propio `CRM_PORTAL_COOKIE_SECRET`.** Compartir
+  la primera ata dos empresas al mismo Postgres para siempre; compartir el
+  segundo hace que una cookie emitida por una valga en la otra.
+- **Su propio `CRM_WEBHOOK_SECRET`**, que le da su propia consola al registrar su
+  endpoint.
 
 ### Lo que hay que crear FUERA de este repositorio, en orden
 
 **Nada de esta lista lo hace `crm-demo`, y sin ella el bloque de variables no
 sirve de nada.** Está escrita con los valores de **Larkfield Energy**, que es la
-cuarta y la que se dio de alta el 2026-08-31 justamente para recorrerla entera;
-para otra, se cambian el nombre, el subdominio y el slug.
+segunda instalación; para otra empresa se cambian el nombre y el subdominio.
 
 | # | Dónde | Qué | Quién |
 |---|---|---|---|
@@ -732,32 +878,37 @@ para otra, se cambian el nombre, el subdominio y el slug.
 | 2 | **Logto** | Copiar el `organization_id` y el `client_id`/`client_secret` de esa M2M (Applications → … → App secrets → el ojo) | Quien despliega |
 | 3 | **Logto** | La aplicación del portal: **Traditional Web**, con `redirect_uri` = `https://energy.demo-te.com/portal/callback` y `post_logout_redirect_uri` = `https://energy.demo-te.com/portal`, **carácter a carácter** | Quien despliega |
 | 4 | **te-api** | La organización en su padrón, con el `portal_client_id` del paso 3: `TE_PARTNER_PORTAL_CLIENT_ID=<ese client_id> npm run seed:partner` | Quien despliega |
-| 5 | **DNS** | `energy.demo-te.com` apuntando al mismo sitio que los otros tres subdominios | Quien despliega |
-| 6 | **Coolify** | Declarar `https://energy.demo-te.com` **en la aplicación de `crm-demo` que ya existe** — un dominio más en su lista, no un despliegue nuevo. Es lo que hace que Traefik lo enrute aquí y lo que dispara el certificado | Quien despliega |
-| 7 | **Coolify** | Pegar el bloque `CRM_ORG_LARKFIELDENERGY_…` del `.env.example` en las variables de esa misma aplicación, con los valores de los pasos 2 y 3, y redesplegar | Quien despliega |
-| 8 | **La base** | `npm run db:migrate` (trae `db/006_supply_point.sql`) y `CRM_SEED_ORG=LARKFIELDENERGY npm run db:seed` | Quien despliega |
+| 5 | **DNS** | `energy.demo-te.com` apuntando al servidor | Quien despliega |
+| 6 | **Coolify** | **Una aplicación NUEVA** a partir de la misma imagen, con `https://energy.demo-te.com` como su dominio. Esto cambió el 2026-08-31: antes era añadir un dominio más a la aplicación que ya existía, porque un despliegue servía a las cuatro | Quien despliega |
+| 7 | **Coolify** | Pegar el bloque **§B** del `.env.example` en las variables de **esa nueva aplicación**, con los valores de los pasos 2 y 3, y desplegar. Su `DATABASE_URL` y su `CRM_PORTAL_COOKIE_SECRET` son **suyos**, no los del banco | Quien despliega |
+| 8 | **La base** | `npm run db:migrate` y `npm run db:seed` desde dentro del contenedor. El padrón lo elige `CRM_REFERENCE_CLAIM` | Quien despliega |
 | 9 | **La consola de la organización** | Elegir sus **tipos de credencial** del catálogo compartido y **encender su emisión**, que es lo que crea sus claves en te-api | **Su administrador** |
+| 10 | **La consola de la organización** | Registrar su webhook: `https://energy.demo-te.com/api/webhooks/te-api`. Devuelve el secreto de firma → `CRM_WEBHOOK_SECRET` y redesplegar | **Su administrador** |
 
-Los pasos 1 y 9 son de la organización y no nuestros, y ésa es la prueba que
-este alta viene a hacer: **el alta es autoservicio**. Nosotros no creamos su
-aplicación M2M ni elegimos qué credenciales emite.
+Los pasos 1, 9 y 10 son de la organización y no nuestros, y ésa es la prueba que
+esto viene a hacer: **el alta es autoservicio**. Nosotros no creamos su
+aplicación M2M, ni elegimos qué credenciales emite, ni registramos su webhook.
 
 > ⚠ **Hasta el paso 9 no hay documento DID, y eso NO es un fallo.** Las claves
 > salen de `GET /v1/trust/did-documents/:host` de te-api, y si te-api no tiene
 > ninguna para esa organización, `/.well-known/did.json` devuelve **404**
-> (`src/lib/did-document.ts`). Es la respuesta honesta a «este dominio todavía
-> no publica ninguna identidad de emisor»: un documento con la lista de claves
-> vacía la cartera lo tomaría por bueno y diría «esta organización no publica
-> claves», que suena a error suyo. Una organización que no ha encendido su
-> emisión **no tiene identidad de emisor todavía**.
+> (`src/lib/did-document.ts`). Es la respuesta honesta a «este dominio todavía no
+> publica ninguna identidad de emisor»: un documento con la lista de claves vacía
+> la cartera lo tomaría por bueno y diría «esta organización no publica claves»,
+> que suena a error suyo.
 
-> ⚠ **`CRM_ORG_<SLUG>_PORTAL_LINK_TYPE` se queda vacía hasta el paso 9.** Tiene
-> que ser un `type_key` del padrón de **esa** organización en te-api, y hasta
-> que su administrador no elija sus tipos no hay ninguno. Con un valor
-> inventado, `POST /v1/b2b/links` responde `400 invalid_request` y el vínculo no
-> se crea. Vacía, el vínculo se hace igual —nace del login, no de la
-> credencial— y en la cartera se lee «Larkfield Energy» en vez de «Larkfield
-> Energy · titular».
+> ⚠ **Hasta el paso 10, `/events` sale vacía y el receptor rechaza todo.** Sin
+> `CRM_WEBHOOK_SECRET` no hay con qué comprobar la firma, y aceptar sin comprobar
+> no es una opción: el cuerpo del evento lleva el veredicto dentro, así que un
+> `POST` sin firma comprobada podría afirmar un `verified` que no ocurrió.
+> Diagnóstico dice qué variable falta.
+
+> ⚠ **`CRM_PORTAL_LINK_TYPE` se queda vacía hasta el paso 9.** Tiene que ser un
+> `type_key` del padrón de **esa** organización en te-api, y hasta que su
+> administrador no elija sus tipos no hay ninguno. Con un valor inventado, `POST
+> /v1/b2b/links` responde `400 invalid_request` y el vínculo no se crea. Vacía, el
+> vínculo se hace igual —nace del login, no de la credencial— y en la cartera se
+> lee «Larkfield Energy» en vez de «Larkfield Energy · customer».
 
 ### Si emite otro tipo de credencial
 
@@ -768,11 +919,13 @@ entrada en `CUSTOMER_ATTRIBUTES` — porque un atributo que no tiene columna no
 tiene de dónde salir.
 
 **Y eso pasó de verdad el 2026-08-30**, así que el ejemplo ya no es hipotético:
-Seguros Aurora necesitaba `policy_number` y Clínica San Rafael
-`medical_record_number`, y salieron en `db/005_sector_reference.sql` con sus dos
-entradas en el catálogo. Son dos columnas y no una genérica porque **el nombre
-de la columna es el nombre del claim**, y un verificador que recibe
-`sector_reference` no sabe qué tiene delante.
+dos organizaciones de otros sectores necesitaron `policy_number` y
+`medical_record_number`, y salieron en `db/005_sector_reference.sql` con sus
+entradas en el catálogo. Son columnas separadas y no una genérica porque **el
+nombre de la columna es el nombre del claim**, y un verificador que recibe
+`sector_reference` no sabe qué tiene delante. (Las dos organizaciones se
+retiraron el 2026-08-31 y su código se fue con ellas; las columnas se quedan, y
+el porqué está en la cabecera de esa migración.)
 
 **Y volvió a pasar el 2026-08-31**: Larkfield Energy necesitaba
 `supply_point_number` —el identificador del contador, que es lo que el titular

@@ -107,7 +107,7 @@ export function IssueCredentialForm({
     readonly displayName: string;
     /**
      * La referencia de su sector, **ya escrita**: `···· 4471` en el banco,
-     * `SA-2019-0418804` en la aseguradora, `HC-0118204` en la clínica.
+     * `SP-16000412201` en la comercializadora de energía.
      *
      * Llega compuesta desde el servidor y no como un `accountLast4` en crudo,
      * que es lo que había: este componente es de navegador y no puede importar
@@ -433,7 +433,7 @@ export function IssueCredentialForm({
                  AQUÍ PONÍA EL NOMBRE DE UNA VARIABLE DE ENTORNO, Y ESTABA MAL
                 ═══════════════════════════════════════════════════════════════
 
-                Decía «Se declaran en CRM_ORG_<SLUG>_OFFICIAL_NUMBERS». Quien lee
+                Decía «Se declaran en CRM_OFFICIAL_NUMBERS». Quien lee
                 esto es un agente de atención al cliente con un teléfono en la
                 mano: ese nombre no le dice qué hacer, le dice que la
                 herramienta que está usando está a medio montar. Y además no lo

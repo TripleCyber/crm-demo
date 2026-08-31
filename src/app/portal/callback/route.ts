@@ -3,8 +3,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { findCustomerByEmail } from '@/lib/customers';
 import { exchangeCode, getPortalBaseUrl, PortalLoginError } from '@/lib/portal-oidc';
 import { saveSession, takeAuthorizationRequest, type LinkOutcome } from '@/lib/portal-session';
-import { getRequestOrganization } from '@/lib/request-organization';
 import { describeTeApiFailure, linkCustomer, TeApiError } from '@/lib/te-api';
+import { getOrganization } from '@/lib/organization';
 
 /**
  * `GET /portal/callback` — **aquí ocurre el vínculo**.
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // ella sale el `home` al que vuelven TODAS las salidas de esta ruta —incluida
   // la de error— y el `redirect_uri` con el que se canjea el código. Resolverla
   // más abajo dejaba las primeras salidas apuntando al portal de otra.
-  const organization = await getRequestOrganization();
+  const organization = getOrganization();
   const home = new URL('/portal', getPortalBaseUrl(organization));
   const params = request.nextUrl.searchParams;
 

@@ -22,6 +22,28 @@ import type { MessageKey, Translator } from '@/i18n/translate';
 /** Los cinco valores de `GET /v1/b2b/presentations/:id`, y ninguno más. */
 export type VerificationStatus = 'pending' | 'verified' | 'rejected' | 'failed' | 'expired';
 
+/** Un desenlace: cualquiera de los cinco menos la espera. */
+export type TerminalVerificationStatus = Exclude<VerificationStatus, 'pending'>;
+
+/**
+ * Si esa cadena es un desenlace de verdad.
+ *
+ * Existe por el receptor de webhooks, que recibe el veredicto **como texto de
+ * fuera** (`data.status` del evento) y no puede pasárselo al diario sin
+ * comprobarlo: `settleVerification` escribe ese valor en una columna con
+ * `check`, así que un valor que no encaje sería un `500` en un sitio donde te-api
+ * reintentaría ocho veces.
+ *
+ * `pending` se queda fuera a propósito, y no es un descuido: un evento de
+ * liquidación que dijera `pending` no está diciendo un desenlace, y cerrar el
+ * diario con él dejaría la comprobación marcada como terminada en «esperando».
+ * Lo mismo vale para el `null` que te-api manda cuando no pudo determinarlo —eso
+ * se archiva y no se aplica.
+ */
+export function isTerminalStatus(value: string): value is TerminalVerificationStatus {
+  return value === 'verified' || value === 'rejected' || value === 'failed' || value === 'expired';
+}
+
 /**
  * El color, por lo que significa y no por cómo se ve.
  *

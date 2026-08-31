@@ -1,7 +1,7 @@
 import { LocaleSwitch } from '@/components/LocaleSwitch';
 import { getTranslator } from '@/i18n/server';
 import { monogramOf } from '@/lib/brand';
-import { getRequestOrganization } from '@/lib/request-organization';
+import { getOrganization } from '@/lib/organization';
 
 /**
  * El portal del cliente. **Otra cabecera, otra sesión, otra persona.**
@@ -22,7 +22,7 @@ export default async function PortalLayout({ children }: { children: React.React
     // portales —banco, aseguradora, clínica y comercializadora— son el mismo
     // despliegue, y la cabecera es lo primero que el titular lee para saber que
     // está en el sitio correcto.
-    const organization = await getRequestOrganization();
+    const organization = getOrganization();
     bankName = organization.displayName;
     monogram = monogramOf(organization);
   } catch {

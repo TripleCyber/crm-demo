@@ -3,25 +3,25 @@ import type { Metadata } from 'next';
 import { LocaleProvider } from '@/i18n/client';
 import { getLocale, getTranslator } from '@/i18n/server';
 import { brandStyleOf } from '@/lib/brand';
-import { getRequestOrganization } from '@/lib/request-organization';
+import { getOrganization } from '@/lib/organization';
 
 import './globals.css';
 
 /**
- * El título de la pestaña, con el nombre de **la organización del dominio**.
+ * El título de la pestaña, con el nombre de la organización de esta instalación.
  *
- * Era una constante con «Banco Demo» dentro, y con cuatro dominios sobre el
- * mismo despliegue eso pone el nombre del banco en la pestaña del portal de la
- * clínica. Es de las cosas que nadie mira hasta que la ve un cliente, y una
- * captura de pantalla la conserva.
+ * Era una constante con «Banco Demo» dentro, y eso pone el nombre del banco en
+ * la pestaña de cualquier otra empresa que despliegue este CRM. Es de las cosas
+ * que nadie mira hasta que la ve un cliente, y una captura de pantalla la
+ * conserva.
  *
- * Si la organización no se puede resolver se queda un rótulo genérico: no se
- * afirma el nombre de ninguna.
+ * Si la configuración no se puede leer se queda un rótulo genérico: no se afirma
+ * el nombre de ninguna empresa.
  */
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslator();
   try {
-    const organization = await getRequestOrganization();
+    const organization = getOrganization();
     return {
       title: organization.displayName,
       description: t('app.description', { organization: organization.displayName }),
@@ -65,11 +65,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
 
   // Si la configuración está rota, la pantalla que lo explica tiene que poder
-  // pintarse. Sin marca es la paleta de la hoja, que es exactamente lo que
-  // había antes de que existiera esto.
-  const brandStyle = await getRequestOrganization()
-    .then(brandStyleOf)
-    .catch(() => undefined);
+  // pintarse. Sin marca es la paleta de la hoja, que es exactamente lo que había
+  // antes de que existiera esto.
+  let brandStyle;
+  try {
+    brandStyle = brandStyleOf(getOrganization());
+  } catch {
+    brandStyle = undefined;
+  }
 
   return (
     <html lang={locale}>

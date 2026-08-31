@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { Translator } from '@/i18n/translate';
 
-import { OrganizationConfigError } from './organizations';
+import { OrganizationConfigError } from './organization';
 
 /**
  * Lo que se le dice a un agente cuando una pantalla no ha podido cargar.

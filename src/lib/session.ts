@@ -3,8 +3,7 @@ import 'server-only';
 import { getTranslator } from '@/i18n/server';
 import type { Translator } from '@/i18n/translate';
 
-import type { OrganizationConfig } from './organizations';
-import { getRequestOrganization } from './request-organization';
+import { getOrganization, type OrganizationConfig } from './organization';
 
 /**
  * La organización activa de la consola de empleados.
@@ -19,17 +18,22 @@ import { getRequestOrganization } from './request-organization';
  *
  * ## El estado de hoy, dicho sin adornos
  *
- * **El login de empleado con Logto OIDC todavía no está.** Es la casilla de
- * F4a que queda pendiente. Mientras tanto la organización sale del **dominio**
- * por el que entró la petición (`./request-organization.ts`): un despliegue
- * sirve `bank.`, `seguros.` y `clinica.demo-te.com`, y cada uno es la consola
- * de su organización. Un host que no es de nadie cae en `CRM_ACTIVE_ORG_ID`,
- * que es lo que hace que `localhost` siga funcionando en desarrollo.
+ * **El login de empleado con Logto OIDC todavía no está.** Es la casilla de F4a
+ * que queda pendiente. Mientras tanto la organización es **la de esta
+ * instalación** (`./organization.ts`), leída del entorno del proceso: una
+ * instalación sirve a una empresa, así que no hay nada que elegir por petición.
  *
- * Cuando entre el login, lo que cambia es el cuerpo de `getEmployeeSession`:
- * el `orgId` saldrá del claim `organizations` del ID token y el `actor` del
- * `sub`. Nada más de este proyecto se entera, porque todo lo que necesita saber
- * de qué organización habla pasa por aquí.
+ * Eso ya no es un apaño con forma de agujero, y conviene decir por qué cambió:
+ * hasta el 2026-08-31 la organización salía de la cabecera `Host`, o sea de algo
+ * que escribe quien llama. Servía —lo único que decidía era qué padrón se
+ * pintaba, nunca qué se autoriza— pero era el único sitio del proyecto donde la
+ * respuesta a «¿de quién es esta pantalla?» podía cambiar entre dos peticiones.
+ * Ahora no puede.
+ *
+ * Cuando entre el login, lo que cambia es el cuerpo de `getEmployeeSession`: el
+ * `actor` saldrá del `sub` del ID token y habrá que comprobar que el empleado
+ * pertenece a `CRM_ORG_ID`. Nada más de este proyecto se entera, porque todo lo
+ * que necesita saber de qué organización habla pasa por aquí.
  *
  * Hasta entonces **esta consola no está autenticada** y no puede publicarse en
  * una URL a la que llegue nadie de fuera.
@@ -76,16 +80,15 @@ export interface EmployeeSession {
  * El empleado cuando el entorno no dice quién es.
  *
  * No hay login de empleado todavía (ver arriba), así que estos dos valores salen
- * de `CRM_ACTIVE_AGENT_ID` y `CRM_ACTIVE_AGENT_NAME`, igual que la organización
- * sale de `CRM_ACTIVE_ORG_ID`. Cuando faltan **no se inventa un nombre de
- * persona**: al titular le sale «Agente de <la organización>», que es verdad, en
- * vez de un «Pedro Ramírez» que no lo es. Un nombre falso en la pantalla de
+ * de `CRM_AGENT_ID` y `CRM_AGENT_NAME`. Cuando faltan **no se inventa un nombre
+ * de persona**: al titular le sale «Agente de <la organización>», que es verdad,
+ * en vez de un «Pedro Ramírez» que no lo es. Un nombre falso en la pantalla de
  * quien está comprobando si le están timando es exactamente lo que no puede
  * pasar.
  *
- * El nombre de la organización se compone, no se escribe: estaba puesto a
- * «Banco Demo» a mano, y con el segundo partner el titular vería en su móvil el
- * nombre del banco de otro.
+ * El nombre de la organización se compone, no se escribe: estaba puesto a «Banco
+ * Demo» a mano, y la segunda instalación enseñaría en el móvil del titular el
+ * nombre de la empresa de otro.
  */
 const UNIDENTIFIED_AGENT_ID = 'unidentified';
 
@@ -103,25 +106,23 @@ function unidentifiedAgent(t: Translator, organization: OrganizationConfig): Age
 }
 
 export async function getEmployeeSession(): Promise<EmployeeSession> {
-  // `async` desde el principio aunque hoy no espere nada: leer la sesión de
-  // Logto sí será asíncrono, y cambiar la firma después obliga a tocar cada
-  // llamada. Con la resolución por `Host` ya espera de verdad —`headers()` lo
-  // es en Next 15—, así que la previsión sirvió para lo que se puso.
+  // `async` aunque la organización ya no se espere: leer la sesión de Logto sí
+  // será asíncrono, y `getTranslator()` de aquí abajo ya lo es. Cambiar la firma
+  // el día del login obligaría a tocar cada llamada de este proyecto.
   //
-  // La elección la resuelve `getRequestOrganization()`, que es la misma que usa
-  // el portal del cliente. Estaba escrita aquí y se movió cuando entró el
-  // portal: dos copias del mismo «cuál es mi banco» acaban discrepando, y
-  // entonces la consola emite para una organización y el portal vincula contra
-  // otra.
-  const organization = await getRequestOrganization();
+  // La configuración la lee `getOrganization()`, que es la misma que usa el
+  // portal del cliente: dos copias del mismo «cuál es mi empresa» acaban
+  // discrepando, y entonces la consola emite para una organización y el portal
+  // vincula contra otra.
+  const organization = getOrganization();
   const fallback = unidentifiedAgent(await getTranslator(), organization);
 
   return {
     organization,
-    actor: process.env.CRM_ACTIVE_ACTOR?.trim() ?? 'crm:no-session',
+    actor: nonEmpty(process.env['CRM_AGENT_ACTOR']) ?? 'crm:no-session',
     agent: {
-      id: nonEmpty(process.env.CRM_ACTIVE_AGENT_ID) ?? fallback.id,
-      displayName: nonEmpty(process.env.CRM_ACTIVE_AGENT_NAME) ?? fallback.displayName,
+      id: nonEmpty(process.env['CRM_AGENT_ID']) ?? fallback.id,
+      displayName: nonEmpty(process.env['CRM_AGENT_NAME']) ?? fallback.displayName,
     },
   };
 }

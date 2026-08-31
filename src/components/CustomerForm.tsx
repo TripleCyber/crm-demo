@@ -17,10 +17,10 @@ import type { ReferenceClaim } from '@/lib/reference-claims';
  * ninguna llamada a nada.
  *
  * De `src/lib` importa **una sola cosa, y sólo el tipo**: el juego cerrado de
- * las cuatro referencias de sector (`reference-claims.ts`), que es de los tres
- * módulos de esa carpeta que no llevan `server-only` porque no leen ni secretos
- * ni base. Todo lo demás de `src/lib` sí lo lleva, y el compilador rechazaría el
- * import desde aquí — que es la propiedad que hay que conservar.
+ * las referencias de sector (`reference-claims.ts`), que es de los tres módulos
+ * de esa carpeta que no llevan `server-only` porque no leen ni secretos ni base.
+ * Todo lo demás de `src/lib` sí lo lleva, y el compilador rechazaría el import
+ * desde aquí — que es la propiedad que hay que conservar.
  */
 
 const initialState: CreateCustomerState = {};
@@ -36,16 +36,11 @@ function SubmitButton() {
 }
 
 /**
- * Cómo se pinta cada una de las cuatro referencias.
+ * Cómo se pinta cada referencia.
  *
  * El nombre del campo es el que lee `createCustomerAction` del `FormData`, así
  * que es también la clave con la que vuelve su error de validación: por eso
  * `name` sirve para las dos cosas y no hay una segunda tabla que mantener.
- *
- * Los ejemplos de póliza e historia siguen en castellano —`PA-…`, `HC-…`— y no
- * se tocan a propósito: son los que ya ven Seguros Aurora y Clínica San Rafael,
- * y este cambio no puede mover ni un píxel de sus pantallas. Cuando a alguna de
- * las dos le toque un cambio propio, ése es el momento de pasarlas a inglés.
  */
 interface ReferenceInput {
   /** El `name` del `<input>`, y la clave del error de validación. */
@@ -54,8 +49,8 @@ interface ReferenceInput {
   readonly placeholder: string;
   /**
    * Sólo los tiene la cuenta: son cuatro dígitos, y el teclado numérico y el
-   * tope de cuatro caracteres son lo que evita la mitad de las erratas. Los
-   * otros tres no llevan ninguno porque cada mercado numera como quiere —el
+   * tope de cuatro caracteres son lo que evita la mitad de las erratas. El punto
+   * de suministro no lleva ninguno porque cada mercado numera como quiere —el
    * CUPS español tiene 20 o 22 caracteres y el MPAN británico 13 dígitos—, así
    * que aquí no hay largo que imponer (ver `validateCustomerInput`).
    */
@@ -71,34 +66,29 @@ const REFERENCE_INPUTS: Record<ReferenceClaim, ReferenceInput> = {
     inputMode: 'numeric',
     maxLength: 4,
   },
-  policy_number: {
-    name: 'policyNumber',
-    labelKey: 'customerForm.policyNumber',
-    placeholder: 'PA-2019-004471',
-  },
-  medical_record_number: {
-    name: 'medicalRecordNumber',
-    labelKey: 'customerForm.medicalRecordNumber',
-    placeholder: 'HC-0044718',
-  },
   supply_point_number: {
     name: 'supplyPointNumber',
     labelKey: 'customerForm.supplyPointNumber',
-    placeholder: 'LE-SP-0044718',
+    placeholder: 'SP-16000412201',
   },
 };
 
 export interface CustomerFormProps {
   /**
-   * La referencia de sector de ESTA organización, o `undefined` si no declara
-   * ninguna y hay que ofrecer las cuatro.
+   * La referencia de sector de ESTA instalación.
    *
    * Llega ya resuelta desde el padre, que es un componente de servidor. Lo que
-   * baja al navegador es una de cuatro palabras conocidas —`supply_point_number`
-   * y poco más—, no la organización: aquí no hay ni `orgId` ni nada de
+   * baja al navegador es una de dos palabras conocidas —`supply_point_number` o
+   * `account_last4`—, no la organización: aquí no hay ni `orgId` ni nada de
    * `src/lib` que no sea el tipo de este valor.
+   *
+   * **No admite `undefined`.** Lo admitía cuando un despliegue servía a cuatro
+   * empresas y las tres primeras no la declaraban; entonces se ofrecían todas
+   * las casillas a la vez, que es lo que le ponía delante a un agente de una
+   * eléctrica una casilla de otro negocio. Hoy la declara el entorno y sin ella
+   * el proceso no arranca (`CRM_REFERENCE_CLAIM`), así que aquí siempre hay una.
    */
-  readonly referenceClaim: ReferenceClaim | undefined;
+  readonly referenceClaim: ReferenceClaim;
 }
 
 export function CustomerForm({ referenceClaim }: CustomerFormProps) {
@@ -140,7 +130,14 @@ export function CustomerForm({ referenceClaim }: CustomerFormProps) {
 
       <label className="field">
         <span>{t('customerForm.externalId')}</span>
-        <input name="externalId" placeholder="BD-99120447" required />
+        {/*
+          El ejemplo sale del catálogo y **no está escrito aquí**. Estaba, y era
+          `BD-99120447` — un identificador de Banco Demo, que en la consola de
+          una comercializadora de energía es exactamente el mismo error que la
+          casilla de «número de historia clínica»: le dice al agente que está
+          usando el software de otra empresa. El del catálogo no es de nadie.
+        */}
+        <input name="externalId" placeholder={t('customerForm.externalIdExample')} required />
         {fieldError('externalId') !== undefined && (
           <small style={{ color: 'var(--danger)' }}>{fieldError('externalId')}</small>
         )}
@@ -176,54 +173,35 @@ export function CustomerForm({ referenceClaim }: CustomerFormProps) {
 
       {/*
         ═══════════════════════════════════════════════════════════════════════
-         LA REFERENCIA DE SECTOR: SE OFRECE LA DE ESTA EMPRESA, NO LAS CUATRO
+         LA REFERENCIA DE SECTOR: SE OFRECE LA DE ESTA EMPRESA, Y SÓLO ÉSA
         ═══════════════════════════════════════════════════════════════════════
 
-        Cuenta, póliza, historia y punto de suministro son la misma cosa en
-        cuatro sectores: el dato con el que el titular reconoce de qué relación
-        se le está hablando (`lib/reference-claims.ts`).
+        La cuenta y el punto de suministro son la misma cosa en dos sectores: el
+        dato con el que el titular reconoce de qué relación se le está hablando
+        (`lib/reference-claims.ts`).
 
-        Hasta el 2026-08-31 se enseñaban **las cuatro**, y el razonamiento
-        escrito aquí era que este formulario es de CLIENTE y no puede saber de
-        qué organización es la pantalla. La primera mitad sigue siendo verdad y
-        la conclusión no lo era: **el padre sí lo sabe** — `customers/new/page`
-        es de servidor, resuelve la organización por el dominio de la petición
-        como todo lo demás, y le pasa el resultado por propiedad. No baja al
-        navegador ninguna organización; baja una de cuatro palabras.
+        Hasta el 2026-08-31 se enseñaban **todas**, y el razonamiento escrito
+        aquí era que este formulario es de CLIENTE y no puede saber de qué
+        organización es la pantalla. La primera mitad sigue siendo verdad y la
+        conclusión no lo era: **el padre sí lo sabe** — `customers/new/page` es
+        de servidor, lee la configuración de la instalación y le pasa el
+        resultado por propiedad. No baja al navegador ninguna organización; baja
+        una palabra de un juego cerrado.
 
         Y no era cosmético. A un agente de Larkfield Energy —luz y gas— le
         aparecía una casilla de «número de historia clínica», lo que en una
-        demostración deshace la historia entera del producto; y ofrecer los de
-        otros tres sectores invita a escribir el punto de suministro en la
-        casilla de la póliza, que después sale mal en el listado, en la ficha y
-        dentro de una credencial firmada.
+        demostración deshace la historia entera del producto; y ofrecer el de
+        otro sector invita a escribir el punto de suministro en la casilla que no
+        es, que después sale mal en el listado, en la ficha y dentro de una
+        credencial firmada.
 
-        Sin declarar se siguen enseñando las cuatro, con esta misma disposición.
-        No es una transición a medias: es lo que tienen las tres organizaciones
-        anteriores, y su alta no cambia (`OrganizationConfig.referenceClaim`).
+        La referencia ocupa el sitio que tenía la cuenta, junto a la fecha de
+        alta: son los dos datos de la relación comercial y se leen juntos.
       */}
-      {referenceClaim === undefined ? (
-        <>
-          <div className="row">
-            {referenceField('account_last4')}
-            {customerSinceField}
-          </div>
-          <div className="row">
-            {referenceField('policy_number')}
-            {referenceField('medical_record_number')}
-          </div>
-          <div className="row">{referenceField('supply_point_number')}</div>
-        </>
-      ) : (
-        // La referencia declarada ocupa el sitio que tenía la cuenta, junto a la
-        // fecha de alta: son los dos datos de la relación comercial y se leen
-        // juntos. Dejar la fila de la fecha sola dejaría un hueco donde antes
-        // había un campo, y esa fila coja se nota.
-        <div className="row">
-          {referenceField(referenceClaim)}
-          {customerSinceField}
-        </div>
-      )}
+      <div className="row">
+        {referenceField(referenceClaim)}
+        {customerSinceField}
+      </div>
 
       <SubmitButton />
     </form>
