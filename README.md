@@ -31,10 +31,10 @@ emisión son los de producción.
 > **LA CONFIGURACIÓN SE ESCRIBE DESDE LA CONSOLA, NO DESDE EL ENTORNO.**
 > Desde el 2026-08-31 una instalación se levanta con **`DATABASE_URL` y nada
 > más**, y se configura desde `/settings`: su organización de Logto, su
-> aplicación de máquina y su secreto, su marca, sus teléfonos, su portal y el
-> secreto de firma del webhook. Esa pantalla enseña además, arriba del todo y
-> con botón de copiar, **su propia dirección de webhook**, que es el único dato
-> que hay que llevarse a tenant-admin.
+> aplicación de máquina y su secreto, su marca, sus teléfonos y el secreto de
+> firma del webhook. Esa pantalla enseña además, arriba del todo y con botón de
+> copiar, **su propia dirección de webhook**, que es el único dato que hay que
+> llevarse a tenant-admin.
 >
 > La regla, que es una sola y está escrita en
 > [`src/lib/tenant-settings.ts`](src/lib/tenant-settings.ts): **la base manda; el
@@ -56,7 +56,7 @@ emisión son los de producción.
 | ✅ | **Marca por instalación**: dos colores y un monograma por variables de entorno (`src/lib/brand.ts`), aplicados como tokens CSS en el `<body>` desde el servidor. Sin declarar marca se queda la paleta de la hoja. Los colores de **estado** —rojo/ámbar/verde/azul— no se repintan nunca |
 | ✅ | **Receptor de webhooks** en `POST /api/webhooks/te-api`, con la firma comprobada (`te-signature-sha-256`, HMAC-SHA256 sobre `t.cuerpo`, hex, dos firmas durante una rotación) y **rechazo si no cuadra**. Lo recibido se guarda en `webhook_event` y se ve en `/events`, con la firma en su propia columna. Ver «El webhook» |
 | ⛔ | **Login de empleado con Logto OIDC.** Es la casilla que queda de F4a. Mientras no esté, esta consola **no está autenticada** y no puede publicarse donde llegue nadie de fuera |
-| ✅ | **Portal del cliente en `/portal`** (F4b): login OIDC del titular contra Logto y `POST /v1/b2b/links` desde el servidor. **Probado en el navegador el 2026-08-29**: Teófilo entró con su cuenta de TripleEnable y el vínculo quedó hecho — fila en `te.org_subject` de te-api, y volver a entrar es idempotente |
+| ↩ | **El portal del cliente en `/portal` (F4b) se retiró el 2026-08-31.** Lo hubo, funcionaba y se probó en el navegador el 2026-08-29: el titular entraba con su cuenta de TripleEnable y de ese login nacía el vínculo (`POST /v1/b2b/links`). Se quitó entero —rutas, sesión, columnas y variables— porque el supuesto de partida era falso, y **el vínculo no nace de un login: nace cuando el titular acepta una credencial de esa entidad en su cartera**. El porqué entero está en «El vínculo con la cartera, y por qué esta consola no lo crea» |
 | ✅ | **El diario del banco**: cada oferta emitida y cada comprobación lanzada quedan anotadas (`credential_offer`, `verification`), y la ficha las enseña con su hora y su autor. Es lo que permite que el listado tenga estado y que una verificación tenga dirección propia |
 | ⛔ | Estado real **de la credencial y del vínculo**: si el titular aceptó la oferta o si tiene cartera enrolada. te-api no lo cuenta, así que la ficha dice «ofrecida» —lo que hizo el banco— y **no pinta ninguna insignia** de «credencial activa» ni de «perfil verificado» |
 | ✅ | Botón «pedir credencial» → `POST /v1/b2b/presentations` de te-api → QR de la petición OID4VP, y en la misma pantalla lo que el titular enseñó. **Probado de punta a punta el 2026-08-29** con un guion que hace de cartera: `pending` → la cartera presenta → `verified` con `given_name` y `family_name`, y sólo con ésos |
@@ -66,20 +66,25 @@ emisión son los de producción.
 | ✅ | `/.well-known/did.json`, compuesto **siempre con `CRM_ORG_DOMAIN`** (`src/app/.well-known/did.json/route.ts`). Las claves las da te-api y esta ruta no puede caerse por ello; si te-api no tiene ninguna, devuelve **404**, que es la verdad — esa empresa todavía no ha encendido su emisión. El `Host` ya no participa: el `id` del documento es el mismo diga lo que diga la petición, así que apuntar un DNS aquí no fabrica una identidad |
 | ⛔ | Que el documento de **Larkfield Energy** se descargue de su dominio. Faltan dos cosas: **declarar el dominio en Coolify**, que es lo que dispara el certificado (ver [`DOMINIOS.md`](../docs/fases/DOMINIOS.md) §4), y que encienda su emisión — sin claves suyas en te-api la ruta devuelve 404 |
 
-## Dos secciones, no una
+## Una sección, no dos
 
-Este proyecto sirve **dos pantallas que no se parecen en nada**, y la separación
-es estructural: dos grupos de rutas, dos disposiciones y dos sesiones distintas.
+Este proyecto sirve **una sola pantalla**, y es de dentro: la consola que usan
+los empleados de la entidad. **A ninguna ruta de esta aplicación entra un
+cliente.**
 
 | | Quién la usa | Qué ve | Qué autentica |
 |---|---|---|---|
-| `(console)` — `/customers`, `/verifications`, `/diagnostics` | Un **empleado** del banco, desde el mostrador | El padrón entero de clientes | Nada todavía (F4a pendiente). Contra te-api autentica el **token M2M** |
-| `portal` — `/portal` | El **titular** | Su ficha y su vínculo, nada más | Login **OIDC contra Logto** con la cuenta de TripleEnable de esa persona |
+| `(console)` — `/customers`, `/verifications`, `/diagnostics` | Un **empleado** de la entidad, desde el mostrador | El padrón entero de clientes | Nada todavía (F4a pendiente). Contra te-api autentica el **token M2M** |
 
-El grupo `(console)` no cambia ninguna URL —los paréntesis son de Next.js— y
-existe para que la cabecera del banco viva en un fichero aparte de la del
-portal. Un `if` en una cabecera compartida se olvida; un enlace a «Clientes»
-pintado en la pantalla de un titular es un enlace que alguien va a pulsar.
+Hubo una segunda, `portal` —la del titular—, y se retiró el 2026-08-31: ver «El
+vínculo con la cartera, y por qué esta consola no lo crea».
+
+El grupo `(console)` no cambia ninguna URL —los paréntesis son de Next.js— y **se
+queda aunque hoy sea el único**. La raíz no pone cabecera, y que cada grupo de
+rutas ponga la suya es lo que hace que un enlace a «Clientes» **no exista** fuera
+de la consola, en vez de existir escondido tras un `if`. Un `if` en una cabecera
+compartida se olvida; el día que haya una segunda sección, compartir cabecera
+sería compartir navegación.
 
 ## El idioma
 
@@ -105,9 +110,9 @@ un chat para pasar una verificación, el `redirect_uri` declarado en Logto y
 cartera no resuelve el `did:web`.
 
 Así que va en **una cookie**, `crm_locale`, que escribe el selector de la barra
-lateral y de la cabecera del portal. Sin cookie se negocia con `Accept-Language`
-del navegador, y si tampoco dice nada, inglés. **No hay ninguna variable de
-entorno del idioma y no hay que reconstruir nada para cambiarlo.**
+lateral. Sin cookie se negocia con `Accept-Language` del navegador, y si tampoco
+dice nada, inglés. **No hay ninguna variable de entorno del idioma y no hay que
+reconstruir nada para cambiarlo.**
 
 | Fichero | Qué es |
 |---|---|
@@ -116,7 +121,7 @@ entorno del idioma y no hay que reconstruir nada para cambiarlo.**
 | `src/i18n/translate.tsx` | El traductor: `t()`, `t.rich()` y el respaldo al inglés |
 | `src/i18n/server.ts` · `client.tsx` | Cómo lo consigue el servidor (cookie) y el navegador (contexto) |
 | `src/i18n/actions.ts` | La acción que escribe la cookie |
-| `src/components/LocaleSwitch.tsx` | El selector, en las dos secciones |
+| `src/components/LocaleSwitch.tsx` | El selector, en la barra lateral de la consola |
 
 Lo que **no** se traduce, y a propósito: los comentarios del código
 (`AGENTS.md` §0.5), los mensajes de `console.error` —diagnóstico interno, que se
@@ -142,8 +147,8 @@ formulario largo donde lo que se leía era el desplegable.
 | `/verifications/<presentationId>` | **Seguir** una comprobación: el estado en grande —con el titular, su número de cliente y el plazo corriendo—, el QR o el enlace, la línea de tiempo y el recibo | C2 · C3 |
 | `/verifications` | El registro de comprobaciones de la organización | — |
 | `/customers/new` | Alta de cliente | — |
-| `/settings` | **La configuración de esta instalación**, guardada en su propia base: su organización de Logto, su aplicación de máquina y su secreto, su marca, su referencia de sector, sus teléfonos, su portal y el secreto de firma del webhook. Arriba del todo enseña **su propia dirección de webhook**, entera y con botón de copiar, que es el único dato que hay que llevarse a tenant-admin. Abajo, dos botones que prueban la integración **en los dos sentidos**: pedir un token a Logto y llamar a `GET /v1/b2b/organization`, y pedirle a te-api que mande un `webhook.test` a esta instalación. Los tres secretos **se escriben y no se releen**: sólo se enseña su huella | — |
-| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, marca, portal, **webhook**), de dónde sale el idioma, y una comprobación real de la base. **Ajustes escribe; Diagnóstico mira** — lo que enseña aquí y no allí es lo que contesta te-api y el recuento de entregas | — |
+| `/settings` | **La configuración de esta instalación**, guardada en su propia base: su organización de Logto, su aplicación de máquina y su secreto, su marca, su referencia de sector, sus teléfonos y el secreto de firma del webhook. Arriba del todo enseña **su propia dirección de webhook**, entera y con botón de copiar, que es el único dato que hay que llevarse a tenant-admin. Abajo, dos botones que prueban la integración **en los dos sentidos**: pedir un token a Logto y llamar a `GET /v1/b2b/organization`, y pedirle a te-api que mande un `webhook.test` a esta instalación. Los **dos** secretos —el de la aplicación de máquina y el del webhook— **se escriben y no se releen**: sólo se enseña su huella | — |
+| `/diagnostics` | La costura con te-api, la configuración de la organización (dominio, `did:web`, números oficiales, marca, **webhook**), de dónde sale el idioma, y una comprobación real de la base. **Ajustes escribe; Diagnóstico mira** — lo que enseña aquí y no allí es lo que contesta te-api y el recuento de entregas | — |
 | `/events` | Los **eventos recibidos por webhook**: cuándo, de qué tipo, a qué cliente afectan y si la firma cuadró. Es la única parte de la integración que ocurre sin que nadie esté mirando, y por eso tiene pantalla | — |
 
 Que el seguimiento tenga dirección propia es lo que arregla tres cosas de golpe:
@@ -507,86 +512,94 @@ El CRM ya hace su parte entera. Lo que queda **no está en este proyecto**:
 2. **Una cartera enrolada y vinculada.** El timbre resuelve
    `(organización, cliente) → vínculo → titular → aparatos`. Sin vínculo no
    resuelve a nadie; con vínculo pero sin cartera enrolada (`te.identity` vacía)
-   se para en la puerta siguiente. En los dos casos la fila nace **señuelo** y
+   se para en la puerta siguiente. El vínculo **no se crea desde aquí**: nace
+   cuando el titular acepta una credencial de esta entidad en su cartera — ver
+   «El vínculo con la cartera». En los dos casos la fila nace **señuelo** y
    te-api contesta exactamente igual, que es el comportamiento correcto y no un
    fallo que haya que perseguir desde aquí.
 3. **`TE_PUSH_ENABLED=true` en te-api.** Con el canal apagado la ruta falla en
    voz alta (`400 unauthorized_client`) en vez de devolver un `wakeupId` que no
    va a sonar nunca.
 
-## El portal del cliente (`/portal`) y el vínculo
+## El vínculo con la cartera, y por qué esta consola no lo crea
 
-Es la mitad de F2 que vive aquí. te-api **no acepta que el banco declare a quién
-vincula**: exige el ID token que el banco recibió al autenticar a esa persona.
-Este portal existe para producir ese ID token.
+**Aquí hubo un portal del cliente en `/portal`, y se retiró entero el
+2026-08-31.** Estaba escrito, funcionaba y estaba probado: el titular entraba con
+su cuenta de TripleEnable, esta aplicación verificaba el ID token y llamaba a
+`POST /v1/b2b/links`. Se fueron con él las rutas (`/portal`, `/portal/login`,
+`/portal/callback`, `/portal/logout`), los tres módulos que las sostenían
+(`portal-oidc.ts`, `portal-session.ts`, `portal-guard.ts`), sus casillas de
+`/settings`, su fila de `/diagnostics`, sus cinco variables `CRM_PORTAL_*` y sus
+cinco columnas de `tenant_settings`, que borra
+[`db/009_drop_portal.sql`](db/009_drop_portal.sql) — dos de ellas guardaban
+secretos, y una columna que ya nadie lee pero que sigue teniendo un secreto
+dentro es lo peor de las dos opciones.
 
-```
-Navegador del TITULAR                Next.js, en el servidor              te-api / Logto
-─────────────────────                ───────────────────────              ──────────────
-GET /portal
-  «Entrar con TripleEnable»
-GET /portal/login  ────────────────► state + nonce + PKCE
-                                     cookie `bd_portal_auth`
-  ◄── 307 ─────────────────────────────────────────────────────────────►  Logto autentica
-GET /portal/callback?code&state
-                                     1. compara el `state`
-                                     2. canjea el código  ──────────────►  Logto /oidc/token
-                                        (client_secret_basic + PKCE)
-                                     3. VERIFICA el ID token: firma contra
-                                        el JWKS, `iss`, `aud`, `nonce`
-                                     4. correo verificado → ficha del padrón
-                                     5. POST /v1/b2b/links ─────────────►  te-api
-                                                                            { linkId, replaced }
-  ◄── 307 a /portal (el resultado, en la cookie de sesión)
-```
+Se quitó por **dos razones, y ninguna es que estuviera mal escrito**:
 
-### Las cuatro decisiones del portal
+**1 · Esta instalación es la consola de dentro.** La usan los empleados de la
+entidad. **Un cliente no entra en la consola interna de su banco**, y un banco no
+registra esa consola como aplicación OIDC para que entren sus clientes — ya tiene
+su banca electrónica, que es otra aplicación, de otro equipo y con otra puerta.
+Un portal del titular metido aquí dentro no existe en ningún despliegue real, así
+que su configuración tampoco tenía por qué ocupar cinco columnas de la tabla de
+ajustes.
 
-**1 · El vínculo se pide en el callback, no con un botón después.** te-api sólo
-acepta ID tokens de **menos de cinco minutos** (`src/b2b/portal-id-token.ts`), a
-propósito: un ID token viejo que sigue vinculando es un ID token filtrado que
-sigue vinculando. Guardarlo «para cuando el titular pulse» produce un fallo
-intermitente que parece de red y no lo es.
+**2 · El vínculo no nacía de ese login.** **Un perfil de TripleEnable queda
+vinculado cuando el titular acepta una credencial de esa entidad en su cartera.**
+Es un trato entre la cartera y la plataforma, y esta consola **no participa en
+crearlo**. El portal producía el ID token que `POST /v1/b2b/links` exige, sí, pero
+estaba fabricando por la puerta de atrás un hecho que ocurre solo por la de
+delante, en cuanto la credencial que esta pantalla ya sabe emitir llega a su
+destino.
 
-**2 · El ID token no se guarda en ninguna parte.** Ni en cookie, ni en base, ni
-en el log. Es la prueba entera del vínculo: quien lo tenga puede atar a esa
-persona a un cliente de esta organización. Lo que sobrevive en la cookie de
-sesión es el **resultado** (`linkId`), que no es canjeable por nada.
+### Lo que sí se conserva: **leer** el vínculo
 
-**3 · Quién eres «en el banco» lo decide el banco, con el correo verificado.**
-`findCustomerByEmail` cruza el `email` del ID token contra el padrón propio. Ese
-correo llega del token verificado y **nunca de un formulario**: si viniera del
-navegador, cualquiera escribiría el correo de otro y se ataría al cliente de
-otro, y te-api no lo podría ver — para te-api el `sub` es el bueno y el
-`external_id` es cosa del banco. Dos fichas con el mismo correo → no se vincula,
-en vez de elegir una al azar.
+`GET /v1/b2b/links` sigue llamándose, desde `hasActiveWalletLink`
+([`src/lib/te-api.ts`](src/lib/te-api.ts)), y es lo que decide si el botón de
+avisar al móvil sirve para algo. **Se fue la escritura, no la lectura**: esta
+integración ya no crea vínculos, pero pregunta si los hay.
 
-**4 · La aplicación de Logto del portal NO es la aplicación M2M.** La M2M
-autentica al servidor contra te-api; ésta autentica a una persona. Y su
-`client_id` es además el `aud` que te-api exige del ID token, así que compartirlas
-haría que el mismo identificador significara dos cosas.
+| | Quién lo hace | Estado |
+|---|---|---|
+| `POST /v1/b2b/links` — **crear** el vínculo | La cartera y la plataforma, cuando el titular acepta una credencial | **Retirado de aquí** el 2026-08-31 |
+| `GET /v1/b2b/links?subjectReference=…` — **preguntar** si lo hay | Esta consola, con su token M2M | **Vivo.** Es lo que sabe la pantalla de comprobación |
 
-> ⚠️ **`POST /v1/b2b/links` responde `403 cannot_complete` a cuatro cosas
-> distintas**: firma mala, `aud` de otra organización, `iat` fuera de la ventana,
-> y **`sub` sin perfil en `te.subject`** — o sea, una persona que todavía no
-> tiene cartera de TripleEnable dada de alta. El último es el caso normal en un
-> entorno de pruebas y el único accionable, y es el que nombra el mensaje de
-> `describeTeApiError`. El motivo real está en `te.request_event` de te-api, con
-> el `requestId` que la pantalla enseña.
+Y hay una razón para preguntarlo por ahí y no en la respuesta del timbre, además
+de la privacidad: **el scope no es el mismo**. El timbre acepta
+`verifications:request` a secas y el directorio exige `credentials:issue`, así
+que meter el hecho en la respuesta del timbre se lo enseñaría a una credencial
+más débil de la que hoy hace falta para leerlo. Y llegaría tarde: la pantalla
+necesita saberlo **antes** de disparar, para no prometer un aviso que no va a
+salir.
 
-### Del lado de Logto y de te-api
+Cuando no hay vínculo, el botón del teléfono se queda **deshabilitado con «No
+wallet to alert»** y la pantalla dice el hecho —esta persona no tiene cartera
+vinculada con esta entidad— y la salida: enseñarle el QR si está delante, o
+emitirle una credencial, que es lo que crea el vínculo al aceptarla. Eso **no ha
+cambiado** y sigue siendo correcto.
 
-Para que esto funcione hacen falta **dos cosas que no están en este repositorio**:
+⚠️ `hasActiveWalletLink` contesta por **el vínculo y nada más**. No dice si el
+titular está suspendido, si retiró la cartera, si está en el escalón de bloqueo o
+si tiene algún aparato elegible: esas cuatro razones también hacen que el timbre
+no suene, y ninguna se publica en ningún sitio. Si el directorio no contesta,
+devuelve `undefined` y la pantalla **no afirma nada** — es mejor no decir que
+decir de más.
 
-1. Una aplicación **Traditional Web** en Logto con
-   `redirect_uri = <CRM_PORTAL_BASE_URL>/portal/callback`.
-2. Su `client_id` sembrado en el padrón de te-api:
-   `TE_PARTNER_PORTAL_CLIENT_ID=<ese client_id> npm run seed:partner`.
+### Lo que se queda del portal en el historial, y no es un olvido
 
-Si los dos valores no coinciden carácter a carácter, el vínculo falla con el
-`403` de arriba y no dice por qué. La receta entera, con los valores del entorno
-de pruebas, está en [`docs/ENTORNO-DE-PRUEBAS.md`](../docs/ENTORNO-DE-PRUEBAS.md)
-§3 y §13.
+El canal de entrega **`app`** —«le espera en el portal, ya autenticado»— **dejó
+de ofrecerse**: sin portal, esa oferta no la recogería nadie, y una entrega que
+no entrega es peor que no ofrecer el canal. Al emitir quedan tres canales: `qr`,
+`link` y `email` ([`src/lib/delivery.ts`](src/lib/delivery.ts)).
+
+Pero las filas de `credential_offer` que se crearon con él **se quedan**, la
+restricción de `db/004_offer_delivery.sql` sigue aceptando `app`, y el historial
+de la ficha las sigue rotulando con su frase. Son el registro de lo que esta
+consola hizo de verdad —el 29 de agosto se ofreció una credencial por ese
+canal—, y reescribir el historial para que cuadre con lo que hoy se puede hacer
+sería falsificarlo. Quitar su rótulo no borraría la fila: la dejaría escrita en
+jerga (`app`) en la pantalla que un empleado lee meses después.
 
 ## Levantarlo
 
@@ -624,16 +637,15 @@ teléfonos y las referencias **no se tocan**, porque el `external_id` viaja como
 nothing`, una base con el padrón viejo no se actualiza sola: hay que borrar esas
 filas por su `external_id` y volver a sembrar.
 
-Dos direcciones, no una:
+Una sola dirección, y es la de dentro:
 
 ```
 http://localhost:3000/customers     la consola de agentes
-http://localhost:3000/portal        el portal del cliente
 ```
 
-Las dos abren **en inglés** salvo que el navegador pida otra cosa en
-`Accept-Language`. El selector de la barra lateral —y el de la cabecera del
-portal— cambian al castellano sin recargar nada más que la pantalla.
+Abre **en inglés** salvo que el navegador pida otra cosa en `Accept-Language`. El
+selector de la barra lateral cambia al castellano sin recargar nada más que la
+pantalla.
 
 ### Probar las DOS instalaciones en local
 
@@ -668,13 +680,6 @@ curl -s http://127.0.0.1:3000/.well-known/did.json
 
 Un **404** aquí no es un fallo de configuración: significa que te-api todavía no
 tiene claves de esta organización, o sea que no ha encendido su emisión.
-
-El portal necesita además la aplicación de Logto y el `portal_client_id` en el
-padrón de te-api — ver «El portal del cliente» más arriba. Sin ellos el botón de
-entrar se queda deshabilitado y la pantalla lo dice **con las palabras de un
-titular**, no con las de quien despliega, en vez de mandar a nadie a un error de
-Logto: el nombre de la variable que falta está en `/diagnostics`, que es la
-pantalla de quien puede ponerla.
 
 Un Postgres de usar y tirar, si no hay otro a mano:
 
@@ -770,7 +775,7 @@ ella la instalación no está configurada, y la pantalla la nombra.
 | `CRM_OFFICIAL_NUMBERS` | Los teléfonos desde los que llama de verdad, separados **por comas**. No son adorno: van firmados dentro de la credencial como `official_numbers` |
 | `CRM_REFERENCE_CLAIM` | Qué dato de relación ofrece su **alta de cliente**: `account_last4` o `supply_point_number`. **Obligatoria** desde el 2026-08-31 — antes, sin ella se ofrecían todas las casillas a la vez, y a un agente de una eléctrica le aparecía una de «número de historia clínica» |
 | `CRM_BRAND_COLOR` | El acento de su marca sobre papel blanco: enlaces, foco, el filo de la tarjeta de oferta. Sólo hexadecimal (`#rgb`/`#rrggbb`, o **sin almohadilla**, que es lo obligado en un `.env` — la almohadilla abre un comentario y el valor se pierde entero). Desde la pantalla, un valor que no encaje se rechaza junto a la casilla |
-| `CRM_BRAND_SURFACE` | La superficie oscura de su marca: la barra de la consola y la cabecera del portal. Va **junta** con la anterior — media marca se lee como una pantalla a medio pintar |
+| `CRM_BRAND_SURFACE` | La superficie oscura de su marca: la barra lateral de la consola. Va **junta** con la anterior — media marca se lee como una pantalla a medio pintar |
 | `CRM_BRAND_MONOGRAM` | Una o dos letras para el disco. Sin él, las iniciales de las dos primeras palabras del nombre |
 
 ### Los tipos de credencial
@@ -794,24 +799,24 @@ uno, porque te-api no lo sabe (ver más arriba).
 |---|---|
 | `CRM_WEBHOOK_SECRET` | El secreto de firma que devuelve la consola al registrar el endpoint. Se pega **tal cual, con el `whsec_` incluido**: es una cadena opaca, no material codificado. Sin él el receptor **rechaza toda entrega**. Su casilla está en `/settings`, justo debajo de la dirección que hay que registrar |
 
-### El empleado y el portal
+### El empleado
 
 Las tres de `CRM_AGENT_*` **se siguen leyendo del entorno siempre**, y no son una
 excepción a la regla: no están en la pantalla de ajustes ni deben estarlo. Son el
 sustituto provisional del login de empleado (F4a) — son de la persona, no de la
-empresa, y desaparecerán cuando ese login exista. Las tres del portal sí están en
-la pantalla.
+empresa, y desaparecerán cuando ese login exista.
 
 | Variable | Qué es |
 |---|---|
 | `CRM_AGENT_ACTOR` | Etiqueta del puesto para el diario, mientras no haya login de empleado |
 | `CRM_AGENT_ID` | El número de agente que ve el **titular** en su móvil cuando suena el timbre. te-api **no lo verifica**: es atribución |
 | `CRM_AGENT_NAME` | El nombre del agente, igual. Sin estas dos al titular le sale «Agente de \<la organización\>», compuesto con su nombre — no se inventa un nombre de persona |
-| `CRM_PORTAL_CLIENT_ID` | La aplicación **Traditional Web** del portal. Es además el `portal_client_id` que te-api tiene en su padrón |
-| `CRM_PORTAL_CLIENT_SECRET` | Su secreto. **Sólo en el servidor.** Va junta con la de arriba: una sin la otra es un error de configuración y el formulario no la deja guardar |
-| `CRM_PORTAL_LINK_TYPE` | El `type` que el portal declara al vincular (`cliente`). Opcional |
-| `CRM_PORTAL_BASE_URL` | La dirección pública del portal. De aquí sale su `redirect_uri`, que Logto compara carácter a carácter con el declarado en su aplicación. **Nunca sale de la cabecera `Host`** |
-| `CRM_PORTAL_COOKIE_SECRET` | Firma la cookie de sesión del portal (HS256). **Ya no hay que inventarla**: si no se siembra, se genera con `randomBytes(32)` al crear la fila de configuración, y por tanto es distinta en cada base. Sembrarla sigue valiendo para conservar las sesiones abiertas de un despliegue que ya existía |
+
+> **Aquí había cinco `CRM_PORTAL_*`** —`_CLIENT_ID`, `_CLIENT_SECRET`,
+> `_LINK_TYPE`, `_BASE_URL` y `_COOKIE_SECRET`— y **ya no las lee nadie**. Se
+> fueron con el portal el 2026-08-31, junto con sus cinco columnas de
+> `tenant_settings` (`db/009_drop_portal.sql`). Dejarlas puestas en un `.env` no
+> hace nada; el porqué está en «El vínculo con la cartera».
 
 ### Sólo para la siembra
 
@@ -912,8 +917,7 @@ Lo que no se puede olvidar:
 - **Su propia `DATABASE_URL`.** Compartirla ata dos empresas al mismo Postgres
   para siempre — y desde que la configuración vive dentro, compartirla es además
   compartir la configuración: **dos instalaciones sobre la misma base son la
-  misma instalación**. La clave de la cookie del portal ya no hay que inventarla:
-  se genera al sembrar la fila, y por tanto es distinta en cada base.
+  misma instalación**.
 - **Su propio secreto de webhook**, que le da su propia consola al registrar su
   endpoint. Se pega en `/settings`, no en el entorno.
 
@@ -927,21 +931,26 @@ segunda instalación; para otra empresa se cambian el nombre y el subdominio.
 |---|---|---|---|
 | 1 | **tenant-admin** | La organización **Larkfield Energy** en Logto, su **rol de organización** con los scopes `credentials:issue` y `verifications:request` sobre el recurso B2B, y su **aplicación M2M** miembro de esa organización con ese rol | **Su propio administrador**, al darse de alta. No nosotros |
 | 2 | **Logto** | Copiar el `organization_id` y el `client_id`/`client_secret` de esa M2M (Applications → … → App secrets → el ojo) | Quien despliega |
-| 3 | **Logto** | La aplicación del portal: **Traditional Web**, con `redirect_uri` = `https://energy.demo-te.com/portal/callback` y `post_logout_redirect_uri` = `https://energy.demo-te.com/portal`, **carácter a carácter** | Quien despliega |
-| 4 | **te-api** | La organización en su padrón, con el `portal_client_id` del paso 3: `TE_PARTNER_PORTAL_CLIENT_ID=<ese client_id> npm run seed:partner` | Quien despliega |
-| 5 | **DNS** | `energy.demo-te.com` apuntando al servidor | Quien despliega |
-| 6 | **Coolify** | **Una aplicación NUEVA** a partir de la misma imagen, con `https://energy.demo-te.com` como su dominio. Esto cambió el 2026-08-31: antes era añadir un dominio más a la aplicación que ya existía, porque un despliegue servía a las cuatro | Quien despliega |
-| 7 | **Coolify** | Poner **`DATABASE_URL`** en las variables de esa nueva aplicación —**suya, no la del banco**— y desplegar. El resto ya no va aquí | Quien despliega |
-| 8 | **La base** | `npm run db:migrate` desde dentro del contenedor | Quien despliega |
-| 8b | **`/settings` de la nueva instalación** | Pegar los valores de los pasos 2 y 3, elegir su referencia de sector y su marca, y guardar. Después `npm run db:seed`, que ya sabe de quién es el padrón | Quien despliega |
-| 9 | **La consola de la organización** | Elegir sus **tipos de credencial** del catálogo compartido y **encender su emisión**, que es lo que crea sus claves en te-api | **Su administrador** |
-| 10 | **La consola de la organización** | Registrar su webhook. **La dirección exacta la enseña `/settings` con botón de copiar** — es `https://energy.demo-te.com/api/webhooks/te-api`. Devuelve el secreto de firma, que se pega en esa misma pantalla; **no hay que redesplegar**. El botón «mandar un evento de prueba» comprueba las dos mitades de una vez | **Su administrador** |
+| 3 | **te-api** | La organización en su padrón: `npm run seed:partner` | Quien despliega |
+| 4 | **DNS** | `energy.demo-te.com` apuntando al servidor | Quien despliega |
+| 5 | **Coolify** | **Una aplicación NUEVA** a partir de la misma imagen, con `https://energy.demo-te.com` como su dominio. Esto cambió el 2026-08-31: antes era añadir un dominio más a la aplicación que ya existía, porque un despliegue servía a las cuatro | Quien despliega |
+| 6 | **Coolify** | Poner **`DATABASE_URL`** en las variables de esa nueva aplicación —**suya, no la del banco**— y desplegar. El resto ya no va aquí | Quien despliega |
+| 7 | **La base** | `npm run db:migrate` desde dentro del contenedor | Quien despliega |
+| 7b | **`/settings` de la nueva instalación** | Pegar los valores del paso 2, elegir su referencia de sector y su marca, y guardar. Después `npm run db:seed`, que ya sabe de quién es el padrón | Quien despliega |
+| 8 | **La consola de la organización** | Elegir sus **tipos de credencial** del catálogo compartido y **encender su emisión**, que es lo que crea sus claves en te-api | **Su administrador** |
+| 9 | **La consola de la organización** | Registrar su webhook. **La dirección exacta la enseña `/settings` con botón de copiar** — es `https://energy.demo-te.com/api/webhooks/te-api`. Devuelve el secreto de firma, que se pega en esa misma pantalla; **no hay que redesplegar**. El botón «mandar un evento de prueba» comprueba las dos mitades de una vez | **Su administrador** |
 
-Los pasos 1, 9 y 10 son de la organización y no nuestros, y ésa es la prueba que
+> **Esta lista tenía dos pasos más, y se fueron el 2026-08-31.** Uno era crear en
+> Logto una aplicación **Traditional Web** para el portal del titular; el otro,
+> sembrar su `client_id` en te-api como `portal_client_id`. Ninguno de los dos
+> hace falta ya: no hay portal, esta integración no crea vínculos y a te-api se
+> le siembra la organización a secas. Ver «El vínculo con la cartera».
+
+Los pasos 1, 8 y 9 son de la organización y no nuestros, y ésa es la prueba que
 esto viene a hacer: **el alta es autoservicio**. Nosotros no creamos su
 aplicación M2M, ni elegimos qué credenciales emite, ni registramos su webhook.
 
-> ⚠ **Hasta el paso 9 no hay documento DID, y eso NO es un fallo.** Las claves
+> ⚠ **Hasta el paso 8 no hay documento DID, y eso NO es un fallo.** Las claves
 > salen de `GET /v1/trust/did-documents/:host` de te-api, y si te-api no tiene
 > ninguna para esa organización, `/.well-known/did.json` devuelve **404**
 > (`src/lib/did-document.ts`). Es la respuesta honesta a «este dominio todavía no
@@ -949,18 +958,11 @@ aplicación M2M, ni elegimos qué credenciales emite, ni registramos su webhook.
 > la cartera lo tomaría por bueno y diría «esta organización no publica claves»,
 > que suena a error suyo.
 
-> ⚠ **Hasta el paso 10, `/events` sale vacía y el receptor rechaza todo.** Sin
+> ⚠ **Hasta el paso 9, `/events` sale vacía y el receptor rechaza todo.** Sin
 > `CRM_WEBHOOK_SECRET` no hay con qué comprobar la firma, y aceptar sin comprobar
 > no es una opción: el cuerpo del evento lleva el veredicto dentro, así que un
 > `POST` sin firma comprobada podría afirmar un `verified` que no ocurrió.
 > Diagnóstico dice qué variable falta.
-
-> ⚠ **`CRM_PORTAL_LINK_TYPE` se queda vacía hasta el paso 9.** Tiene que ser un
-> `type_key` del padrón de **esa** organización en te-api, y hasta que su
-> administrador no elija sus tipos no hay ninguno. Con un valor inventado, `POST
-> /v1/b2b/links` responde `400 invalid_request` y el vínculo no se crea. Vacía, el
-> vínculo se hace igual —nace del login, no de la credencial— y en la cartera se
-> lee «Larkfield Energy» en vez de «Larkfield Energy · customer».
 
 ### Si emite otro tipo de credencial
 
@@ -983,8 +985,8 @@ el porqué está en la cabecera de esa migración.)
 `supply_point_number` —el identificador del contador, que es lo que el titular
 reconoce cuando alguien dice llamarle de su compañía de la luz— y salió en
 `db/006_supply_point.sql`. Es, literalmente, **lo único** que la cuarta
-organización necesitó de código. Todo lo demás —dominio, `did:web`, M2M, portal,
-marca, padrón de prueba— fue configuración.
+organización necesitó de código. Todo lo demás —dominio, `did:web`, M2M, marca,
+padrón de prueba— fue configuración.
 
 Lo que **no** necesitó fue declarar tipos: no lleva ninguna `CRM_TYPE_…`. Sin
 declarar un tipo, éste lleva todos los atributos del catálogo que la ficha
@@ -995,21 +997,18 @@ compartido que publica el emisor.
 ## Lo que se puede demostrar
 
 - **Ni un secreto en el navegador.** `npm run build` y luego
-  `grep -ril "M2M_SECRET\|client_secret\|m2mSecret\|PORTAL_CLIENT_SECRET" .next/static`
-  — vacío. Comprobado el 2026-08-29 con los secretos del portal ya puestos; ni
-  siquiera sale el `client_id` del portal, que no es secreto pero tampoco pinta
-  nada ahí.
+  `grep -ril "M2M_SECRET\|client_secret\|m2mSecret\|webhookSecret" .next/static`
+  — vacío. Se comprobó por primera vez el 2026-08-29, entonces con los dos
+  secretos del portal también puestos.
 - **te-api responde sin ninguna sesión de empleado.** `curl` a
   `/api/organization` sin cookies: contesta igual.
 - **El `tx_code` no viaja por el mismo canal que el enlace.** El PIN se pinta en
   su propia tarjeta y no se manda a ningún sitio.
-- **El portal no puede vincular con un ID token que no sea suyo.** Se mandó a
-  `POST /v1/b2b/links` un ID token con `iss` y `aud` correctos y firma
-  inventada: `403 cannot_complete`, y en el diario de te-api
-  `b2b.link_denied` con `no applicable key found in the JSON Web Key Set`. No se
-  creó ninguna fila de vínculo.
-- **Vincular dos veces no duplica nada.** Segundo login del mismo titular:
-  `alreadyLinked: true`, una sola fila en `te.org_subject`, mismo `linkId`.
+- Aquí había dos pruebas más, **las dos del portal** —que un ID token con la
+  firma inventada no vincula, y que vincular dos veces no duplica la fila—. Se
+  quitaron con él el 2026-08-31: siguen siendo verdad de te-api, pero **ya no se
+  pueden demostrar desde aquí**, porque esta integración no llama a
+  `POST /v1/b2b/links`.
 - **De la verificación sólo vuelve lo que se pidió.** Se hizo presentar a la
   cartera **las cuatro** divulgaciones habiendo pedido sólo `given_name`, y la
   respuesta de te-api trajo un solo claim, `given_name`, y nada más. (El valor
