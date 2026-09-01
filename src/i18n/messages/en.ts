@@ -717,6 +717,12 @@ export const en = {
     receiptSignature: 'Signature',
     receiptSignatureValue:
       'that of the <code>KB-JWT</code>, which ties this presentation to the holder’s key',
+    receiptHolderKeyJwk: 'Holder public key',
+    receiptNonce: 'Nonce',
+    receiptAudience: 'Audience',
+    receiptSdHash: 'SD hash',
+    receiptProofNote:
+      'These four are what lets anybody re-check the <code>KB-JWT</code> without asking this organisation or TripleEnable for anything: the key that signed it, the challenge it answers, the verifier it was signed for, and the hash that ties it to this presentation and to no other.',
   },
 
   /** El enlace que abre la cartera. */

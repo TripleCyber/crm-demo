@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 
 import { logConsoleFailure } from '@/lib/console-failures';
 import { getOrganization } from '@/lib/organization';
-import { settleVerification } from '@/lib/verifications';
+import {
+  readPresentationProof,
+  settleVerification,
+  type VerificationSettlement,
+} from '@/lib/verifications';
 import { isTerminalStatus } from '@/lib/verification-status';
 import { storeWebhookEvent } from '@/lib/webhook-events';
 import {
@@ -81,9 +85,45 @@ import {
  *
  * Lo que este receptor **no** hace, y ahora es una regla y no una preferencia,
  * es llamar a te-api para completar el evento. Todo lo que se usa viene dentro.
- * Los claims y el recibo firmado no vienen —te-api minimiza el dato personal que
- * sale por un canal saliente— y **eso no se suple preguntando**: si el recibo
- * necesita un campo, se añade al evento en te-api. Ver `lib/te-api.ts`.
+ * Si al recibo le falta un campo, el sitio donde se arregla es el evento —en
+ * te-api—, nunca una llamada de vuelta desde aquí. Ver `lib/te-api.ts`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  Y AHORA EL EVENTO LO TRAE TODO, INCLUIDO EL DATO PERSONAL
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Aquí decía que los claims y el recibo firmado **no** venían, porque te-api
+ * minimizaba el dato personal que sale por un canal saliente. Esa política está
+ * revocada y ahora es la contraria: `presentation.settled` lleva **todo lo que
+ * trae la confirmación del titular** —`claims`, `holderKey`, `holderLinkId` y
+ * `proof`—, para que quien lo recibe no tenga que volver a llamar a la API para
+ * nada.
+ *
+ * El porqué, que no es una comodidad sino un argumento sobre a quién pertenece
+ * el dato, en tres piezas:
+ *
+ *  1. **El destino no es de un tercero: lo puso la propia organización.** Esta
+ *     dirección la dio de alta y la verificó su administrador en tenant-admin.
+ *     Mandarle el dato aquí no es sacarlo de la organización — es entregárselo
+ *     en el buzón que ella misma señaló.
+ *  2. **El cuerpo va firmado.** Nadie puede inyectar un recibo ni leerlo por el
+ *     camino sin romper la firma, y este receptor la comprueba antes de mirar
+ *     nada (paso 2). Un canal firmado punto a punto no es «un canal saliente»
+ *     en el sentido que preocupaba.
+ *  3. **Esta organización ya tiene derecho a esos datos.** Es quien pidió la
+ *     verificación, y el titular consintió enseñárselos al aprobarla en su
+ *     cartera. Obligarla a pedirlos otra vez por una segunda ruta no protegía
+ *     al titular de nada: protegía de una llamada que la propia organización
+ *     estaba autorizada a hacer.
+ *
+ * Lo que **no** cambia es la otra mitad de la regla: el receptor no vuelve a
+ * llamar a te-api. Los cuatro campos se leen del cuerpo o no se leen.
+ *
+ * Y se leen **con desconfianza**: son `unknown` de un JSON, así que se valida la
+ * forma de cada uno (ver `readSettlement`). Los cuatro son opcionales aunque el
+ * desenlace sea `verified` —te-api tiene un tope de tamaño de cuerpo y los
+ * recorta antes que el sobre, y un evento de una versión anterior no los lleva—,
+ * así que faltar es un caso normal y no un error que haya que registrar.
  */
 
 export const runtime = 'nodejs';
@@ -250,10 +290,18 @@ async function dispatch(
       }
 
       // El diario se cierra **con lo que trae el evento**, sin volver a llamar.
-      // Los claims no vienen —te-api minimiza el dato personal que sale por un
-      // canal saliente— y por eso van a `null`: la consulta los preserva si el
-      // sondeo llegó antes (`coalesce` en `settleVerification`).
-      await settleVerification(orgId, presentationId, status, null);
+      // Y ahora el evento trae todo lo que trae la confirmación del titular, así
+      // que lo que se escribe aquí es el recibo entero y no sólo el veredicto.
+      // El porqué de que pueda venir por este canal está en la cabecera.
+      //
+      // Lo que no venga se escribe `null`, y `settleVerification` lo trata con
+      // `coalesce`: un `null` no borra lo que hubiera. Faltar es un caso normal
+      // —cuerpo degradado por tamaño, versión anterior del evento, desenlace que
+      // no es `verified`— y por eso no se registra como fallo.
+      await settleVerification(orgId, presentationId, {
+        status,
+        ...readSettlement(data),
+      });
       return NextResponse.json({ status: 'applied' });
     }
 
@@ -268,6 +316,57 @@ async function dispatch(
       console.warn('[crm] tipo de webhook desconocido, archivado sin aplicar', { type });
       return NextResponse.json({ status: 'stored', applied: false });
   }
+}
+
+/**
+ * Lee del evento las cuatro piezas de la confirmación del titular.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA FIRMA DICE QUIÉN LO MANDÓ, NO QUÉ FORMA TIENE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Que el MAC cuadre demuestra que el cuerpo lo escribió te-api y que nadie lo
+ * tocó por el camino. **No demuestra que `holderKey` sea un objeto ni que
+ * `claims` no sea un array**: eso depende de qué versión de te-api esté
+ * desplegada al otro lado, y esta consola se despliega por su cuenta. Un
+ * `data.claims` que llegue como cadena y se meta en una columna `jsonb` no
+ * revienta aquí — revienta al pintar el recibo, tres pantallas más allá y sin
+ * nada que lo relacione con este `POST`.
+ *
+ * Por eso cada campo pasa por su lector, y **lo que no encaje se descarta en
+ * silencio**. En silencio a propósito: los cuatro son opcionales por contrato
+ * —no vienen si el desenlace no es `verified`, ni si te-api recortó el cuerpo
+ * por tamaño, ni si el evento es de una versión anterior—, así que no distinguir
+ * «no venía» de «vino torcido» con un registro de error es correcto. Lo que no
+ * se puede es escribir basura en el diario y que el recibo la enseñe como
+ * prueba.
+ *
+ * `status` no sale de aquí: ya lo validó el llamante contra la lista cerrada de
+ * desenlaces, que es una comprobación distinta y con otra consecuencia.
+ */
+function readSettlement(data: Record<string, unknown>): Omit<VerificationSettlement, 'status'> {
+  // `holderKey` es `{thumbprint, jwk}` y se parte en dos columnas: la huella es
+  // lo que se compara, la llave es con lo que se vuelve a verificar. Se leen por
+  // separado porque una puede venir sin la otra y ninguna necesita a la otra
+  // para valer.
+  const holderKey = isRecord(data['holderKey']) ? data['holderKey'] : {};
+
+  return {
+    // Los claims son el objeto del titular, no nuestro esquema: se guarda tal
+    // cual, sin recortar ni convertir. Quien filtra por lo que se pidió es
+    // te-api —lo hace en `toPresentationResult`, antes de componer el evento—
+    // así que repetir aquí ese filtro sería una segunda copia de una regla que
+    // ya se aplicó, y el día que las dos discrepen el recibo enseñaría menos de
+    // lo que el titular enseñó de verdad.
+    disclosedClaims: isRecord(data['claims']) ? data['claims'] : null,
+    holderKey: asString(holderKey['thumbprint']) ?? null,
+    holderKeyJwk: isRecord(holderKey['jwk']) ? holderKey['jwk'] : null,
+    holderLinkId: asString(data['holderLinkId']) ?? null,
+    // El recibo firmado lo valida `lib/verifications.ts`, que es también quien
+    // lo normaliza al leerlo de la columna. Una sola validación para los dos
+    // bordes: ver `readPresentationProof`.
+    proof: readPresentationProof(data['proof']),
+  };
 }
 
 function parseEnvelope(rawBody: string): WebhookEnvelope {

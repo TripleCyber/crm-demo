@@ -12,8 +12,9 @@
 --     agente en esta consola y no lo sabe nadie más;
 --   · las horas las sella este servidor, que es el único reloj que el banco
 --     puede defender ante una reclamación;
---   · el desenlace y lo que el titular enseñó vienen tal cual de
---     `GET /v1/b2b/presentations/:id`, y se copian aquí **sin interpretarlos**.
+--   · el desenlace y lo que el titular enseñó vienen tal cual del evento
+--     `presentation.settled` que te-api entrega al webhook —este servidor no
+--     pregunta por ellos—, y se copian aquí **sin interpretarlos**.
 --
 -- Por qué hace falta guardarlo, y no basta con la pantalla: una comprobación
 -- que sólo vive en la pestaña del agente desaparece al recargar, no se puede
@@ -21,12 +22,19 @@
 -- historial en la ficha. Un banco que llama a sus clientes necesita poder
 -- decir *qué le pidió a quién, cuándo, y qué contestó*. Eso es el diario.
 --
--- ## Lo que sigue SIN estar aquí, y no por descuido
+-- ## Lo que aquí faltaba, y dónde está ahora
 --
--- El KB-JWT, la `did:key` del titular y su perfil `te_…`. te-api no los
--- devuelve al partner (`{presentationId, status, claims}` y nada más), así que
--- no hay columna para ellos: una columna vacía para siempre es una promesa que
--- el esquema no puede cumplir. Cuando te-api los sirva, se añaden.
+-- Esta sección decía que el KB-JWT, la llave del titular y su vínculo no tenían
+-- columna porque te-api no los devolvía al partner, y que se añadirían el día
+-- que los sirviera. **Ese día llegó**: el evento `presentation.settled` lleva
+-- ahora `claims`, `holderKey`, `holderLinkId` y `proof`, o sea todo lo que trae
+-- la confirmación del titular, y las cuatro columnas que hacían falta las añade
+-- `010_holder_proof.sql` —que es donde está escrito el porqué de cada una—.
+--
+-- Lo que sigue en pie de aquella nota es el criterio, no el inventario: una
+-- columna vacía para siempre es una promesa que el esquema no puede cumplir, y
+-- por eso no se añadió ninguna hasta que hubo un dato de verdad que meter
+-- dentro.
 
 create table if not exists verification (
   id uuid primary key default gen_random_uuid(),

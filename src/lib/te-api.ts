@@ -97,11 +97,21 @@ export interface PresentationRequestResult {
  * aquí — es que el evento lo lleve. El sitio donde se arregla eso es te-api, no
  * este fichero.
  *
- * Lo que el evento trae hoy, verbatim de `src/b2b/webhook-events.ts` de te-api:
- * `presentationId`, `status`, `credentialType`, `requestedAt`, `expiresAt` y
- * `settledAt`. Y nada más: `claims`, `holderKey`, `holderLinkId` y `proof` están
- * excluidos a propósito —te-api minimiza el dato personal que sale por un canal
- * saliente— y hay una prueba suya (`expectNoHolderData`) que lo sujeta.
+ * Lo que el evento trae hoy: `presentationId`, `status`, `credentialType`,
+ * `requestedAt`, `expiresAt`, `settledAt` **y toda la confirmación del titular**
+ * —`claims`, `holderKey`, `holderLinkId` y `proof`—.
+ *
+ * Esos cuatro últimos estuvieron excluidos a propósito, con el argumento de que
+ * te-api minimizaba el dato personal que salía por un canal saliente. Esa
+ * política está revocada: el webhook es un destino que la propia organización
+ * dio de alta y verificó, el cuerpo va firmado, y esa organización ya tiene
+ * derecho a esos datos porque es quien pidió la verificación y el titular
+ * consintió enseñárselos. El argumento entero está en la cabecera de
+ * `app/api/webhooks/te-api/route.ts`, que es donde el dato entra.
+ *
+ * Vienen **sólo cuando el desenlace es `verified`**, y pueden faltar además si
+ * te-api degrada el cuerpo por tamaño o si el evento es de una versión anterior.
+ * Se tratan como opcionales siempre, sin excepción.
  */
 
 export interface RequestPresentationInput {

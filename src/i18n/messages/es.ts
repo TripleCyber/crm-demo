@@ -662,6 +662,12 @@ export const es: PartialMessages = {
     receiptSignature: 'Firma',
     receiptSignatureValue:
       'la del <code>KB-JWT</code>, que ata esta presentación a la llave del titular',
+    receiptHolderKeyJwk: 'Llave pública del titular',
+    receiptNonce: 'Nonce',
+    receiptAudience: 'Destinatario',
+    receiptSdHash: 'Hash SD',
+    receiptProofNote:
+      'Estos cuatro son lo que permite que cualquiera vuelva a comprobar el <code>KB-JWT</code> sin pedirle nada a esta organización ni a TripleEnable: la llave que lo firmó, el reto al que contesta, el verificador para el que se firmó y el hash que lo ata a esta presentación y a ninguna otra.',
   },
 
   wallet: {

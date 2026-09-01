@@ -412,11 +412,27 @@ export async function GET(request: Request): Promise<NextResponse> {
     // `settleVerification` al llegar el evento — la que este servidor puede
     // defender, que es la regla que el `POST` de aquí arriba ya seguía para los
     // otros dos hitos.
+    //
+    // ── Y el recibo también, para que la pantalla no tenga que recargarse ──
+    //
+    // `holderKey`, `holderLinkId` y `proof` salen de la misma fila. Van aquí y
+    // no sólo en la página servidor porque la ceremonia ocurre **con la pantalla
+    // abierta**: el agente está al teléfono, el titular firma, el webhook
+    // aterriza, y la consulta siguiente tiene que poder pintar el recibo entero
+    // sin que nadie pulse F5. Sin esto, la mitad de arriba del recibo aparecía
+    // sola y las filas de la firma sólo salían al volver a entrar mañana.
+    //
+    // Sigue sin haber una sola llamada a te-api en esta ruta. Son cuatro
+    // columnas más del mismo `select`, no una fuente nueva.
     return NextResponse.json({
       presentationId: verification.presentationId,
       status: verification.status,
       claims: verification.disclosedClaims,
       settledAt: verification.settledAt,
+      holderKey: verification.holderKey,
+      holderKeyJwk: verification.holderKeyJwk,
+      holderLinkId: verification.holderLinkId,
+      proof: verification.proof,
     });
   } catch (error) {
     return errorResponse(t, error, 'leyendo la comprobación');

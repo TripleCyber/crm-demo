@@ -100,29 +100,59 @@ import { WalletLink } from './WalletLink';
 type Channel = 'qr' | 'phone';
 
 /**
- * Las tres piezas que atan la presentación a **una llave concreta de una
- * persona concreta**, y que son las que convierten el recibo en una prueba que
- * un tercero puede verificar sin preguntarnos.
+ * El recibo firmado, tal y como viaja en el evento y se guarda en el diario.
  *
- * ⚠️ **Hoy llegan las cuatro vacías, y la razón cambió.** Antes era que te-api
- * no las servía todavía. Ahora te-api sí las tiene —las devuelve por
- * `GET /v1/b2b/presentations/:id`— pero **este CRM ya no consulta esa ruta**: se
- * entera por el webhook, y el evento `presentation.settled` excluye a propósito
- * `claims`, `holderKey`, `holderLinkId` y `proof` para no sacar dato personal
- * por un canal saliente (te-api tiene una prueba que lo sujeta).
+ * Se declara aquí en vez de importarse de `lib/verifications.ts` por lo mismo
+ * que `StatusResponse`: aquel módulo es `server-only` y no debe entrar en el
+ * paquete del navegador ni siquiera como tipo. Es la misma forma; si allí
+ * cambia, aquí también, y el compilador lo dice porque la página servidor pasa
+ * la fila entera.
+ */
+interface PresentationProof {
+  readonly presentation?: string | null;
+  readonly keyBinding?: string | null;
+  readonly sdHash?: string | null;
+  readonly audience?: string | null;
+  readonly nonce?: string | null;
+  readonly signedAt?: string | null;
+}
+
+/**
+ * Las piezas que atan la presentación a **una llave concreta de una persona
+ * concreta**, y que son las que convierten el recibo en una prueba que un
+ * tercero puede verificar sin preguntarnos.
  *
- * Así que cada fila **simplemente no se pinta**, igual que antes. Lo que no se
- * hace es rotular el hueco: la pantalla del comprador no es el sitio donde se
- * anuncian las carencias de nuestra propia implementación.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  AHORA LLEGAN, Y ESO CAMBIA LO QUE ES ESTA PANTALLA
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * **Y el arreglo no es volver a llamar a te-api desde aquí.** Es que el evento
- * las lleve —decisión de te-api, no de este repositorio— y que el receptor de
- * webhooks las escriba en el diario. Estas filas se quedan escritas y listas
- * para ese día; quitarlas obligaría a rehacerlas, y dejarlas cuesta cuatro
- * condiciones que hoy no se cumplen.
+ * Aquí había un aviso que decía que las cuatro llegaban vacías: te-api las
+ * tenía, pero el evento `presentation.settled` las excluía a propósito para no
+ * sacar dato personal por un canal saliente, y este CRM ya no consultaba la
+ * ruta que las servía. Esa política está revocada. El evento lleva ahora **todo
+ * lo que trae la confirmación del titular**, así que estas filas dejan de ser
+ * una promesa y pasan a ser el contenido del recibo.
  *
- * Los nombres son los de la respuesta de te-api. Si allí se llaman de otra
- * forma, el cambio es renombrar aquí y nada más: nadie más en el CRM los toca.
+ * El argumento, que está entero en la cabecera de `api/webhooks/te-api`: el
+ * webhook es un destino que la propia organización dio de alta y verificó, el
+ * cuerpo va firmado, y esa organización **ya tiene derecho a estos datos** — es
+ * quien pidió la verificación y el titular consintió enseñárselos. Lo que sigue
+ * en pie es la otra mitad: **el receptor no vuelve a llamar a te-api**, ni desde
+ * aquí ni desde el servidor.
+ *
+ * Cada campo **sigue teniendo su condición** y la fila que no tiene dato no se
+ * pinta. Eso no era un apaño para el hueco: es que los cuatro son opcionales por
+ * contrato —no vienen si el desenlace no es `verified`, ni si te-api recortó el
+ * cuerpo por tamaño, ni si el evento es de una versión anterior—, y un recibo
+ * que rotula un campo vacío afirma que falta algo que quizá nunca hubo.
+ *
+ * ## Por qué esta forma es plana y la de la base no
+ *
+ * En el diario, el recibo firmado vive entero en una columna `jsonb` porque es
+ * una unidad que no se debe trocear. Aquí se aplana —una propiedad por fila del
+ * recibo— porque este objeto no se guarda: se pinta. `holderProofOf` es el único
+ * sitio donde se pasa de una forma a la otra, y así el JSX se lee sin encadenar
+ * opcionales dentro de cada condición.
  */
 interface HolderProof {
   /**
@@ -130,9 +160,18 @@ interface HolderProof {
    *
    * No es un `did:key:`: el `cnf` que pone nuestro emisor es una JWK cruda, y
    * te-api entrega la huella sin inventarse una conversión a DID. 44
-   * caracteres, estable, y es lo que un perito compara.
+   * caracteres, estable, y es lo que un perito compara de un vistazo.
    */
   readonly holderKey?: string | null;
+  /**
+   * La llave en sí, como JWK.
+   *
+   * La huella identifica; **ésta verifica**. Sin la parte pública no se puede
+   * comprobar la firma del KB-JWT, así que un recibo con huella y sin llave
+   * obligaría a pedirle la llave a alguien — que es exactamente lo que este
+   * recibo existe para evitar.
+   */
+  readonly holderKeyJwk?: Record<string, unknown> | null;
   /**
    * El vínculo de esta persona con **esta** organización.
    *
@@ -149,10 +188,47 @@ interface HolderProof {
    * Cuándo firmó **el titular**, según su propio teléfono.
    *
    * Es distinto de `settledAt`, que es cuándo se enteró esta consola: entre las
-   * dos hay el tiempo que tarde el evento en llegar. El banco sólo puede
-   * archivar la segunda mientras el evento no traiga la primera.
+   * dos hay el tiempo que tarde el evento en llegar. Ahora se archivan las dos,
+   * con rótulos distintos, y la diferencia entre ellas se lee en la línea de
+   * tiempo sin restar nada a mano.
    */
   readonly signedAt?: string | null;
+  /** El `sd_hash` firmado: ata la firma a **esta** presentación y a ninguna otra. */
+  readonly sdHash?: string | null;
+  /** El `aud` del KB-JWT: el verificador para el que se firmó. */
+  readonly audience?: string | null;
+  /** El `nonce` de la petición: lo que impide reutilizar una firma vieja. */
+  readonly nonce?: string | null;
+}
+
+/**
+ * Aplana lo que trae el diario a las filas que pinta el recibo.
+ *
+ * Es el único sitio donde se abre `proof`, y por eso está aquí y no repartido
+ * por el JSX: la fila guarda `holderKey` y `holderLinkId` en sus propias
+ * columnas —se comparan y se indexan— y el resto dentro del recibo firmado, que
+ * es una unidad. La pantalla no tiene por qué saber esa distinción.
+ *
+ * Lo usan los dos caminos por los que el recibo puede aparecer: el estado
+ * inicial que baja del servidor y la respuesta del sondeo local que llega
+ * cuando el titular firma con la pantalla delante.
+ */
+function holderProofOf(source: {
+  readonly holderKey?: string | null;
+  readonly holderKeyJwk?: Record<string, unknown> | null;
+  readonly holderLinkId?: string | null;
+  readonly proof?: PresentationProof | null;
+}): HolderProof {
+  return {
+    holderKey: source.holderKey ?? null,
+    holderKeyJwk: source.holderKeyJwk ?? null,
+    holderLinkId: source.holderLinkId ?? null,
+    keyBinding: source.proof?.keyBinding ?? null,
+    signedAt: source.proof?.signedAt ?? null,
+    sdHash: source.proof?.sdHash ?? null,
+    audience: source.proof?.audience ?? null,
+    nonce: source.proof?.nonce ?? null,
+  };
 }
 
 export interface TrackedVerification extends HolderProof {
@@ -179,18 +255,33 @@ export interface TrackedVerification extends HolderProof {
   readonly settledAt: string | null;
   readonly status: VerificationStatus;
   readonly disclosedClaims: Record<string, unknown> | null;
+  /**
+   * El recibo firmado entero, tal y como lo guardó el diario.
+   *
+   * `holderKey`, `holderKeyJwk` y `holderLinkId` los hereda de `HolderProof` y
+   * la fila los trae con esos mismos nombres, así que la página servidor pasa la
+   * fila entera sin traducir nada. Las otras cinco piezas —el KB-JWT, la hora
+   * que firmó el titular, el `sd_hash`, el `aud` y el `nonce`— viven aquí dentro
+   * porque en la base son una sola columna, y `holderProofOf` es quien las saca.
+   */
+  readonly proof: PresentationProof | null;
 }
 
 /**
- * Lo que contesta `GET /api/credentials/present`, que ahora es **el diario de
- * este banco** y no una copia de la respuesta de te-api.
+ * Lo que contesta `GET /api/credentials/present`, que es **el diario de este
+ * banco** y no una copia de la respuesta de te-api.
  *
- * Tres campos, y los tres salen de la misma fila. Antes esta forma tenía además
- * `holderKey`, `holderLinkId` y `proof`, porque la ruta devolvía tal cual lo que
- * contestaba `GET /v1/b2b/presentations/:id`; esa llamada ya no se hace y esos
- * tres campos no los trae el webhook, así que declararlos aquí sería un contrato
- * que nadie cumple. Ver `HolderProof`, que es donde está escrito el porqué y qué
- * haría falta para recuperarlos.
+ * Todos los campos salen de la misma fila. Aquí hubo tres —estado, claims y la
+ * hora del desenlace— porque el webhook no traía nada más; ahora trae también la
+ * confirmación del titular entera, y la ruta la devuelve. **No es una fuente
+ * nueva**: son cuatro columnas más del mismo `select`, y esta ruta sigue sin
+ * llamar a te-api ni una vez.
+ *
+ * Por qué viaja hasta aquí y no basta con lo que bajó al cargar la página: la
+ * ceremonia ocurre **con la pantalla abierta**. El titular firma, el webhook
+ * aterriza, y la consulta siguiente tiene que poder pintar el recibo entero sin
+ * que nadie recargue. Con sólo el estado, aparecía la mitad de arriba del recibo
+ * y las filas de la firma no salían hasta volver a entrar.
  *
  * Se declara aquí, y no se importa de `lib/verifications.ts`, para no arrastrar
  * un módulo de servidor al paquete del navegador ni siquiera como tipo.
@@ -206,6 +297,10 @@ interface StatusResponse {
    * el evento firmado — la única que el banco puede defender.
    */
   readonly settledAt: string | null;
+  readonly holderKey: string | null;
+  readonly holderKeyJwk: Record<string, unknown> | null;
+  readonly holderLinkId: string | null;
+  readonly proof: PresentationProof | null;
 }
 
 /**
@@ -275,21 +370,22 @@ export function VerificationTracker({
   const [status, setStatus] = useState<VerificationStatus>(verification.status);
   const [disclosed, setDisclosed] = useState(verification.disclosedClaims);
   /**
-   * La prueba de quién firmó. **Ya no es estado, y por eso está aquí abajo con
-   * un comentario en vez de en un `useState`.**
+   * La prueba de quién firmó. **Vuelve a ser estado, y ése es el cambio.**
    *
-   * Antes se completaba con lo que contestara el sondeo a te-api. Retirado ese
-   * sondeo, no hay nada que pueda cambiarla durante la ceremonia: el webhook no
-   * trae ninguna de las cuatro piezas, así que valen lo que valgan al cargar y
-   * ahí se quedan. Un `useState` con un `set` que nadie llama es una promesa
-   * falsa de que algo va a llegar. Ver `HolderProof`.
+   * Aquí había una constante con un comentario que decía que nada podía
+   * cambiarla durante la ceremonia: el webhook no traía ninguna de las piezas,
+   * así que valían lo que valieran al cargar. Eso dejó de ser cierto — el evento
+   * trae ahora la confirmación del titular entera (ver `HolderProof`), y el
+   * caso normal es justamente el que la constante no sabía atender: la
+   * ceremonia ocurre **con esta pantalla delante**.
+   *
+   * El titular firma, el webhook aterriza en el diario, y el sondeo local trae
+   * el recibo en la consulta siguiente. Con una constante, el agente veía
+   * aparecer «es quien dice ser» y un recibo sin la firma debajo, y sólo al
+   * recargar salía entero. Un `set` que nadie llama era una promesa falsa;
+   * ahora hay quien lo llama.
    */
-  const proof: HolderProof = {
-    holderKey: verification.holderKey,
-    holderLinkId: verification.holderLinkId,
-    keyBinding: verification.keyBinding,
-    signedAt: verification.signedAt,
-  };
+  const [proof, setProof] = useState<HolderProof>(() => holderProofOf(verification));
   /**
    * Cuándo supo el banco que la petición había terminado.
    *
@@ -392,6 +488,12 @@ export function VerificationTracker({
         setPollTick((tick) => tick + 1);
         if (payload.status !== 'pending') {
           setDisclosed(payload.claims);
+          // El recibo, en el mismo momento que el desenlace y no al recargar.
+          // Va dentro de este `if` y no en cada consulta a propósito: mientras
+          // la fila está pendiente los cuatro campos son `null`, y volver a
+          // fijar un objeto nuevo cada tres segundos remontaría el recibo por
+          // nada. Aquí ocurre una vez, que es las veces que ocurre el hecho.
+          setProof(holderProofOf(payload));
           // La hora la pone **el servidor**, no este navegador. Aquí había un
           // `new Date()`, que es el reloj de quien tenga el puesto delante: una
           // línea de tiempo que un agente puede mover cambiando la hora de su
@@ -684,10 +786,11 @@ function PresentationTimeline({
   /**
    * Cuándo firmó **el titular**, según el reloj de su teléfono.
    *
-   * Es el hito que le faltaba a esta línea: hasta que te-api lo devolvió, el
-   * banco sólo podía archivar cuándo se enteró él. Se pinta sólo si viene —una
-   * presentación de antes de que te-api lo sirviera no lo tiene—, y cuando no
-   * viene la línea se lee igual de bien con un hito menos.
+   * Es el hito que le faltaba a esta línea: mientras el evento no lo trajo, el
+   * banco sólo podía archivar cuándo se enteró él. Ahora viene dentro de `proof`
+   * y se pinta —pero sólo si viene: una presentación liquidada antes de que el
+   * evento lo llevara no lo tiene, y entonces la línea se lee igual de bien con
+   * un hito menos y sin una hora inventada.
    */
   signedAt: string | null | undefined;
 }) {
@@ -821,16 +924,24 @@ function PresentationTimeline({
  * móvil—, porque eso no lo arregla ningún cambio de código y callarlo llevaría
  * al agente a dar por hecho lo que no puede.
  *
- * Las tres filas —llave, perfil y firma— siguen construidas y esperando en
- * `HolderProof`, y **cada una se pinta cuando su campo viene**. Mientras no
- * vengan, la fila no sale y el recibo no explica por qué.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  Y AHORA EL RECIBO SE PINTA ENTERO
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * ⚠️ Lo mismo le pasa ahora a **los atributos divulgados**, y hay que decirlo
- * aquí porque es lo más visible del recibo: llegaban en la respuesta del sondeo
- * a te-api, ese sondeo se retiró, y el evento `presentation.settled` no los
- * lleva. Así que el bloque «lo que enseñó» sale vacío —es decir, no sale— hasta
- * que el evento los traiga. La respuesta **no** es volver a llamar a te-api
- * desde aquí; ver `lib/te-api.ts`.
+ * Aquí había un aviso que decía que **los atributos divulgados** salían vacíos
+ * —llegaban por el sondeo a te-api, el sondeo se retiró, y el evento no los
+ * llevaba—. Ya no: `presentation.settled` trae ahora todo lo que trae la
+ * confirmación del titular, así que el bloque «lo que enseñó» sale con lo que
+ * enseñó, y las filas de la llave, el vínculo y la firma salen con la prueba.
+ * El porqué de que el dato pueda viajar por ese canal está en la cabecera de
+ * `api/webhooks/te-api`; lo que no cambia es que nadie vuelve a llamar a te-api.
+ *
+ * **Cada fila sigue teniendo su condición, y eso no era el apaño del hueco.**
+ * Los campos son opcionales por contrato —no vienen si el desenlace no es
+ * `verified`, ni si te-api recortó el cuerpo por tamaño, ni si el evento es de
+ * una versión anterior—, y un recibo que rotula un campo vacío afirma que falta
+ * algo que quizá nunca hubo. La regla se mantiene entera: la fila que no tiene
+ * dato **no existe**, ni con hueco ni con guion ni con explicación.
  */
 function PresentationReceipt({
   t,
@@ -844,7 +955,10 @@ function PresentationReceipt({
   t: Translator;
   verification: TrackedVerification;
   disclosed: Record<string, unknown> | null;
-  /** Llave, perfil y firma. Ver `HolderProof`: hoy pueden venir las tres vacías. */
+  /**
+   * Llave, vínculo y firma, ya aplanados. Ver `HolderProof`: cada campo puede
+   * faltar por separado, y el que falta no se pinta.
+   */
   proof: HolderProof;
   labelFor: Record<string, string>;
   settledAt: string | null;
@@ -882,9 +996,13 @@ function PresentationReceipt({
         <dd className="mono">{verification.externalId}</dd>
 
         {/*
-          Las tres piezas que atan la firma a una llave. Cada una con su
+          Las cuatro piezas que atan la firma a una llave. Cada una con su
           condición: si el campo no viene, la fila no existe. Ni hueco, ni
           guion, ni explicación.
+
+          En la superficie van éstas y no las forenses: la huella se compara de
+          un vistazo y la hora se lee sola. El `nonce`, el `aud`, el `sd_hash` y
+          la llave en crudo son material de peritaje y viven abajo, plegados.
         */}
         {proof.holderKey != null && proof.holderKey !== '' && (
           <>
@@ -961,7 +1079,69 @@ function PresentationReceipt({
               <dd>{t.rich('tracker.receiptSignatureValue')}</dd>
             </>
           )}
+
+          {/*
+            ═══════════════════════════════════════════════════════════════
+             LO QUE UN PERITO COMPARA, Y POR QUÉ ESTÁ AQUÍ Y NO ARRIBA
+            ═══════════════════════════════════════════════════════════════
+
+            El KB-JWT ya se enseñaba, y solo no sirve para nada: para
+            comprobarlo hacen falta las cuatro piezas de este bloque —la llave
+            con la que verificar la firma, el `nonce` al que contesta, el `aud`
+            para el que se firmó y el `sd_hash` que lo ata a esta presentación
+            y a ninguna otra—. Sin ellas, «aquí tiene el JWT» es un blob que
+            hay que venir a preguntarnos cómo se valida, y este recibo existe
+            precisamente para que no haya que preguntarnos nada.
+
+            Van al detalle plegado y no al recibo por lo de siempre: quien
+            firma el contrato no compara hashes, y quien los compara sabe
+            abrir un `<details>`. Arriba quedan las cuatro filas que un humano
+            lee en voz alta por teléfono.
+
+            **Lo que no se pinta es `proof.presentation`**, la cadena entera
+            `<SD-JWT>~<disclosure>~…~<KB-JWT>`. Se guarda —está en el diario,
+            que es lo que importa para poder reconstruir el caso— pero no se
+            enseña: son kilobytes, lleva dentro las divulgaciones en crudo que
+            el bloque de arriba ya presenta legibles, y nadie audita eso
+            leyéndolo de una pantalla. Se exporta de la base, no se copia de
+            aquí.
+          */}
+          {proof.holderKeyJwk != null && (
+            <>
+              <dt>{t('tracker.receiptHolderKeyJwk')}</dt>
+              <dd className="mono">{JSON.stringify(proof.holderKeyJwk)}</dd>
+            </>
+          )}
+          {proof.nonce != null && proof.nonce !== '' && (
+            <>
+              <dt>{t('tracker.receiptNonce')}</dt>
+              <dd className="mono">{proof.nonce}</dd>
+            </>
+          )}
+          {proof.audience != null && proof.audience !== '' && (
+            <>
+              <dt>{t('tracker.receiptAudience')}</dt>
+              <dd className="mono">{proof.audience}</dd>
+            </>
+          )}
+          {proof.sdHash != null && proof.sdHash !== '' && (
+            <>
+              <dt>{t('tracker.receiptSdHash')}</dt>
+              <dd className="mono">{proof.sdHash}</dd>
+            </>
+          )}
         </dl>
+
+        {/*
+          La nota va **debajo del bloque y sólo si hay bloque**: sin las piezas
+          no hay nada que explicar, y una frase que promete una comprobación
+          para la que faltan los datos es peor que ninguna frase.
+        */}
+        {(proof.nonce != null || proof.audience != null || proof.sdHash != null) && (
+          <p className="muted" style={{ marginBottom: 0 }}>
+            {t.rich('tracker.receiptProofNote')}
+          </p>
+        )}
       </details>
     </div>
   );
