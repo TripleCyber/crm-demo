@@ -9,17 +9,21 @@ import { getEmployeeSession } from '@/lib/session';
 import {
   describeTeApiError,
   fetchB2bOrganizationCached,
-  fetchPresentationStatus,
   requestPresentation,
   sendWakeup,
   TeApiError,
   type TeApiOperation,
 } from '@/lib/te-api';
-import { recordVerification, settleVerification } from '@/lib/verifications';
+import { findVerification, recordVerification } from '@/lib/verifications';
 
 /**
- * `POST /api/credentials/present` — el botón «pedir credencial».
- * `GET  /api/credentials/present?presentationId=…` — «¿ya ha contestado?».
+ * `POST /api/credentials/present` — el botón «pedir credencial». **Habla con te-api.**
+ * `GET  /api/credentials/present?presentationId=…` — lee el diario. **No habla con te-api.**
+ *
+ * Esa asimetría es el diseño y no una casualidad: lo que sale hacia te-api lo
+ * dispara siempre una persona pulsando un botón, y lo que vuelve —el veredicto—
+ * llega solo, por el webhook. Ninguna de las dos mitades tiene un temporizador
+ * detrás. Ver la cabecera del `GET`.
  *
  * ## La otra mitad del ciclo
  *
@@ -342,6 +346,41 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 }
 
+/**
+ * `GET /api/credentials/present?presentationId=…` — **se lee el diario, no te-api.**
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ESTA RUTA YA NO HABLA CON te-api, Y ESO ES EL CAMBIO ENTERO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Hasta ahora llamaba a `GET /v1/b2b/presentations/:id` en cada consulta del
+ * navegador. La pantalla pregunta cada tres segundos, así que **una ceremonia de
+ * cinco minutos eran unas cien llamadas a te-api para averiguar un hecho que
+ * ocurre una sola vez**. Y ocurría con el agente mirando: con la pestaña
+ * cerrada, nadie preguntaba y la fila se quedaba en `pending` para siempre.
+ *
+ * Ahora el desenlace entra en el diario **por el webhook y sólo por él**
+ * (`api/webhooks/te-api`, que verifica la firma antes de tocar nada). Esta ruta
+ * lee la fila que ese receptor ha escrito. Los dos caminos que había —el sondeo
+ * y el evento— eran uno de más: te-api liquida toda petición que responde *o*
+ * que caduca, así que el evento llega en los dos casos y llega igual con la
+ * pestaña cerrada.
+ *
+ * ## Por qué esto ya no escribe nada
+ *
+ * Antes este `GET` escribía —reconciliaba la fila con lo que dijera te-api— y
+ * hacía falta explicarlo. Ya no: el único que cierra el diario es el receptor de
+ * webhooks, que es donde llega el dato firmado. Un `GET` que sólo lee es lo que
+ * un `GET` debe ser, y de paso desaparece la duda de quién gana la carrera.
+ *
+ * ## Lo que el navegador sigue haciendo, y por qué está bien
+ *
+ * La pantalla sigue preguntando **a este mismo servidor** cada tres segundos.
+ * Eso es tráfico interno de la maqueta contra su propia base: no gasta el cubo
+ * de tasa de la organización en te-api, que era el coste que importaba, y no
+ * cruza ninguna frontera. Lo prohibido era sondear a te-api, y ya no se hace ni
+ * desde el navegador ni desde aquí.
+ */
 export async function GET(request: Request): Promise<NextResponse> {
   const t = await getTranslator();
   const presentationId = new URL(request.url).searchParams.get('presentationId') ?? '';
@@ -351,40 +390,36 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const session = await getEmployeeSession();
-    // No hace falta comprobar de quién es: te-api busca la petición con el
-    // `org_id` del token en el `where`, así que la de otra organización
-    // responde igual que una inventada.
-    const status = await fetchPresentationStatus(session.organization, presentationId);
-
-    // ── Reconciliar el diario ──────────────────────────────────────────────
-    //
-    // ═════════════════════════════════════════════════════════════════════
-    //  EL DESENLACE SE ESCRIBE AQUÍ PORQUE AQUÍ ES DONDE LO DICE te-api
-    // ═════════════════════════════════════════════════════════════════════
-    //
-    // Un `GET` que escribe pide explicación. La alternativa era que el
-    // navegador mandara el resultado a una segunda ruta, y eso convierte el
-    // diario del banco en un campo editable: cualquiera con la consola de red
-    // abierta cerraría en verde la comprobación de otro. El valor tiene que
-    // entrar en la base desde el mismo sitio del que sale, y ese sitio es esta
-    // llamada con el token de la organización. El navegador dispara la
-    // consulta; no aporta el dato.
-    //
-    // Es idempotente: `settleVerification` sólo toca filas en `pending`, así
-    // que los sondeos que llegan después del primero no reescriben nada — ni
-    // aunque haya dos pestañas abiertas o alguien abra la dirección mañana.
-    if (status.status !== 'pending') {
-      await settleVerification(
-        session.organization.orgId,
-        presentationId,
-        status.status,
-        status.claims,
-      );
+    // El `org_id` de la sesión va en el `where`, así que la comprobación de otra
+    // organización se comporta igual que una inventada. Antes esta garantía la
+    // ponía te-api —buscaba con el `org_id` del token—; al leer de la base hay
+    // que ponerla aquí, y `findVerification` no tiene ninguna forma de no
+    // ponerla: no existe una función que encuentre una comprobación sin decir de
+    // qué organización es.
+    const verification = await findVerification(session.organization.orgId, presentationId);
+    if (verification === null) {
+      return NextResponse.json({ error: t('errors.presentationNotFound') }, { status: 404 });
     }
 
-    return NextResponse.json(status);
+    // `status` sale del diario, que es donde lo dejó el webhook firmado, y
+    // `claims` de la misma fila. Mientras el evento no haya llegado la respuesta
+    // es `pending` y la pantalla sigue esperando, que es exactamente lo que
+    // significa: todavía no se sabe.
+    //
+    // `settledAt` es nuevo aquí, y arregla de paso una hora que se inventaba: la
+    // pantalla sellaba el desenlace con `new Date()` **del navegador**, o sea con
+    // el reloj de quien tuviera el puesto delante. Ahora es la hora que escribió
+    // `settleVerification` al llegar el evento — la que este servidor puede
+    // defender, que es la regla que el `POST` de aquí arriba ya seguía para los
+    // otros dos hitos.
+    return NextResponse.json({
+      presentationId: verification.presentationId,
+      status: verification.status,
+      claims: verification.disclosedClaims,
+      settledAt: verification.settledAt,
+    });
   } catch (error) {
-    return errorResponse(t, error, 'consultando la presentación');
+    return errorResponse(t, error, 'leyendo la comprobación');
   }
 }
 

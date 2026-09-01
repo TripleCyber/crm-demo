@@ -66,20 +66,24 @@ import {
  *    evento no se ha guardado y se perdería.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  Y ESTO NO SUSTITUYE AL BARRIDO
+ *  Y AHORA ESTO ES EL ÚNICO CAMINO
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * `GET /v1/b2b/presentations/:id` sigue exactamente igual y sigue siendo lo que
- * sondea la pantalla de comprobación mientras el agente mira. Son dos caminos a
- * propósito: el sondeo es el que responde en tres segundos con el agente al
- * teléfono, y el webhook es el que cierra el caso del titular que contesta media
- * hora después. El que llegue primero gana, y `settleVerification` sólo escribe
- * si la fila sigue en `pending`, así que no compiten.
+ * Aquí decía que el sondeo de la pantalla y este receptor eran dos caminos a
+ * propósito, y que ganaba el que llegara primero. **El sondeo se retiró.** Este
+ * receptor es lo único que escribe un desenlace en el diario de este banco; la
+ * pantalla de la ceremonia lee la fila que él deja.
  *
- * Lo que este receptor **no** hace es llamar a te-api para completar el evento.
- * Todo lo que necesita viene dentro; los claims y el recibo firmado no vienen a
- * propósito —te-api minimiza el dato personal que sale por un canal saliente— y
- * quien los quiera los lee por el camino autenticado de siempre.
+ * Se pudo retirar porque te-api liquida —y por tanto avisa— en los dos casos que
+ * importan: la petición que responde y la que caduca sin respuesta. No hace
+ * falta que nadie tenga una pestaña abierta para que el caso se cierre, que era
+ * justo lo que el sondeo compraba y lo único que compraba.
+ *
+ * Lo que este receptor **no** hace, y ahora es una regla y no una preferencia,
+ * es llamar a te-api para completar el evento. Todo lo que se usa viene dentro.
+ * Los claims y el recibo firmado no vienen —te-api minimiza el dato personal que
+ * sale por un canal saliente— y **eso no se suple preguntando**: si el recibo
+ * necesita un campo, se añade al evento en te-api. Ver `lib/te-api.ts`.
  */
 
 export const runtime = 'nodejs';
@@ -192,10 +196,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     return await dispatch(organization.orgId, asString(envelope.type), presentationId, data);
   } catch (error) {
-    // El evento YA está archivado, así que no se pierde nada devolviendo 200: se
-    // ve en la pantalla y el barrido lo cierra. Un 500 aquí haría que te-api
-    // reintentara ocho veces algo que sólo puede volver a fallar, y a las veinte
-    // suspendería el endpoint.
+    // El evento YA está archivado, así que se ve en la pantalla de eventos y no
+    // se pierde el rastro. Un 500 aquí haría que te-api reintentara ocho veces
+    // algo que sólo puede volver a fallar, y a las veinte suspendería el
+    // endpoint — o sea que el precio de insistir es quedarse sin el canal.
+    //
+    // Lo que sí se pierde es el cierre de ESA fila: retirado el sondeo, no queda
+    // nadie detrás que la reconcilie, y se quedará en `pending` con el plazo
+    // vencido (que el listado pinta «sin respuesta»). Por eso esto se registra
+    // como fallo de consola y no se traga en silencio.
     logConsoleFailure(error, 'un webhook archivado no se pudo aplicar');
     return NextResponse.json({ status: 'stored', applied: false });
   }

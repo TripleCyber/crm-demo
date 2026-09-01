@@ -81,55 +81,28 @@ export interface PresentationRequestResult {
   readonly expiresAt: string;
 }
 
-/** Lo que devuelve `GET /v1/b2b/presentations/:id`. */
-export interface PresentationStatus {
-  readonly presentationId: string;
-  /**
-   * `rejected` es la persona diciendo que no desde su cartera; `failed` es la
-   * credencial no valiendo. Son dos cosas distintas para quien está al teléfono
-   * con el cliente: una se repite, la otra no.
-   */
-  readonly status: 'pending' | 'verified' | 'rejected' | 'failed' | 'expired';
-  /** Sólo los atributos que se pidieron, y sólo cuando `status` es `verified`. */
-  readonly claims: Record<string, unknown> | null;
-  /**
-   * La llave con la que firmó el titular, del `cnf` de la credencial
-   * presentada. NO es un `did:key:`: nuestro emisor pone una JWK cruda, y
-   * te-api no se inventa la conversión. `thumbprint` es la huella RFC 7638 —44
-   * caracteres, estable— y es lo que se enseña; `jwk` es lo que hace falta para
-   * comprobar la firma sin nosotros.
-   */
-  readonly holderKey: { readonly thumbprint: string; readonly jwk: Record<string, unknown> } | null;
-  /**
-   * El vínculo de esta persona **con esta organización**.
-   *
-   * NO es su perfil en TripleEnable, y la diferencia importa: el perfil es el
-   * mismo en todas las organizaciones, así que dos partners que guardaran sus
-   * recibos podrían cruzarlos y descubrir que el cliente 4471 de uno y el 8823
-   * del otro son la misma persona. El vínculo contesta la misma pregunta y no
-   * sirve para cruzarlos.
-   */
-  readonly holderLinkId: string | null;
-  /**
-   * La prueba, entera o nada. Suelta, la firma no demuestra nada: hace falta la
-   * presentación que se firmó, el resumen que se hasheó, y a quién y con qué
-   * número se dirigía. Por eso viaja como un objeto y no como cuatro campos.
-   */
-  readonly proof: {
-    /** La SD-JWT presentada, con sus divulgaciones y el KB-JWT al final. */
-    readonly presentation: string;
-    /** El KB-JWT: lo que ata esa presentación a esa llave. */
-    readonly keyBinding: string;
-    /** El resumen de la presentación, tal como lo firmó el titular. */
-    readonly sdHash: string;
-    /** A quién iba dirigida. Sin esto, la firma se podría reusar en otro sitio. */
-    readonly audience: string;
-    /** El número de un solo uso. Sin esto, se podría reusar más tarde. */
-    readonly nonce: string;
-    /** Cuándo firmó **el titular**. No es cuándo se enteró este banco. */
-    readonly signedAt: string;
-  } | null;
-}
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  AQUÍ VIVÍA `PresentationStatus`, Y NO VUELVE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Era la forma de `GET /v1/b2b/presentations/:id`, la ruta que este CRM sondeaba
+ * cada tres segundos para saber si el titular había contestado. **Ese sondeo se
+ * retiró entero**: este servidor no le pregunta a te-api si una verificación ha
+ * terminado — se lo cuenta te-api, por el webhook (`api/webhooks/te-api`).
+ *
+ * La regla, escrita para quien venga a añadir un campo al recibo y no encuentre
+ * de dónde sacarlo: **un CRM se entera por webhook, no preguntando**. Si al
+ * recibo le falta un dato, la respuesta no es volver a llamar a te-api desde
+ * aquí — es que el evento lo lleve. El sitio donde se arregla eso es te-api, no
+ * este fichero.
+ *
+ * Lo que el evento trae hoy, verbatim de `src/b2b/webhook-events.ts` de te-api:
+ * `presentationId`, `status`, `credentialType`, `requestedAt`, `expiresAt` y
+ * `settledAt`. Y nada más: `claims`, `holderKey`, `holderLinkId` y `proof` están
+ * excluidos a propósito —te-api minimiza el dato personal que sale por un canal
+ * saliente— y hay una prueba suya (`expectNoHolderData`) que lo sujeta.
+ */
 
 export interface RequestPresentationInput {
   /** El `type_key` del padrón del partner. El mismo que al emitir. */
@@ -514,24 +487,24 @@ export async function hasActiveWalletLink(
   }
 }
 
-/**
- * `GET /v1/b2b/presentations/:id` — «¿ya ha contestado?».
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  AQUÍ VIVÍA `fetchPresentationStatus`, Y TAMPOCO VUELVE
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * Se sondea porque no hay webhook, y no por falta de soporte en walt.id: el
- * destino lo elegiría quien pide, y el verificador de TripleEnable acabaría
- * haciendo peticiones salientes a donde le dijeran.
+ * Llamaba a `GET /v1/b2b/presentations/:id` cada vez que la pantalla de la
+ * ceremonia preguntaba «¿ya ha contestado?» — o sea, veinte veces por minuto
+ * mientras el agente miraba, y unas cien por ceremonia de cinco minutos. Su
+ * comentario decía «se sondea porque no hay webhook». Ya lo hay, y funciona.
+ *
+ * Ninguna llamada a te-api en este módulo existe ya para preguntar si algo ha
+ * terminado. Las que quedan son todas **de ida**: abrir una sesión, tocar el
+ * timbre, emitir, leer el padrón. Cada una la dispara un empleado pulsando un
+ * botón, y ninguna se repite sola.
+ *
+ * Si alguien va a añadir otra, la pregunta que decide es: ¿la dispara una
+ * persona, o un temporizador? Si es lo segundo, no va aquí.
  */
-export async function fetchPresentationStatus(
-  organization: OrganizationConfig,
-  presentationId: string,
-): Promise<PresentationStatus> {
-  return callB2b<PresentationStatus>(
-    organization,
-    organization.verifierUrl,
-    `/v1/b2b/presentations/${encodeURIComponent(presentationId)}`,
-    { method: 'GET' },
-  );
-}
 
 /**
  * Cuánto se espera a te-api por el documento DID. **Dos segundos y se corta.**

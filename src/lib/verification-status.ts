@@ -82,13 +82,14 @@ interface VerdictShape {
 /**
  * Cómo se lee una comprobación, con su plazo tenido en cuenta.
  *
- * `expiresAt` importa porque una fila que se quedó en `pending` —nadie tenía la
- * pantalla abierta cuando venció el plazo, así que nadie preguntó y nadie la
- * marcó— **no está en curso**: su plazo se agotó, y enseñarla como «en curso»
+ * `expiresAt` importa porque una fila que se quedó en `pending` con el plazo
+ * vencido **no está en curso**: su plazo se agotó, y enseñarla como «en curso»
  * en el listado de mañana sería decir que hay una ceremonia viva que no existe.
  * Se pinta como lo que es, sin respuesta y en ámbar, y no se afirma que te-api
- * la haya dado por caducada: eso lo dirá él cuando alguien abra la pantalla de
- * seguimiento, que vuelve a preguntar al cargar y reconcilia la fila.
+ * la haya dado por caducada: eso lo dirá él en el evento `presentation.settled`,
+ * que llega solo. Que quede alguna sin cerrar es ahora la excepción y no la
+ * norma —te-api liquida también las caducadas—, pero mientras el evento no haya
+ * llegado esta función no puede afirmar un desenlace que nadie ha confirmado.
  *
  * El traductor entra por parámetro y no se resuelve aquí: este módulo lo
  * importan también los componentes de navegador, que reciben el idioma por

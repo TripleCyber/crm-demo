@@ -34,11 +34,14 @@ import type { SignatureFailure } from './webhook-signature';
  * ## Lo que el evento NO lleva, y por qué eso no es un hueco
  *
  * Ni los claims que enseñó el titular, ni el recibo firmado, ni su clave. Es
- * deliberado en te-api —minimizar el dato personal que sale por un canal
- * saliente— y se lee por el camino de siempre, `GET /v1/b2b/presentations/:id`,
- * que no ha cambiado. **Ese barrido se queda**: es el que cierra los casos que
- * el webhook no entregó, y sigue siendo lo que sondea la pantalla de
- * comprobación mientras el agente mira.
+ * deliberado en te-api: minimizar el dato personal que sale por un canal
+ * saliente. Existe `GET /v1/b2b/presentations/:id`, que sí los sirve, pero
+ * **este CRM ya no la llama**: el sondeo se retiró entero y con él la única
+ * llamada que este servidor hacía para preguntar si algo había terminado.
+ *
+ * Consecuencia, dicha sin adornos: **el recibo pinta el veredicto pero no los
+ * atributos que enseñó el titular**, porque nadie se los cuenta. No se disimula
+ * y no se suple preguntando — el sitio donde se arregla es el evento, en te-api.
  *
  * Lo que sí cambia, y es el punto entero de que esto exista: **con el veredicto
  * dentro, el receptor cierra el caso sin volver a llamar**. Un titular que

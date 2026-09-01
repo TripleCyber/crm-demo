@@ -690,7 +690,7 @@ export const en = {
     outcomeFailed: 'The credential did not hold',
     outcomeExpired: 'Expired with no answer',
     architectureNote:
-      'This screen <b>does not talk to TripleEnable</b>: it asks this organisation’s own server every {seconds} seconds (<code>GET /api/credentials/present</code>), and it is that server that queries te-api (<code>GET /v1/b2b/presentations/:id</code>) with the organisation’s token. Neither the token nor the secret that requests it reach the browser, and that is checked by opening the network tab.',
+      'This screen <b>does not talk to TripleEnable</b>: it asks this organisation’s own server every {seconds} seconds (<code>GET /api/credentials/present</code>), and that server answers from its own database. <b>It does not query te-api either</b>: the outcome reaches it on its own, over a signed webhook (<code>POST /api/webhooks/te-api</code>), which is how any line-of-business system finds out. That is checked by opening the network tab.',
     verifierNote:
       'The request was opened in TripleEnable’s verifier, signed with this organisation’s DID. It has no verifier of its own and no verification key.',
     pollFailed: 'the query failed ({status})',
@@ -750,7 +750,7 @@ export const en = {
       '<code>POST /v1/b2b/wakeups</code>. The response is the same whether the holder has a wallet or not — deliberately: if it distinguished, it could be used to find out who has the app by trying identifiers — so it does not confirm that anything rang.',
     following: 'Following a verification',
     followingDetail:
-      'The ceremony screen polls this same server every 3 s and it is that server that queries <code>GET /v1/b2b/presentations/:id</code>. Three seconds and not one because the B2B gate carries a per-organisation rate bucket shared with issuing.',
+      'This server <b>does not ask te-api whether a verification has finished</b>. The outcome arrives on its own, over a signed webhook to <code>POST /api/webhooks/te-api</code>, and is written to this organisation’s journal. The ceremony screen reads that journal every 3 s, without leaving here.',
     roster: 'The customer roster',
     rosterDetail:
       'It does not leave here. It lives in this CRM’s own database and neither te-api nor Logto ever read it; the only thing that travels about a customer is what is signed inside their credential.',
@@ -825,9 +825,9 @@ export const en = {
     claimsNotCarried:
       'this customer’s “{label}” credential does not carry {claims}, so it cannot be requested',
     missingPresentationId: 'presentationId is missing',
+    presentationNotFound: 'that check is not in this organisation’s journal',
     issueFailed: 'the credential could not be issued; check the server log',
     presentFailed: 'the request could not be sent; check the server log',
-    statusFailed: 'the verification status could not be read; check the server log',
     teApiNotFound:
       'te-api rejected the call. The B2B gate answers the same for eight different reasons (token, resource, organisation, roster or scope), so the real reason is in te-api’s log{reference}.',
     /*

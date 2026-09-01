@@ -24,11 +24,31 @@ import { WalletLink } from './WalletLink';
  * ficha: refrescar la pestaña lo borraba todo.
  *
  * El estado inicial llega **del servidor**, leído del diario del banco. Este
- * componente sólo sondea mientras siga pendiente.
+ * componente sólo pregunta mientras siga pendiente.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  A QUIÉN SE LE PREGUNTA, QUE ES LO QUE CAMBIÓ
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Esta pantalla pregunta cada tres segundos **al servidor de esta organización**,
+ * y ese servidor contesta **de su propia base**. Antes, cada una de esas
+ * preguntas se convertía en una llamada a te-api: cien por ceremonia para
+ * averiguar un hecho que ocurre una vez.
+ *
+ * Ese segundo salto ya no existe. El desenlace entra en el diario **por el
+ * webhook de te-api**, que llega solo, llega firmado y llega también con la
+ * pestaña cerrada. Lo que queda aquí es un temporizador contra el propio
+ * servidor de la maqueta: no gasta el cubo de tasa de la organización, no cruza
+ * ninguna frontera, y es lo que permite que la pantalla se entere sin recargar.
+ *
+ * **Lo que no puede volver es preguntarle a te-api desde aquí ni desde el
+ * servidor.** Si al recibo le falta un dato, el sitio donde se arregla es el
+ * evento —en te-api—, no una llamada de vuelta. Ver `lib/te-api.ts`, donde está
+ * escrito qué trae el evento hoy y qué no.
  *
  * ## Qué hace este fichero y qué hace el escenario
  *
- * Aquí vive **el ciclo**: el sondeo, el desenlace, el reintento y las horas. En
+ * Aquí vive **el ciclo**: la consulta, el desenlace, el reintento y las horas. En
  * `VerificationStage` vive **cómo se ve** ese ciclo —el reloj del plazo, el
  * latido de cada consulta contestada, el sello del final y el número de
  * cliente—. Están separados porque son dos oficios: uno decide *qué es verdad*
@@ -53,7 +73,7 @@ import { WalletLink } from './WalletLink';
  *    nombres de nuestros contenedores, y si lo primero que ve es una ruta,
  *    deja de leer.
  *  · **El mecanismo vive en «ver el detalle técnico»**, plegado y cerrado de
- *    salida. Sigue estando entero —cadencia del sondeo, rutas, protocolos— y
+ *    salida. Sigue estando entero —cadencia de la consulta, rutas, protocolos— y
  *    sigue siendo consultable: ningún ingeniero del banco puede decir que se
  *    le oculta nada. Ver `.tech` en `globals.css`.
  *
@@ -66,11 +86,14 @@ import { WalletLink } from './WalletLink';
  * escrita del dueño de que la verificación se hace en nuestra infraestructura.
  *
  * Lo que sí es verdad hoy, y sigue escrito **dentro del detalle técnico**: el
- * navegador no habla con TripleEnable. Pregunta a este mismo servidor, y es él
- * quien consulta a te-api con el token de la organización. Esa propiedad
- * —ningún secreto en el navegador, ninguna petición del agente a un tercero— es
- * la que un empleado puede comprobar abriendo la pestaña de red, y por eso se
- * escribe donde la busca quien la va a comprobar.
+ * navegador no habla con TripleEnable. Pregunta a este mismo servidor, que le
+ * contesta de su propia base. Esa propiedad —ningún secreto en el navegador,
+ * ninguna petición del agente a un tercero— es la que un empleado puede
+ * comprobar abriendo la pestaña de red, y por eso se escribe donde la busca
+ * quien la va a comprobar.
+ *
+ * Y ahora la frase del artifact es verdad entera, no a medias: **esta pantalla
+ * no sondea a TripleEnable**, y su servidor tampoco.
  */
 
 /** Cómo se avisó al titular. */
@@ -81,11 +104,22 @@ type Channel = 'qr' | 'phone';
  * persona concreta**, y que son las que convierten el recibo en una prueba que
  * un tercero puede verificar sin preguntarnos.
  *
- * Hoy `GET /v1/b2b/presentations/:id` no las devuelve todavía —están en curso
- * en te-api—, así que llegan `undefined` y **cada fila simplemente no se
- * pinta**. Lo que no se hace es rotular el hueco: la pantalla del comprador no
- * es el sitio donde se anuncian las carencias de nuestra propia implementación.
- * Eso se arregla, no se explica.
+ * ⚠️ **Hoy llegan las cuatro vacías, y la razón cambió.** Antes era que te-api
+ * no las servía todavía. Ahora te-api sí las tiene —las devuelve por
+ * `GET /v1/b2b/presentations/:id`— pero **este CRM ya no consulta esa ruta**: se
+ * entera por el webhook, y el evento `presentation.settled` excluye a propósito
+ * `claims`, `holderKey`, `holderLinkId` y `proof` para no sacar dato personal
+ * por un canal saliente (te-api tiene una prueba que lo sujeta).
+ *
+ * Así que cada fila **simplemente no se pinta**, igual que antes. Lo que no se
+ * hace es rotular el hueco: la pantalla del comprador no es el sitio donde se
+ * anuncian las carencias de nuestra propia implementación.
+ *
+ * **Y el arreglo no es volver a llamar a te-api desde aquí.** Es que el evento
+ * las lleve —decisión de te-api, no de este repositorio— y que el receptor de
+ * webhooks las escriba en el diario. Estas filas se quedan escritas y listas
+ * para ese día; quitarlas obligaría a rehacerlas, y dejarlas cuesta cuatro
+ * condiciones que hoy no se cumplen.
  *
  * Los nombres son los de la respuesta de te-api. Si allí se llaman de otra
  * forma, el cambio es renombrar aquí y nada más: nadie más en el CRM los toca.
@@ -115,8 +149,8 @@ interface HolderProof {
    * Cuándo firmó **el titular**, según su propio teléfono.
    *
    * Es distinto de `settledAt`, que es cuándo se enteró esta consola: entre las
-   * dos hay hasta un intervalo de sondeo. Hasta que te-api lo devolvió, el
-   * banco sólo podía archivar la segunda.
+   * dos hay el tiempo que tarde el evento en llegar. El banco sólo puede
+   * archivar la segunda mientras el evento no traiga la primera.
    */
   readonly signedAt?: string | null;
 }
@@ -148,45 +182,60 @@ export interface TrackedVerification extends HolderProof {
 }
 
 /**
- * Lo que contesta `GET /api/credentials/present`, que es lo que contesta te-api
- * sin tocar.
+ * Lo que contesta `GET /api/credentials/present`, que ahora es **el diario de
+ * este banco** y no una copia de la respuesta de te-api.
  *
- * **No extiende `HolderProof`**: no tienen la misma forma, y ahí estuvo el
- * error. `HolderProof` es lo que pinta el recibo —cuatro cadenas planas—;
- * esto es el contrato de te-api, donde `holderKey` es un objeto y las piezas
- * de la firma viajan juntas dentro de `proof` porque sueltas no prueban nada.
- * El aplanado se hace en el sondeo, en un solo sitio. Se declara aquí, y no se
- * importa de `lib/te-api.ts`, para no arrastrar un módulo de servidor al
- * paquete del navegador ni siquiera como tipo.
+ * Tres campos, y los tres salen de la misma fila. Antes esta forma tenía además
+ * `holderKey`, `holderLinkId` y `proof`, porque la ruta devolvía tal cual lo que
+ * contestaba `GET /v1/b2b/presentations/:id`; esa llamada ya no se hace y esos
+ * tres campos no los trae el webhook, así que declararlos aquí sería un contrato
+ * que nadie cumple. Ver `HolderProof`, que es donde está escrito el porqué y qué
+ * haría falta para recuperarlos.
+ *
+ * Se declara aquí, y no se importa de `lib/verifications.ts`, para no arrastrar
+ * un módulo de servidor al paquete del navegador ni siquiera como tipo.
  */
 interface StatusResponse {
   readonly status: VerificationStatus;
   readonly claims: Record<string, unknown> | null;
-  readonly holderKey?: { readonly thumbprint: string } | null;
-  readonly holderLinkId?: string | null;
-  readonly proof?: { readonly keyBinding: string; readonly signedAt: string } | null;
+  /**
+   * Cuándo escribió el diario el desenlace, sellado por el servidor.
+   *
+   * Antes esta hora se la inventaba el navegador (`new Date()` en el momento de
+   * recibir el sondeo). Ahora viene de la fila, que es la hora en la que llegó
+   * el evento firmado — la única que el banco puede defender.
+   */
+  readonly settledAt: string | null;
 }
 
 /**
  * Cada cuánto se vuelve a preguntar mientras la petición sigue viva.
  *
- * Tres segundos y no uno: la consulta pasa por la puerta B2B de te-api, que
- * lleva un **cubo de tasa por organización** compartido con la emisión
- * (`TE_B2B_RATE_PER_ORG`, 600 por diez minutos por defecto). Una pantalla
- * sondeando cada segundo durante los cinco minutos que vive la petición se come
- * la mitad del presupuesto de todo el banco, y el que se queda fuera es el
- * agente de al lado que intentaba emitir.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ESTO YA NO LLEGA A te-api, Y POR ESO SE PUEDE DEJAR
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Tres segundos era la cadencia que se podía permitir cuando cada pregunta se
+ * convertía en una llamada a la puerta B2B de te-api, que lleva un **cubo de
+ * tasa por organización** compartido con la emisión (`TE_B2B_RATE_PER_ORG`, 600
+ * por diez minutos por defecto): una pantalla a un segundo se comía la mitad del
+ * presupuesto de todo el banco y el que se quedaba fuera era el agente de al
+ * lado intentando emitir.
+ *
+ * Ese coste ya no existe: la respuesta sale de la base de esta maqueta. Se deja
+ * en tres segundos igual, porque es la cadencia con la que el escenario está
+ * afinado —el latido, el «hace 2 s»— y bajarla no gana nada que un ojo humano
+ * note.
  */
 const POLL_INTERVAL_MS = 3000;
 
 /**
  * Cuánto se sigue preguntando después de que venza el plazo.
  *
- * te-api contesta `expired` en cuanto pasa la hora, así que un margen corto
- * basta para recogerlo. Sin este tope, una pestaña olvidada en un puesto
- * sondearía este servidor —y él a te-api— hasta que alguien la cerrara: son
- * 1.200 llamadas por hora del presupuesto del banco para mirar algo que ya no
- * va a cambiar.
+ * te-api liquida la petición en cuanto pasa la hora y manda el evento, así que
+ * un margen corto basta para recoger lo que el webhook acabe de escribir. Sin
+ * este tope, una pestaña olvidada en un puesto interrogaría este servidor hasta
+ * que alguien la cerrara, para mirar algo que ya no va a cambiar.
  */
 const POLL_GRACE_MS = 20_000;
 
@@ -226,21 +275,26 @@ export function VerificationTracker({
   const [status, setStatus] = useState<VerificationStatus>(verification.status);
   const [disclosed, setDisclosed] = useState(verification.disclosedClaims);
   /**
-   * La prueba de quién firmó. Arranca con lo que traiga el diario y se
-   * completa con lo que conteste el sondeo. Mientras te-api no las devuelva las
-   * tres siguen vacías, y el recibo se pinta sin esas filas.
+   * La prueba de quién firmó. **Ya no es estado, y por eso está aquí abajo con
+   * un comentario en vez de en un `useState`.**
+   *
+   * Antes se completaba con lo que contestara el sondeo a te-api. Retirado ese
+   * sondeo, no hay nada que pueda cambiarla durante la ceremonia: el webhook no
+   * trae ninguna de las cuatro piezas, así que valen lo que valgan al cargar y
+   * ahí se quedan. Un `useState` con un `set` que nadie llama es una promesa
+   * falsa de que algo va a llegar. Ver `HolderProof`.
    */
-  const [proof, setProof] = useState<HolderProof>({
+  const proof: HolderProof = {
     holderKey: verification.holderKey,
     holderLinkId: verification.holderLinkId,
     keyBinding: verification.keyBinding,
     signedAt: verification.signedAt,
-  });
+  };
   /**
    * Cuándo supo el banco que la petición había terminado.
    *
-   * No es la hora en la que el titular firmó: entre las dos hay hasta un
-   * intervalo de sondeo. Se guarda igual porque es el único instante que este
+   * No es la hora en la que el titular firmó: entre las dos está lo que tarde el
+   * evento en llegar. Se guarda igual porque es el único instante que este
    * servidor puede defender —«a esta hora lo supimos»— y porque cierra la línea
    * de tiempo con un dato en vez de con un hueco. El rótulo lo dice.
    */
@@ -270,8 +324,8 @@ export function VerificationTracker({
    * Es la forma más barata de lanzar una animación por suceso sin guardar
    * temporizadores.
    *
-   * Sólo cuenta la consulta que **contestó bien**: un 429 del cubo de tasa o
-   * un corte no son un latido, y dejarlos contar haría que el punto siguiera
+   * Sólo cuenta la consulta que **contestó bien**: un corte o un fallo de la
+   * base no son un latido, y dejarlos contar haría que el punto siguiera
    * latiendo mientras la pantalla ya no sabe nada.
    */
   const [lastPolledAt, setLastPolledAt] = useState<number | null>(null);
@@ -280,7 +334,7 @@ export function VerificationTracker({
    * Si el desenlace ha ocurrido **con esta pantalla delante**.
    *
    * Es lo que separa «ha pasado ahora» de «pasó ayer»: se pone una sola vez, en
-   * el sondeo que trae el final, y nunca al cargar. Abrir mañana el recibo de
+   * la consulta que trae el final, y nunca al cargar. Abrir mañana el recibo de
    * hoy enseña el mismo resultado quieto, porque animar un desenlace de hace
    * catorce horas sería representar un suceso que no está ocurriendo.
    */
@@ -310,8 +364,8 @@ export function VerificationTracker({
     };
 
     const poll = async () => {
-      // El tope de cortesía: si el plazo venció hace rato y te-api sigue
-      // diciendo «pendiente», no hay nada más que esperar. Ver `POLL_GRACE_MS`.
+      // El tope de cortesía: si el plazo venció hace rato y el diario sigue
+      // diciendo «pendiente», el evento no va a llegar ya. Ver `POLL_GRACE_MS`.
       if (!Number.isNaN(deadline) && Date.now() > deadline + POLL_GRACE_MS) {
         stop();
         return;
@@ -324,40 +378,34 @@ export function VerificationTracker({
         if (stopped) return;
         const payload = (await response.json()) as StatusResponse & { error?: string };
         if (!response.ok) {
-          // Se enseña, pero **no se para**: un 429 del cubo de tasa o un corte
-          // suelto no invalidan la petición, y el titular puede estar
-          // contestando justo ahora. El siguiente sondeo lo vuelve a intentar.
+          // Se enseña, pero **no se para**: un corte suelto o una base que
+          // tropieza no invalidan la petición, y el titular puede estar
+          // contestando justo ahora. La siguiente consulta lo vuelve a intentar.
           setError(payload.error ?? t('tracker.pollFailed', { status: response.status }));
           return;
         }
-        // Un sondeo bueno borra el aviso del anterior: dejarlo puesto haría que
-        // una pantalla que ya funciona pareciera rota.
+        // Una consulta buena borra el aviso de la anterior: dejarlo puesto haría
+        // que una pantalla que ya funciona pareciera rota.
         setError(undefined);
         // El latido. Va aquí y no antes del `ok` a propósito: ver `pollTick`.
         setLastPolledAt(Date.now());
         setPollTick((tick) => tick + 1);
         if (payload.status !== 'pending') {
           setDisclosed(payload.claims);
-          // La forma de te-api no es plana: `holderKey` es un objeto con la
-          // huella y la JWK, y las cuatro piezas de la firma viajan juntas
-          // dentro de `proof` porque sueltas no prueban nada. Aquí se aplana a
-          // lo que pinta el recibo; la JWK entera y el resto de `proof` no se
-          // guardan porque esta pantalla no los enseña. Cada fila sigue
-          // apareciendo sola, y faltando sin explicación, según venga o no.
-          setProof({
-            holderKey: payload.holderKey?.thumbprint,
-            holderLinkId: payload.holderLinkId,
-            keyBinding: payload.proof?.keyBinding,
-            signedAt: payload.proof?.signedAt,
-          });
-          setSettledAt(new Date().toISOString());
+          // La hora la pone **el servidor**, no este navegador. Aquí había un
+          // `new Date()`, que es el reloj de quien tenga el puesto delante: una
+          // línea de tiempo que un agente puede mover cambiando la hora de su
+          // Windows no sirve para reclamar nada, y es la misma regla que el
+          // `POST` de la ruta ya seguía para los otros dos hitos. El respaldo
+          // sólo cubre una fila cerrada sin sello, que no debería existir.
+          setSettledAt(payload.settledAt ?? new Date().toISOString());
           // El orden importa poco para React —agrupa los dos— pero se escribe
           // así porque se lee así: **primero ha pasado, y por eso se enseña**.
           setJustSettled(true);
           setStatus(payload.status);
         }
       } catch {
-        // Un fallo de red suelto no para el sondeo: el siguiente lo vuelve a
+        // Un fallo de red suelto no para el ciclo: el siguiente lo vuelve a
         // intentar, y el QR sigue siendo válido mientras no caduque.
         //
         // Pero **se dice**, igual que el `!response.ok` de arriba. Callarlo
@@ -379,17 +427,21 @@ export function VerificationTracker({
     return stop;
     // `pending` es un booleano y cambia una vez: el efecto se monta dos veces en
     // toda la ceremonia. Depender del objeto de estado haría que cada respuesta
-    // volviera a montarlo, cancelara el temporizador y sondeara de inmediato —
-    // eso no es un sondeo cada tres segundos, es un bucle tan rápido como
+    // volviera a montarlo, cancelara el temporizador y preguntara de inmediato —
+    // eso no es una consulta cada tres segundos, es un bucle tan rápido como
     // conteste la red. Pasó, y se vio en el cubo de tasa de te-api: 611 llamadas
-    // en 52 segundos desde una sola pantalla.
+    // en 52 segundos desde una sola pantalla. Hoy ese bucle ya no llegaría a
+    // te-api, pero seguiría siendo un bucle y la dependencia se queda como está.
     //
     // `t` entra en las dependencias porque el efecto lo usa, y no vuelve a
-    // montar el sondeo: `useTranslator` lo memoriza por idioma, así que sólo
+    // montar el ciclo: `useTranslator` lo memoriza por idioma, así que sólo
     // cambia cuando de verdad se cambia de idioma — y entonces la pantalla
     // entera se está recargando de todas formas.
   }, [pending, deadline, verification.presentationId, t]);
 
+  // El reloj de la cuenta atrás. **No toca la red**: sólo vuelve a pintar el
+  // «caduca en 4:12». Se queda tal cual — lo que se retiró es el tráfico a
+  // te-api, no la sensación de que la pantalla está viva.
   useEffect(() => {
     if (!pending) return;
     setNow(Date.now());
@@ -600,9 +652,10 @@ export function VerificationTracker({
  * pedido» y «esperando su respuesta». La segunda no está aquí, y no por
  * pereza: es el momento en que la cartera va a buscar el objeto de solicitud, y
  * **hoy va al verificador de TripleEnable**, no al de este banco. te-api no lo
- * cuenta —`GET /v1/b2b/presentations/:id` devuelve `{status, claims}` y nada
- * más—, así que el banco no puede saberlo. Inventar esa marca sería poner una
- * hora falsa en un registro que existe para reclamar.
+ * cuenta —su evento `presentation.settled` lleva el desenlace y las horas de la
+ * petición, no los pasos de la cartera—, así que el banco no puede saberlo.
+ * Inventar esa marca sería poner una hora falsa en un registro que existe para
+ * reclamar.
  *
  * En su sitio va la que sí ocurre y sí se mide: **cuándo salió el timbre**. Es
  * un hito real, con la hora de este servidor, y es además el que le importa al
@@ -610,7 +663,8 @@ export function VerificationTracker({
  *
  * La marca de la respuesta lleva un rótulo distinto por lo mismo: es la hora en
  * la que el banco se enteró, no la hora en la que el titular firmó. Entre las
- * dos hay hasta un intervalo de sondeo, y decirlo cuesta una palabra.
+ * dos está lo que tarde el evento de te-api en llegar, y decirlo cuesta una
+ * palabra.
  */
 function PresentationTimeline({
   t,
@@ -683,7 +737,7 @@ function PresentationTimeline({
           Este hito lo firma su teléfono, no este servidor, y por eso es el
           único de la línea cuya hora el banco **no** pone. Va antes del
           desenlace porque ocurrió antes: entre que el titular firma y que esta
-          consola se entera hay hasta un intervalo de consulta, y esa diferencia
+          consola se entera está lo que tarde el evento, y esa diferencia
           —que se ve aquí de un vistazo, dos horas seguidas en la misma
           columna— es exactamente lo que el recibo necesitaba para dejar de ser
           «cuándo lo supimos» y pasar a ser «cuándo lo hizo».
@@ -723,10 +777,10 @@ function PresentationTimeline({
             <div>
               <strong>{t(OUTCOME_MILESTONE[status])}</strong>
               {/*
-                Sigue sin ser «la hora en la que firmó»: entre las dos hay hasta
-                un intervalo de sondeo. Lo que se ha quitado son los segundos
-                —la cadencia es cocina— y no la salvedad, que es la que impide
-                que este registro afirme una hora que el banco no vio.
+                Sigue sin ser «la hora en la que firmó»: entre las dos está lo
+                que tarde el evento en llegar. Lo que se ha quitado son los
+                segundos —la cadencia es cocina— y no la salvedad, que es la que
+                impide que este registro afirme una hora que el banco no vio.
               */}
               <span>{t('tracker.milestoneSettledHint')}</span>
             </div>
@@ -767,10 +821,16 @@ function PresentationTimeline({
  * móvil—, porque eso no lo arregla ningún cambio de código y callarlo llevaría
  * al agente a dar por hecho lo que no puede.
  *
- * Las tres filas —llave, perfil y firma— están construidas y esperando en
- * `HolderProof`: llegan por `GET /v1/b2b/presentations/:id` y **cada una se
- * pinta cuando su campo viene**. Mientras no vengan, la fila no sale y el
- * recibo no explica por qué.
+ * Las tres filas —llave, perfil y firma— siguen construidas y esperando en
+ * `HolderProof`, y **cada una se pinta cuando su campo viene**. Mientras no
+ * vengan, la fila no sale y el recibo no explica por qué.
+ *
+ * ⚠️ Lo mismo le pasa ahora a **los atributos divulgados**, y hay que decirlo
+ * aquí porque es lo más visible del recibo: llegaban en la respuesta del sondeo
+ * a te-api, ese sondeo se retiró, y el evento `presentation.settled` no los
+ * lleva. Así que el bloque «lo que enseñó» sale vacío —es decir, no sale— hasta
+ * que el evento los traiga. La respuesta **no** es volver a llamar a te-api
+ * desde aquí; ver `lib/te-api.ts`.
  */
 function PresentationReceipt({
   t,

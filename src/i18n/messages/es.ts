@@ -635,7 +635,7 @@ export const es: PartialMessages = {
     outcomeFailed: 'La credencial no ha valido',
     outcomeExpired: 'Caducó sin respuesta',
     architectureNote:
-      'Esta pantalla <b>no habla con TripleEnable</b>: pregunta cada {seconds} segundos al servidor de esta organización (<code>GET /api/credentials/present</code>), y es él quien consulta a te-api (<code>GET /v1/b2b/presentations/:id</code>) con el token de la organización. Ni el token ni el secreto que lo pide bajan al navegador, y se comprueba abriendo la pestaña de red.',
+      'Esta pantalla <b>no habla con TripleEnable</b>: pregunta cada {seconds} segundos al servidor de esta organización (<code>GET /api/credentials/present</code>), y ese servidor contesta de su propia base. <b>Tampoco él le pregunta nada a te-api</b>: el resultado le llega solo, por un webhook firmado (<code>POST /api/webhooks/te-api</code>), que es como se entera cualquier sistema de negocio. Se comprueba abriendo la pestaña de red.',
     verifierNote:
       'La solicitud se abrió en el verificador de TripleEnable, firmada con el DID de esta organización. No tiene verificador propio ni clave de verificación.',
     pollFailed: 'la consulta ha fallado ({status})',
@@ -693,7 +693,7 @@ export const es: PartialMessages = {
       '<code>POST /v1/b2b/wakeups</code>. La respuesta es la misma tenga cartera el titular o no —es deliberado: si distinguiera, serviría para averiguar quién tiene la app probando identificadores—, así que no confirma que haya sonado nada.',
     following: 'Seguir una verificación',
     followingDetail:
-      'La pantalla de la ceremonia sondea este mismo servidor cada 3 s y es él quien consulta <code>GET /v1/b2b/presentations/:id</code>. Tres segundos y no uno porque la puerta B2B lleva un cubo de tasa por organización compartido con la emisión.',
+      'Este servidor <b>no pregunta a te-api si una verificación ha terminado</b>. El veredicto llega solo, por webhook firmado a <code>POST /api/webhooks/te-api</code>, y se anota en el diario de esta organización. La pantalla de la ceremonia lee ese diario cada 3 s, sin salir de aquí.',
     roster: 'El padrón de clientes',
     rosterDetail:
       'No sale de aquí. Vive en la base de este CRM y ni te-api ni Logto la leen nunca; lo único que viaja de un cliente es lo que se firma dentro de su credencial.',
@@ -767,9 +767,9 @@ export const es: PartialMessages = {
     claimsNotCarried:
       'la credencial «{label}» de este cliente no lleva {claims}, así que no se puede pedir',
     missingPresentationId: 'falta presentationId',
+    presentationNotFound: 'esa comprobación no está en el diario de esta organización',
     issueFailed: 'no se ha podido emitir la credencial; mira el log del servidor',
     presentFailed: 'no se ha podido lanzar la petición; mira el log del servidor',
-    statusFailed: 'no se ha podido leer el estado de la verificación; mira el log del servidor',
     teApiNotFound:
       'te-api ha rechazado la llamada. La puerta B2B contesta lo mismo para ocho motivos distintos (token, recurso, organización, padrón o scope), así que el motivo real está en el registro de te-api{reference}.',
     // Ver la nota larga en `en.ts`: el consejo de volver a sembrar el tipo era

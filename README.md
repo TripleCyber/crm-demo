@@ -244,9 +244,11 @@ te-api  POST /v1/b2b/presentations        (abre la sesión en SU verificador)
    │
    │  la cartera del titular va al requestUri y presenta
    ▼
-te-api  GET /v1/b2b/presentations/:id     (se sondea cada 3 s)
+te-api  POST /api/webhooks/te-api          (te-api avisa; aquí no se pregunta)
    ▼
-{ status, claims }  →  lo que el titular enseñó, y sólo lo que se pidió
+presentation.settled { status, settledAt, … }  →  se anota en el diario
+   ▼
+la pantalla lee el diario de este servidor cada 3 s (nunca te-api)
 ```
 
 **El verificador es de TripleEnable, no de Banco Demo.** Se ve leyendo este
@@ -313,26 +315,38 @@ Pedirlo todo «ya que estamos» es exactamente lo que la divulgación selectiva
 existe para no tener que hacer, y lo que la cartera enseñe de más tampoco llega:
 te-api devuelve la intersección con lo que se pidió.
 
-**3 · Se sondea Y se recibe, y las dos cosas hacen falta.** Aquí ponía «se
-sondea, no hay webhook», y era verdad hasta el 2026-08-31: lo que faltaba no era
-soporte en te-api —que tiene cola, reintentos y firma— sino **el receptor**.
-Tanto que el webhook de Banco Demo apuntaba a `webhook.site`, una dirección de
-prueba que no es de nadie.
+**3 · No se sondea. Se recibe.** Este documento contó dos historias antes: «se
+sondea, no hay webhook» hasta el 2026-08-31, y luego «hay las dos y no compiten».
+Las dos están superadas. **Un CRM se entera por webhook, y este no hace ninguna
+excepción**:
 
-Ahora hay las dos, y no compiten:
+> ni el navegador ni el servidor de este CRM llaman a te-api para preguntar si
+> una verificación ha terminado.
 
-| | Para qué | Cuándo gana |
-|---|---|---|
-| **El sondeo** (`GET /v1/b2b/presentations/:id`, cada 3 s) | El agente está mirando la pantalla con el cliente al teléfono | Siempre que la pestaña esté abierta |
-| **El webhook** (`POST /api/webhooks/te-api`) | El titular contesta media hora después y no hay nadie mirando | Siempre que no la esté |
+| Salto | Cómo se entera hoy |
+|---|---|
+| **te-api → servidor del CRM** | `POST /api/webhooks/te-api`, firmado y verificado. Llega solo. Llega también con la pestaña cerrada. |
+| **servidor del CRM → navegador** | `GET /api/credentials/present`, cada 3 s, contestado **desde la base de este CRM**. Tráfico interno de la maqueta; no sale de aquí. |
 
-El primero en llegar cierra el diario (`settleVerification` sólo escribe si la
-fila sigue en `pending`). El sondeo va a 3 s porque la consulta pasa por el cubo
-de tasa por organización de te-api, que comparte con la emisión.
+El sondeo a `GET /v1/b2b/presentations/:id` se retiró entero, y con él
+`fetchPresentationStatus` en `lib/te-api.ts`. La cuenta de lo que ahorra: una
+ceremonia de cinco minutos con la pantalla abierta hacía **unas 100 llamadas a
+te-api** —una cada 3 s— para averiguar un hecho que ocurre una vez. Ahora hace
+**una entrega**, que además la paga te-api y no el cubo de tasa de la
+organización.
 
-Y **el barrido no se quita al añadir el receptor**: es el camino cuando la
-entrega se perdió, y es el único que trae los claims — el evento lleva el
-veredicto pero no el dato personal, a propósito. Ver «El webhook».
+Se pudo retirar porque te-api liquida —y por tanto avisa— **en los dos casos**:
+la petición que responde y la que caduca sin respuesta (`settlePresentations`).
+No hacía falta que nadie tuviera una pestaña abierta, que era lo único que el
+sondeo compraba.
+
+⚠️ **Lo que se pierde, dicho sin disimulo.** El evento `presentation.settled`
+lleva `presentationId`, `status`, `credentialType`, `requestedAt`, `expiresAt` y
+`settledAt` — y **no lleva** `claims`, `holderKey`, `holderLinkId` ni `proof`,
+porque te-api minimiza a propósito el dato personal que sale por un canal
+saliente. O sea que el recibo pinta el veredicto y las horas, pero **no los
+atributos que enseñó el titular**. El arreglo es que el evento los lleve, en
+te-api; no es volver a llamar desde aquí.
 
 ### Nada de una empresa concreta está cableado
 
@@ -421,10 +435,10 @@ comparte el ámbar: una comprobación en curso no es una que haya fallado.
 #### T9 · lo que le falta al rojo para llegar hasta aquí
 
 **La pantalla ya está preparada y no hay nada que construir en el CRM.** El
-bloque `rejected` existe, pinta rojo y es el único que lo hace; el tipo de
-`GET /v1/b2b/presentations/:id` ya declara los cinco estados; y el sondeo sigue
-vivo hasta que llegue un final. El día que te-api mueva la sesión a `rejected`,
-esta pantalla lo pinta **sin tocar una línea**.
+bloque `rejected` existe, pinta rojo y es el único que lo hace; `VerificationStatus`
+ya declara los cinco estados; y el evento `presentation.settled` los admite los
+cinco en `data.status`. El día que te-api mueva la sesión a `rejected`, esta
+pantalla lo pinta **sin tocar una línea**.
 
 Lo que falta está fuera: `src/routes/requests.ts` de te-api **no toca la sesión
 de presentación** al recibir el `not_me`, y `rejected` sólo nace cuando el

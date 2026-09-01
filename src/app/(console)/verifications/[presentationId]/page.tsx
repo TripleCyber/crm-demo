@@ -30,12 +30,21 @@ import { findVerification } from '@/lib/verifications';
  * enlace de autorización que se anotó al abrir la sesión. Por eso recargar la
  * pantalla vuelve a enseñar el mismo código y no uno nuevo — es el mismo dato.
  *
- * Al cargar, el componente de seguimiento vuelve a preguntar si la petición
- * seguía pendiente, y esa consulta es la que **reconcilia** la fila: una
- * comprobación que caducó sin que nadie mirara se queda en `pending` en la base
- * hasta que alguien abre esta pantalla, y entonces te-api dice `expired` y se
- * anota. Es la razón de que el listado pinte «sin respuesta» en vez de afirmar
- * una caducidad que nadie ha confirmado todavía.
+ * ## La fila ya no la reconcilia esta pantalla
+ *
+ * Aquí decía que al cargar el seguimiento volvía a preguntarle a te-api y que
+ * **esa** consulta cerraba la fila — o sea que una comprobación que caducara sin
+ * nadie mirando se quedaba en `pending` hasta que alguien abriera esta
+ * dirección. Ya no: el desenlace lo escribe el receptor de webhooks
+ * (`api/webhooks/te-api`) cuando te-api liquida la petición, y te-api liquida
+ * **tanto la que responde como la que caduca**. Con la pestaña cerrada, con
+ * nadie delante y de madrugada.
+ *
+ * Lo que el seguimiento hace al cargar es leer esa fila, no rehacerla. El
+ * listado sigue pintando «sin respuesta» para una fila `pending` con el plazo
+ * vencido, y eso también sigue siendo lo correcto: es lo que el diario dice
+ * mientras el evento no haya llegado, y afirmar una caducidad que nadie ha
+ * confirmado sería inventarla.
  */
 
 export const dynamic = 'force-dynamic';

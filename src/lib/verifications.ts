@@ -12,8 +12,9 @@ import type { VerificationStatus } from './verification-status';
  *
  * Cada fila nace cuando el agente lanza una comprobación y se cierra cuando
  * te-api dice cómo acabó. Ni un campo se compone: lo que se pidió lo eligió el
- * agente, las horas las sella este servidor y el desenlace se copia tal cual de
- * `GET /v1/b2b/presentations/:id`. La razón larga está en `db/003_verification.sql`.
+ * agente, las horas las sella este servidor y el desenlace se copia tal cual del
+ * evento `presentation.settled` que te-api entrega al webhook — este servidor no
+ * pregunta por él. La razón larga está en `db/003_verification.sql`.
  *
  * Toda consulta lleva el `org_id` en el `where`, sin excepción, por lo mismo
  * que en `./customers.ts`: no existe una función que encuentre una comprobación
@@ -176,21 +177,25 @@ export async function recordVerification(input: RecordVerificationInput): Promis
  * Cierra la fila con el desenlace que ha dado te-api.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  EL ESTADO LO TRAE te-api, NUNCA EL NAVEGADOR
+ *  UN SOLO LLAMANTE: EL RECEPTOR DE WEBHOOKS
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Quien llama a esto es la ruta que acaba de consultar
- * `GET /v1/b2b/presentations/:id` con el token de la organización. El navegador
- * sólo dispara la consulta; el valor sale de te-api. Si el estado viniera del
- * cuerpo de una petición, cualquiera con la consola de red abierta cerraría en
- * verde la comprobación de otro, y el diario del banco pasaría a ser un campo
- * de texto editable.
+ * Y eso es nuevo. Antes eran dos —el receptor de webhooks y la ruta que sondeaba
+ * `GET /v1/b2b/presentations/:id` cada tres segundos—; el sondeo se retiró
+ * entero, así que el único camino por el que un desenlace entra en este diario
+ * es un `POST` de te-api **con la firma comprobada** (`api/webhooks/te-api`).
  *
- * El `where` exige que siga en `pending`: el primer desenlace es el bueno y los
- * sondeos que llegan después no lo reescriben, así que `settled_at` guarda la
- * hora en la que el banco se enteró **la primera vez**. Es idempotente a
- * propósito — la pantalla sondea cada tres segundos y puede haber dos pestañas
- * abiertas.
+ * Sigue sin poder venir del navegador, que era la propiedad importante: si el
+ * estado saliera del cuerpo de una petición del agente, cualquiera con la
+ * consola de red abierta cerraría en verde la comprobación de otro y el diario
+ * del banco pasaría a ser un campo de texto editable. Ahora hay una razón más
+ * para que no ocurra — no queda ninguna ruta que escriba aquí desde una acción
+ * del navegador.
+ *
+ * El `where` exige que siga en `pending`: el primer desenlace es el bueno y las
+ * reentregas que lleguen después no lo reescriben, así que `settled_at` guarda
+ * la hora en la que el banco se enteró **la primera vez**. Es idempotente a
+ * propósito — la entrega de te-api es «al menos una vez».
  */
 export async function settleVerification(
   orgId: string,
@@ -201,20 +206,19 @@ export async function settleVerification(
   await query(
     `update verification
         set status = $3,
-            -- coalesce y no una asignación a secas, POR EL WEBHOOK.
+            -- coalesce y no una asignacion a secas.
             --
-            -- Este diario se cierra ahora por dos caminos: el sondeo de la
-            -- pantalla, que trae los claims que enseñó el titular, y el evento
-            -- de te-api, que trae el veredicto y a propósito NO trae los claims
-            -- (minimiza el dato personal que sale por un canal saliente). Con
-            -- una asignación normal, el que llegara segundo con null borraría lo
-            -- que hubiera escrito el primero.
+            -- Ya no hay carrera: retirado el sondeo, el unico que cierra esta
+            -- fila es el webhook, y llega con claims a null siempre (te-api
+            -- minimiza el dato personal que sale por un canal saliente). Una
+            -- asignacion normal haria lo mismo que este coalesce mientras eso
+            -- siga asi.
             --
-            -- Hoy no puede pasar -- el where exige pending y el primero en
-            -- llegar cierra la fila -- pero eso hace que los claims dependan de
-            -- QUIEN llegue antes, y eso si es una carrera de verdad: el webhook
-            -- gana siempre que el agente no tenga la pestaña abierta. Preservar
-            -- lo que ya hubiera es lo correcto en los dos ordenes.
+            -- Se queda igualmente, y por lo que viene: el dia que el evento
+            -- traiga los claims, o que se escriban por otro camino, el que
+            -- llegue segundo con null no debe borrar lo que hubiera escrito el
+            -- primero. Preservar lo que ya hay es correcto en los dos ordenes y
+            -- no cuesta nada.
             disclosed_claims = coalesce($4, disclosed_claims),
             settled_at = now()
       where org_id = $1 and presentation_id = $2 and status = 'pending'`,
