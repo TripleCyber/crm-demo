@@ -297,12 +297,23 @@ export function VerificationTracker({
     if (!pending) return;
 
     let stopped = false;
+    // El temporizador se declara antes que `poll` porque `poll` lo apaga: sin
+    // esto, pasado el tope de cortesía el intervalo seguía disparando cada tres
+    // segundos hasta que alguien cerrara la pantalla, sólo para salir por la
+    // primera línea. No pedía red, pero mantenía vivo un temporizador que ya no
+    // servía para nada.
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    const stop = () => {
+      stopped = true;
+      if (timer !== undefined) clearInterval(timer);
+    };
 
     const poll = async () => {
       // El tope de cortesía: si el plazo venció hace rato y te-api sigue
       // diciendo «pendiente», no hay nada más que esperar. Ver `POLL_GRACE_MS`.
       if (!Number.isNaN(deadline) && Date.now() > deadline + POLL_GRACE_MS) {
-        stopped = true;
+        stop();
         return;
       }
       try {
@@ -346,17 +357,26 @@ export function VerificationTracker({
           setStatus(payload.status);
         }
       } catch {
-        // Un fallo de red suelto no borra la pantalla: el siguiente sondeo lo
-        // vuelve a intentar, y el QR sigue siendo válido mientras no caduque.
+        // Un fallo de red suelto no para el sondeo: el siguiente lo vuelve a
+        // intentar, y el QR sigue siendo válido mientras no caduque.
+        //
+        // Pero **se dice**, igual que el `!response.ok` de arriba. Callarlo
+        // dejaba la pantalla diciendo «esperando al titular» con el latido
+        // congelado y sin nada que explicara por qué: el agente está al teléfono
+        // y no puede distinguir «el cliente no ha contestado todavía» de «esta
+        // pantalla lleva un minuto sin hablar con nadie». Una espera muda es
+        // peor que un aviso, porque parece que funciona.
+        if (stopped) return;
+        setError(t('tracker.noServer'));
       }
     };
 
     void poll();
-    const timer = setInterval(() => void poll(), POLL_INTERVAL_MS);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
+    // `poll` corre síncrono hasta el primer `await`, y el tope de cortesía está
+    // antes de él: si ya se ha pasado, `stopped` es `true` aquí y no hay que
+    // montar el intervalo siquiera.
+    if (!stopped) timer = setInterval(() => void poll(), POLL_INTERVAL_MS);
+    return stop;
     // `pending` es un booleano y cambia una vez: el efecto se monta dos veces en
     // toda la ceremonia. Depender del objeto de estado haría que cada respuesta
     // volviera a montarlo, cancelara el temporizador y sondeara de inmediato —
