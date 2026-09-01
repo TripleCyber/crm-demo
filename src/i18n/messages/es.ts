@@ -309,6 +309,9 @@ export const es: PartialMessages = {
     alertPhoneBusy: 'Avisando…',
     alertQr: 'Está delante · enseñar QR',
     alertQrBusy: 'Pidiendo…',
+    alertNoWallet:
+      '<b>{name} no tiene cartera vinculada con esta entidad</b>, así que avisar a su móvil no haría sonar nada. Usa el QR si está delante, o emítele antes una credencial.',
+    alertPhoneNoWallet: 'No hay cartera a la que avisar',
     requestFailed: 'la petición ha fallado ({status})',
     noServer: 'no se ha podido contactar con el servidor',
     previewTitle: 'Lo que le llega a él',
@@ -842,10 +845,11 @@ export const es: PartialMessages = {
     teApiNotFound:
       'te-api ha rechazado la llamada. La puerta B2B contesta lo mismo para ocho motivos distintos (token, recurso, organización, padrón o scope), así que el motivo real está en el registro de te-api{reference}.',
     // Ver la nota larga en `en.ts`: el consejo de volver a sembrar el tipo era
-    // falso —el `vct` no falta del padrón, falta del formato— y además mandaba
-    // a la terminal a repetir un comando que no podía funcionar.
+    // falso —re-sembrar no crea un identificador que el emisor no publica— y el
+    // motivo tampoco era el que parecía: cada formato se pide por una clave
+    // distinta y la plataforma todavía no construye la de los `mso_mdoc`.
     teApiNoVct:
-      'Ese tipo de credencial se puede emitir, pero no pedir de vuelta: su formato no lleva identificador de tipo verificable, así que ninguna verificación puede solicitarlo. Para verificar a este cliente, usa un tipo emitido como SD-JWT{reference}.',
+      'Ese tipo de credencial se puede emitir, pero no pedir de vuelta: la plataforma todavía no construye una petición de presentación para su formato. Para verificar a este cliente, usa un tipo emitido como SD-JWT o como credencial JWT del modelo W3C{reference}.',
     teApiLink:
       'te-api no ha podido completar el vínculo. El motivo más habitual es que esa cuenta todavía no tiene una cartera de TripleEnable dada de alta; el motivo real está en el registro de te-api{reference}.',
     teApiUnavailable: 'El emisor de credenciales no está operativo ahora mismo{reference}.',

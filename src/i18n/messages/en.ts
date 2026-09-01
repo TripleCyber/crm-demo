@@ -344,6 +344,16 @@ export const en = {
     alertPhoneBusy: 'Alerting…',
     alertQr: 'They are in front of you · show QR',
     alertQrBusy: 'Requesting…',
+    /**
+     * El hecho, no el síntoma. Antes esta pantalla decía «We have alerted their
+     * mobile» y arrancaba una cuenta atrás de cinco minutos para un aviso que
+     * no había salido: te-api contesta 200 igual, y sin cartera vinculada nace
+     * un señuelo que caduca solo. Ahora se dice antes de disparar, y se manda
+     * al canal que sí funciona.
+     */
+    alertNoWallet:
+      '<b>{name} has no wallet linked to this entity</b>, so alerting their mobile would ring nowhere. Use the QR if they are in front of you, or issue them a credential first.',
+    alertPhoneNoWallet: 'No wallet to alert',
     requestFailed: 'the request failed ({status})',
     noServer: 'the server could not be reached',
     previewTitle: 'What reaches them',
@@ -897,18 +907,22 @@ export const en = {
     /*
      * ESTE MENSAJE DABA UN CONSEJO FALSO, Y MANDABA A LA TERMINAL.
      *
-     * Decía que se arreglaba «seeding the type in te-api again». No se arregla:
-     * el `vct` no falta del padrón por un sembrado a medias, falta porque **el
-     * formato de la credencial no lleva ninguno**. `vct` es exclusivo de SD-JWT
-     * VC; un `jwt_vc_json` no tendrá uno nunca y un `mso_mdoc` usa `doctype`.
-     * De los 25 tipos que el emisor publica, 16 están así.
+     * Decía que se arreglaba «seeding the type in te-api again». No se
+     * arregla: re-sembrar no puede crear un identificador que el emisor no
+     * publica, así que el consejo mandaba a alguien a repetir un comando que no
+     * podía funcionar.
      *
-     * Volver a sembrar no puede inventar lo que el emisor no anuncia, así que
-     * el consejo mandaba a alguien a repetir un comando que no podía funcionar.
-     * Lo único accionable es conceder un tipo SD-JWT, y eso es lo que se dice.
+     * Y el motivo tampoco era el que parecía. No es que al padrón le falte el
+     * `vct`: es que **cada formato se pide por una clave distinta** —`vct`,
+     * `credential_definition.type`, `doctype`— y la plataforma todavía no
+     * construye la consulta de todos. Hoy pide los `dc+sd-jwt` y los
+     * `jwt_vc_json`; los `mso_mdoc` no.
+     *
+     * Así que el texto dice el hecho —se emite, no se puede pedir— y lo único
+     * accionable: usar un tipo de los que sí se piden.
      */
     teApiNoVct:
-      'That credential type can be issued but not asked for back: its format carries no verifiable type identifier, so no verification can request it. To verify this customer, use a type issued as SD-JWT{reference}.',
+      'That credential type can be issued but not asked for back: the platform does not build a presentation request for its format yet. To verify this customer, use a credential type issued as SD-JWT or as a W3C JWT credential{reference}.',
     teApiLink:
       'te-api could not complete the link. The most common reason is that this account does not yet have a TripleEnable wallet registered; the real reason is in te-api’s log{reference}.',
     teApiUnavailable: 'The credential issuer is not operational right now{reference}.',
