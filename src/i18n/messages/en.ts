@@ -894,8 +894,21 @@ export const en = {
     statusFailed: 'the verification status could not be read; check the server log',
     teApiNotFound:
       'te-api rejected the call. The B2B gate answers the same for eight different reasons (token, resource, organisation, roster or scope), so the real reason is in te-api’s log{reference}.',
+    /*
+     * ESTE MENSAJE DABA UN CONSEJO FALSO, Y MANDABA A LA TERMINAL.
+     *
+     * Decía que se arreglaba «seeding the type in te-api again». No se arregla:
+     * el `vct` no falta del padrón por un sembrado a medias, falta porque **el
+     * formato de la credencial no lleva ninguno**. `vct` es exclusivo de SD-JWT
+     * VC; un `jwt_vc_json` no tendrá uno nunca y un `mso_mdoc` usa `doctype`.
+     * De los 25 tipos que el emisor publica, 16 están así.
+     *
+     * Volver a sembrar no puede inventar lo que el emisor no anuncia, así que
+     * el consejo mandaba a alguien a repetir un comando que no podía funcionar.
+     * Lo único accionable es conceder un tipo SD-JWT, y eso es lo que se dice.
+     */
     teApiNoVct:
-      'te-api cannot ask for that credential type back: it is missing the `vct` in the organisation’s roster. It can be issued but not verified, and it is fixed by seeding the type in te-api again, not by retrying from here{reference}.',
+      'That credential type can be issued but not asked for back: its format carries no verifiable type identifier, so no verification can request it. To verify this customer, use a type issued as SD-JWT{reference}.',
     teApiLink:
       'te-api could not complete the link. The most common reason is that this account does not yet have a TripleEnable wallet registered; the real reason is in te-api’s log{reference}.',
     teApiUnavailable: 'The credential issuer is not operational right now{reference}.',

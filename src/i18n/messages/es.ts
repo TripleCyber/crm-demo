@@ -841,8 +841,11 @@ export const es: PartialMessages = {
     statusFailed: 'no se ha podido leer el estado de la verificación; mira el log del servidor',
     teApiNotFound:
       'te-api ha rechazado la llamada. La puerta B2B contesta lo mismo para ocho motivos distintos (token, recurso, organización, padrón o scope), así que el motivo real está en el registro de te-api{reference}.',
+    // Ver la nota larga en `en.ts`: el consejo de volver a sembrar el tipo era
+    // falso —el `vct` no falta del padrón, falta del formato— y además mandaba
+    // a la terminal a repetir un comando que no podía funcionar.
     teApiNoVct:
-      'te-api no puede pedir ese tipo de credencial de vuelta: le falta el `vct` en el padrón de la organización. Se emite pero no se verifica, y se arregla volviendo a sembrar el tipo en te-api, no reintentando desde aquí{reference}.',
+      'Ese tipo de credencial se puede emitir, pero no pedir de vuelta: su formato no lleva identificador de tipo verificable, así que ninguna verificación puede solicitarlo. Para verificar a este cliente, usa un tipo emitido como SD-JWT{reference}.',
     teApiLink:
       'te-api no ha podido completar el vínculo. El motivo más habitual es que esa cuenta todavía no tiene una cartera de TripleEnable dada de alta; el motivo real está en el registro de te-api{reference}.',
     teApiUnavailable: 'El emisor de credenciales no está operativo ahora mismo{reference}.',
