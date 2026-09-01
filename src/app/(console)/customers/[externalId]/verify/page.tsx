@@ -37,7 +37,7 @@ export default async function VerifyCustomerPage({
   const t = await getTranslator();
   const { externalId } = await params;
   const { level: rawLevel } = await searchParams;
-  const { session, customer, credentialTypes, teApiWarning } =
+  const { session, customer, credentialTypes, teApiWarning, walletLinked } =
     await loadCustomerContext(externalId);
 
   if (customer === null) notFound();
@@ -83,6 +83,7 @@ export default async function VerifyCustomerPage({
         credentialTypes={credentialTypes}
         agent={session.agent}
         initialLevel={initialLevel}
+        walletLinked={walletLinked}
       />
     </>
   );

@@ -240,6 +240,35 @@ export async function POST(request: Request): Promise<NextResponse> {
           // Sirve para que en el móvil del titular ponga quién le está llamando.
           actor: session.agent,
         });
+        // ── El aviso que no salió ──────────────────────────────────────────
+        //
+        // te-api contesta `200` toque o no toque el timbre —la fila nace señuelo
+        // si no hay a quién despertar—, así que hasta ahora esto seguía adelante
+        // y la pantalla prometía «hemos avisado a su móvil» con cinco minutos de
+        // cuenta atrás para un aviso inexistente.
+        //
+        // Ahora lo dice: `delivery.status`. Se para aquí y **por el mismo camino
+        // que un timbre que falla**, no con un 200 adornado, porque es la misma
+        // situación — no ha salido nada— y la ceremonia no debe quedar anotada
+        // como pendiente. La sesión de presentación abierta se deja caducar
+        // sola, igual que en el `catch`.
+        if (wakeup.delivery?.status === 'not_delivered') {
+          console.error('[crm] tocando el timbre: te-api no entregó el aviso', {
+            reason: wakeup.delivery.reason,
+            wakeupId: wakeup.wakeupId,
+          });
+          return NextResponse.json(
+            {
+              error: t('errors.noWalletLink'),
+              // El código estable viaja tal cual: quien depure esta integración
+              // tiene que poder distinguirlo de un fallo de red sin leer el
+              // texto, que además está traducido.
+              reason: wakeup.delivery.reason,
+            },
+            { status: 409 },
+          );
+        }
+
         wakeupId = wakeup.wakeupId;
         wakeupAt = new Date().toISOString();
       } catch (error) {

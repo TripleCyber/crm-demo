@@ -921,6 +921,14 @@ export const en = {
      * Así que el texto dice el hecho —se emite, no se puede pedir— y lo único
      * accionable: usar un tipo de los que sí se piden.
      */
+    /**
+     * El aviso que no salió, dicho como hecho y con la salida al lado.
+     *
+     * «connected service» y no «CRM»: el texto de producto no nombra la pieza
+     * que lo pinta.
+     */
+    noWalletLink:
+      'No alert was sent: this customer has no wallet linked to your organisation, so there was nobody to ring. Show them the QR if they are in front of you, or issue them a credential first — that is what creates the link.',
     teApiNoVct:
       'That credential type can be issued but not asked for back: the platform does not build a presentation request for its format yet. To verify this customer, use a credential type issued as SD-JWT or as a W3C JWT credential{reference}.',
     teApiLink:

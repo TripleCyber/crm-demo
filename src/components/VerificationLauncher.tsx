@@ -82,6 +82,7 @@ export function VerificationLauncher({
   credentialTypes,
   agent,
   initialLevel,
+  walletLinked,
 }: {
   externalId: string;
   holderName: string;
@@ -100,6 +101,14 @@ export function VerificationLauncher({
   agent: { readonly id: string; readonly displayName: string };
   /** Con qué nivel se ha entrado, según el enlace que se pulsó en la ficha. */
   initialLevel: Level;
+  /**
+   * Si este cliente tiene cartera vinculada con esta organización.
+   *
+   * `undefined` = no se ha podido averiguar, y entonces **no se afirma nada**:
+   * los dos botones se comportan como siempre. Sale del directorio de vínculos,
+   * no de la respuesta del timbre. Ver `hasActiveWalletLink`.
+   */
+  walletLinked: boolean | undefined;
 }) {
   const router = useRouter();
   const t = useTranslator();
@@ -285,13 +294,37 @@ export function VerificationLauncher({
                 —«está al teléfono» en vez de «push»— es lo que hace que no haya que
                 elegir bien para acertar.
               */}
+              {/*
+                Y si no hay cartera a la que avisar, se dice **antes** de
+                disparar. Lo que había era una promesa falsa: te-api contesta
+                200 igual, así que la pantalla decía «hemos avisado a su móvil»
+                y arrancaba cinco minutos de cuenta atrás para un aviso que
+                nació señuelo. El agente se quedaba mirando un reloj.
+
+                Sólo cuando se sabe que NO: con `undefined` —el directorio no
+                contestó— no se afirma nada y todo sigue como antes.
+              */}
+              {walletLinked === false && (
+                <p className="alert" style={{ marginTop: 0 }}>
+                  {t.rich('verify.alertNoWallet', { name: holderName })}
+                </p>
+              )}
               <div className="row" style={{ alignItems: 'stretch' }}>
                 <button
                   type="button"
                   onClick={() => void startRequest('phone')}
-                  disabled={busy !== undefined || type === '' || selected.length === 0}
+                  disabled={
+                    busy !== undefined ||
+                    type === '' ||
+                    selected.length === 0 ||
+                    // No es un aviso que se pueda ignorar pulsando igual: el
+                    // botón no puede cumplir lo que su rótulo promete.
+                    walletLinked === false
+                  }
                 >
-                  {t(busy === 'phone' ? 'verify.alertPhoneBusy' : 'verify.alertPhone')}
+                  {walletLinked === false
+                    ? t('verify.alertPhoneNoWallet')
+                    : t(busy === 'phone' ? 'verify.alertPhoneBusy' : 'verify.alertPhone')}
                 </button>
                 <button
                   type="button"

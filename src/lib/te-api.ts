@@ -3,6 +3,7 @@ import 'server-only';
 import type { MessageKey, Translator } from '@/i18n/translate';
 
 import { getB2bToken, invalidateB2bToken } from './b2b-token';
+import { logConsoleFailure } from './console-failures';
 import type { PublicJwk } from './did-document';
 import type { OrganizationConfig } from './organization';
 
@@ -183,6 +184,22 @@ export interface WakeupInput {
 export interface WakeupResult {
   readonly wakeupId: string;
   readonly expiresAt: string;
+  /**
+   * Si el aviso salió o no, tal y como lo dice te-api.
+   *
+   * `not_delivered` + `no_wallet_link` = no había a quién despertar y no va a
+   * salir nada. Es lo único que te-api revela de las cinco razones por las que
+   * un aviso puede no sonar; `queued` significa «se encoló» y **no** promete que
+   * el teléfono vaya a sonar.
+   *
+   * Opcional porque un te-api anterior a este campo no lo manda: entonces se lee
+   * como `undefined` y esta integración se comporta como antes, en vez de tratar
+   * la ausencia como un fallo.
+   */
+  readonly delivery?: {
+    readonly status: 'queued' | 'not_delivered';
+    readonly reason: 'no_wallet_link' | null;
+  };
 }
 
 export interface IssueCredentialInput {
@@ -460,8 +477,12 @@ export async function requestPresentation(
  * contestar, y si no resuelve a nadie la fila nace señuelo y caduca sola. Es
  * deliberado: si la respuesta cambiara, este CRM sería un oráculo para averiguar
  * quién tiene cartera de TripleEnable probando identificadores. Por eso aquí no
- * hay nada que interpretar, y la pantalla no puede decir «este cliente no tiene
- * la app» — el 200 no lo dice.
+ * hay nada que interpretar: **el 200 sigue sin decir nada**.
+ *
+ * Lo que sí se puede saber, y por otro sitio, es si este cliente tiene un
+ * vínculo activo con esta organización: lo publica `GET /v1/b2b/links` a la
+ * organización dueña del vínculo. Ver `hasActiveWalletLink`, que es de donde la
+ * pantalla saca el hecho **antes** de tocar el timbre — no de aquí.
  */
 export async function sendWakeup(
   organization: OrganizationConfig,
@@ -482,6 +503,63 @@ export async function sendWakeup(
       actor: { id: input.actor.id, displayName: input.actor.displayName },
     },
   });
+}
+
+/**
+ * ¿Tiene este cliente una cartera vinculada con nosotros?
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  POR QUÉ ESTO NO ES UN ORÁCULO, Y POR QUÉ NO SE PREGUNTA EN EL TIMBRE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `POST /v1/b2b/wakeups` contesta lo mismo haya cartera o no, y **eso no se
+ * toca**: es lo que impide usar el timbre para descubrir quién tiene la app
+ * probando identificadores. Pero el mismo hecho ya se le publica a la
+ * organización dueña del vínculo por `GET /v1/b2b/links?subjectReference=…`,
+ * que filtra por la huella de esa referencia y sólo devuelve vínculos activos.
+ * O sea: preguntarlo aquí **no revela nada nuevo**, porque es literalmente la
+ * llamada que ya existe para contestarlo.
+ *
+ * Y hay una razón para preguntarlo por aquí y no pedir el dato en la respuesta
+ * del timbre, más allá de la privacidad:
+ *
+ *  1. **El scope no es el mismo.** El timbre acepta `verifications:request` a
+ *     secas; el directorio exige `credentials:issue`. Meter el hecho en la
+ *     respuesta del timbre se lo enseñaría a una credencial más débil de la que
+ *     hoy hace falta para leerlo — eso sí sería una fuga.
+ *  2. **Llega tarde.** La pantalla necesita saberlo *antes* de disparar, para
+ *     no prometer un aviso que no va a salir. Un campo en la respuesta del
+ *     timbre se conoce cuando la ceremonia ya ha empezado.
+ *
+ * ⚠️ Contesta por **el vínculo y nada más**. No dice si el titular está
+ * suspendido, si retiró la cartera, si está en el escalón de bloqueo o si tiene
+ * algún aparato elegible: esas cuatro razones también hacen que el timbre no
+ * suene, y ninguna se publica en ningún sitio. Siguen siendo indistinguibles de
+ * un envío bueno, que es como tienen que seguir.
+ *
+ * `undefined` = no se ha podido averiguar. La pantalla entonces **no afirma
+ * nada** y se comporta como antes: es mejor no decir que decir de más.
+ */
+export async function hasActiveWalletLink(
+  organization: OrganizationConfig,
+  subjectReference: string,
+): Promise<boolean | undefined> {
+  try {
+    const query = new URLSearchParams({ subjectReference, limit: '1' });
+    const result = await callB2b<{ links: readonly unknown[] }>(
+      organization,
+      organization.issuerUrl,
+      `/v1/b2b/links?${query.toString()}`,
+      { method: 'GET' },
+    );
+    return result.links.length > 0;
+  } catch (error) {
+    // No se propaga: que el directorio no conteste no puede impedir pedir una
+    // verificación. Se degrada a «no lo sé», que es un estado que la pantalla
+    // ya sabe pintar.
+    logConsoleFailure(error, 'no se pudo consultar el directorio de vínculos');
+    return undefined;
+  }
 }
 
 /**

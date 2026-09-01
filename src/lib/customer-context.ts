@@ -7,7 +7,12 @@ import { logConsoleFailure } from './console-failures';
 import { resolveCredentialTypes, type CredentialTypeView } from './credential-profiles';
 import { findCustomer, type Customer } from './customers';
 import { getEmployeeSession, type EmployeeSession } from './session';
-import { describeTeApiError, fetchB2bOrganizationCached, TeApiError } from './te-api';
+import {
+  describeTeApiError,
+  fetchB2bOrganizationCached,
+  hasActiveWalletLink,
+  TeApiError,
+} from './te-api';
 
 /**
  * Lo que las tres pantallas de un cliente necesitan saber antes de pintar nada.
@@ -44,6 +49,21 @@ export interface CustomerContext {
   readonly issuerDid: string | undefined;
   /** Qué falló al preguntarle a te-api, si falló. */
   readonly teApiWarning: string | undefined;
+  /**
+   * Si este cliente tiene una cartera vinculada con esta organización.
+   *
+   * `undefined` = no se ha podido averiguar, y entonces la pantalla no afirma
+   * nada. Sale de `GET /v1/b2b/links`, que es quien publica este hecho a la
+   * organización dueña del vínculo; **no** de la respuesta del timbre, que
+   * contesta igual haya cartera o no y tiene que seguir haciéndolo. Ver
+   * `hasActiveWalletLink`.
+   *
+   * Sólo dice eso: hay vínculo o no lo hay. Un titular vinculado puede seguir
+   * sin recibir el aviso —suspendido, sin la cartera puesta, bloqueado, sin
+   * aparato elegible— y ninguna de esas cuatro cosas se sabe aquí ni se puede
+   * saber.
+   */
+  readonly walletLinked: boolean | undefined;
 }
 
 export async function loadCustomerContext(externalId: string): Promise<CustomerContext> {
@@ -57,19 +77,28 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
       credentialTypes: [],
       issuerDid: undefined,
       teApiWarning: undefined,
+      walletLinked: undefined,
     };
   }
 
   const t = await getTranslator();
 
   try {
-    const organization = await fetchB2bOrganizationCached(session.organization);
+    // Las dos en paralelo: son independientes y encadenarlas sumaría una ida y
+    // vuelta a una pantalla que alguien tiene delante. El directorio no puede
+    // tumbar la carga —`hasActiveWalletLink` se traga su propio fallo y devuelve
+    // `undefined`—, así que no hace falta un `allSettled`.
+    const [organization, walletLinked] = await Promise.all([
+      fetchB2bOrganizationCached(session.organization),
+      hasActiveWalletLink(session.organization, customer.externalId),
+    ]);
     return {
       session,
       customer,
       credentialTypes: resolveCredentialTypes(t, organization.credentialTypes, customer),
       issuerDid: organization.did,
       teApiWarning: undefined,
+      walletLinked,
     };
   } catch (error) {
     return {
@@ -77,6 +106,7 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
       customer,
       credentialTypes: [],
       issuerDid: undefined,
+      walletLinked: undefined,
       // `describeTeApiError` sí traduce lo suyo a algo que un agente entiende.
       // Lo que caía en la otra rama era el mensaje crudo de `B2bTokenError` o
       // de la configuración —«Logto ha rechazado el token M2M de eptrz3ww9y1n

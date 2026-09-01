@@ -848,6 +848,8 @@ export const es: PartialMessages = {
     // falso —re-sembrar no crea un identificador que el emisor no publica— y el
     // motivo tampoco era el que parecía: cada formato se pide por una clave
     // distinta y la plataforma todavía no construye la de los `mso_mdoc`.
+    noWalletLink:
+      'No se ha enviado ningún aviso: este cliente no tiene una cartera vinculada con vuestra organización, así que no había a quién llamar. Enséñale el QR si está delante, o emítele antes una credencial — que es lo que crea el vínculo.',
     teApiNoVct:
       'Ese tipo de credencial se puede emitir, pero no pedir de vuelta: la plataforma todavía no construye una petición de presentación para su formato. Para verificar a este cliente, usa un tipo emitido como SD-JWT o como credencial JWT del modelo W3C{reference}.',
     teApiLink:
