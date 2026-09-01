@@ -233,46 +233,6 @@ export async function searchCustomers(
   }));
 }
 
-/**
- * La ficha de un titular a partir del correo con el que se autenticó.
- *
- * ═══════════════════════════════════════════════════════════════════════════
- *  ES LA DECISIÓN «QUIÉN ERES EN MI BANCO», Y LA TOMA EL BANCO
- * ═══════════════════════════════════════════════════════════════════════════
- *
- * El portal del cliente la usa para pasar de «esta persona se ha autenticado
- * con TripleEnable y su correo verificado es X» a «X es mi cliente
- * BD-77310092». Esa traducción es **suya y de nadie más**: te-api no ve el
- * correo, no ve el padrón y no tiene por qué. Lo único que recibe es el
- * `external_id` resultante, ya como huella.
- *
- * El correo llega del ID token verificado, **nunca de un formulario**. Si
- * viniera del navegador, cualquiera escribiría el correo de otro y se ataría al
- * cliente de otro — y te-api no lo podría ver, porque para te-api el `sub` del
- * ID token es el bueno y el `external_id` es cosa del banco.
- *
- * `lower(...)` en los dos lados porque un correo no distingue mayúsculas en la
- * parte del dominio y en la práctica tampoco en la local: `Teofilo@te.com`
- * autenticándose contra una ficha guardada como `teofilo@te.com` tiene que
- * encontrarse, o el portal dice «no te conozco» a un cliente que sí está.
- */
-export async function findCustomerByEmail(orgId: string, email: string): Promise<Customer | null> {
-  const rows = await query<CustomerRow>(
-    `select ${SELECT_COLUMNS} from customer c
-      where c.org_id = $1 and lower(c.email) = lower($2)
-      order by c.created_at asc
-      limit 2`,
-    [orgId, email],
-  );
-  // Dos fichas con el mismo correo es un dato sucio del padrón, y elegir una al
-  // azar ataría al titular al cliente equivocado — un vínculo mal hecho hace
-  // sonar el teléfono de una persona por una operación de otra. Se prefiere no
-  // vincular y que alguien lo arregle.
-  if (rows.length !== 1) return null;
-  const row = rows[0];
-  return row === undefined ? null : toCustomer(row);
-}
-
 export async function findCustomer(orgId: string, externalId: string): Promise<Customer | null> {
   const rows = await query<CustomerRow>(
     `select ${SELECT_COLUMNS} from customer c where c.org_id = $1 and c.external_id = $2`,

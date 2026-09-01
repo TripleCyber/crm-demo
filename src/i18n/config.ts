@@ -16,9 +16,9 @@
  *
  * Tampoco va en la ruta (`/en/customers`). Meter un segmento de idioma delante
  * cambiaría **todas** las direcciones del producto: los enlaces que un agente
- * pega en un chat para pasar una verificación a un compañero, el
- * `redirect_uri` declarado en Logto, y `/.well-known/did.json`, que tiene que
- * responder en la raíz del dominio o la cartera no resuelve el DID.
+ * pega en un chat para pasar una verificación a un compañero, y
+ * `/.well-known/did.json`, que tiene que responder en la raíz del dominio o la
+ * cartera no resuelve el DID.
  *
  * Así que el idioma va en **una cookie**, la elige quien mira la pantalla, y se
  * cambia en caliente: no hay que reconstruir la imagen ni tocar el entorno.

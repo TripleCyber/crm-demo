@@ -65,7 +65,7 @@ export function brandStyleOf(organization: OrganizationConfig): CSSProperties | 
   return {
     // El acento sobre papel: enlaces, foco, el filo de la tarjeta de oferta.
     '--navy': brand.accent,
-    // La superficie oscura: la barra de la consola y la cabecera del portal.
+    // La superficie oscura: la barra lateral de la consola.
     '--navy-deep': brand.surface,
     // La regla dentro de esa superficie. Un 14 % de blanco: se ve la separación
     // y no se convierte en una raya.

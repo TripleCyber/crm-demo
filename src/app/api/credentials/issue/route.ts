@@ -5,7 +5,6 @@ import type { Translator } from '@/i18n/translate';
 import { recordIssuedOffer } from '@/lib/credential-offers';
 import { findDeclaredType, resolveCredentialType } from '@/lib/credential-profiles';
 import { buildCredentialClaims, findCustomer, type Customer } from '@/lib/customers';
-import { getPortalBaseUrl } from '@/lib/portal-oidc';
 import { renderQrSvg } from '@/lib/qr';
 import { getEmployeeSession } from '@/lib/session';
 import {
@@ -42,22 +41,23 @@ import {
  * claims lleva, y de paso el error deja de ser el `{ error, requestId }` opaco
  * de te-api y pasa a nombrar el tipo.
  *
- * ## Los cuatro canales, y por qué el canal no cambia la credencial
+ * ## Los tres canales, y por qué el canal no cambia la credencial
  *
  * `delivery` decide **cómo llega la oferta**, no qué lleva dentro ni con qué
- * autoridad. La oferta es la misma en los cuatro: la misma URI, la misma firma
+ * autoridad. La oferta es la misma en los tres: la misma URI, la misma firma
  * y el mismo `tx_code`. Es la regla del artifact —«el canal nunca es una
  * entrada de confianza»— escrita en código: este `switch` toca la entrega y no
  * puede tocar `issueCredential`, que ya ha ocurrido cuando se lee.
+ *
+ * Fueron cuatro: había un `app` que dejaba la oferta esperando en el portal de
+ * clientes. El portal se retiró —esta consola es interna del banco— y con él
+ * ese canal: una oferta que nadie puede recoger no es una entrega.
  *
  * - `qr` — el cliente está delante y mira esta pantalla.
  * - `link` — el enlace, para pegarlo donde haga falta.
  * - `email` — se compone un borrador `mailto:` **sin el `tx_code` dentro**, y
  *   lo manda el agente desde su propio correo. El CRM no tiene servidor de
  *   correo y no se le pone uno para esto.
- * - `app` — la oferta se queda esperando en `/portal` y sólo la ve quien entre
- *   con su cuenta. Es el único de los cuatro en el que quien recoge está
- *   autenticado.
  *
  * ## Los números oficiales van DENTRO
  *
@@ -77,9 +77,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Cómo se le hace llegar la oferta al titular. Ver la cabecera. */
-type DeliveryChannel = 'qr' | 'link' | 'email' | 'app';
+type DeliveryChannel = 'qr' | 'link' | 'email';
 
-const DELIVERY_CHANNELS: readonly DeliveryChannel[] = ['qr', 'link', 'email', 'app'];
+const DELIVERY_CHANNELS: readonly DeliveryChannel[] = ['qr', 'link', 'email'];
 
 function isDeliveryChannel(value: unknown): value is DeliveryChannel {
   return typeof value === 'string' && (DELIVERY_CHANNELS as readonly string[]).includes(value);
@@ -191,26 +191,20 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // El QR se dibuja **sólo para el canal que lo usa**. Pintarlo también en
     // una entrega por correo sería trabajo de servidor para un SVG que nadie
-    // mira. El enlace, en cambio, vuelve siempre: es la misma URI en los cuatro
+    // mira. El enlace, en cambio, vuelve siempre: es la misma URI en los tres
     // canales y el agente tiene que poder leerla para depurar.
     const qrSvg = delivery === 'qr' ? await renderQrSvg(offer.offerUri) : undefined;
 
-    // ── El registro, para los cuatro canales ───────────────────────────────
+    // ── El registro, para los tres canales ─────────────────────────────────
     //
-    // Antes sólo se anotaba el canal `app`, porque era el único que lo
-    // necesitaba **para funcionar**: la oferta tiene que estar en algún sitio
-    // hasta que el titular entre en el portal.
+    // La ficha del cliente tiene que poder contestar «¿ya se le ofreció su
+    // credencial, cuándo y por dónde?». Eso el banco lo sabe de sus propios
+    // actos, y es lo más que se puede decir con verdad — **si el titular la
+    // aceptó no lo sabe nadie**, te-api no tiene ruta que lo diga, y por eso la
+    // ficha sigue sin pintar ninguna insignia de «credencial activa».
     //
-    // Ahora se anotan los cuatro, por una razón distinta: la ficha del cliente
-    // tiene que poder contestar «¿ya se le ofreció su credencial, cuándo y por
-    // dónde?». Eso el banco lo sabe de sus propios actos, y es lo más que se
-    // puede decir con verdad — **si el titular la aceptó no lo sabe nadie**,
-    // te-api no tiene ruta que lo diga, y por eso la ficha sigue sin pintar
-    // ninguna insignia de «credencial activa».
-    //
-    // El `delivery` va en la fila porque el portal se queda sólo con las suyas:
-    // una oferta que salió por QR ya se la llevó quien estaba delante de la
-    // pantalla. Ver `credential-offers.ts`.
+    // El `delivery` va en la fila porque es parte del hecho que se registra: se
+    // le ofreció por QR, o por correo. Ver `credential-offers.ts`.
     await recordIssuedOffer({
       orgId: session.organization.orgId,
       externalId: customer.externalId,
@@ -239,13 +233,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       // la regla de qué NO puede ir dentro —el `tx_code`— es una regla de
       // seguridad, y esas no se dejan en el navegador.
       mail: delivery === 'email' ? composeMailDraft(t, customer, offer.offerUri) : undefined,
-      // Dónde va el titular a recogerla. Sólo en su canal, y es una dirección
-      // pública: no lleva la oferta dentro.
-      // La dirección sale de `CRM_PORTAL_BASE_URL` y nunca del `Host` de la
-      // petición: es a donde va el titular a recoger su credencial, y componerla
-      // con algo que escribe quien llama sería dejar que un tercero decida a
-      // dónde manda este banco a sus clientes.
-      portalUrl: delivery === 'app' ? `${getPortalBaseUrl(session.organization)}/portal` : undefined,
     });
   } catch (error) {
     if (error instanceof TeApiError) {

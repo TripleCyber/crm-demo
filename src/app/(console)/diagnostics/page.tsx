@@ -190,22 +190,6 @@ export default async function DiagnosticsPage() {
           <dd className="mono">{session.organization.issuerUrl}</dd>
           <dt>{t('diagnostics.verifierBase')}</dt>
           <dd className="mono">{session.organization.verifierUrl}</dd>
-          <dt>{t('diagnostics.customerPortal')}</dt>
-          <dd>
-            {session.organization.portal === undefined ? (
-              <span className="warn">
-                {t('diagnostics.portalUndeclared')}{' '}
-                <Link href="/settings">{t('diagnostics.setInSettings')}</Link>
-              </span>
-            ) : (
-              // El `client_id` del portal sí se enseña, y el M2M no. No es una
-              // incoherencia: éste viaja en la URL de autorización de cada
-              // login, así que ya lo ve cualquiera que mire la barra del
-              // navegador, y es además el `aud` que te-api exige — el valor que
-              // hay que cuadrar cuando el vínculo falla con un 403 mudo.
-              <span className="mono">{session.organization.portal.clientId}</span>
-            )}
-          </dd>
         </dl>
       </div>
 

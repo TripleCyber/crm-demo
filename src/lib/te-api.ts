@@ -367,54 +367,6 @@ export async function fetchB2bOrganizationCached(
   return value;
 }
 
-/** Lo que devuelve `POST /v1/b2b/links`. */
-export interface CustomerLink {
-  readonly linkId: string;
-  /** `true` si este vínculo sustituyó a otro que apuntaba a otro perfil. */
-  readonly replaced: boolean;
-}
-
-export interface LinkCustomerInput {
-  /** El `external_id` del cliente en el padrón del banco. El mismo que el `sub`. */
-  readonly subjectReference: string;
-  /**
-   * El ID token que Logto emitió al autenticar al titular **en este portal**.
-   *
-   * Es la prueba entera: te-api comprueba su firma contra el JWKS de Logto y
-   * que su `aud` es el `portal_client_id` de esta organización. Sin él la ruta
-   * responde `cannot_complete` sin mirar nada más — un banco no declara a quién
-   * vincula, lo demuestra.
-   *
-   * **Y tiene que ser reciente.** te-api sólo acepta ID tokens de menos de
-   * cinco minutos, así que esto se llama en el callback del login y no cuando
-   * al titular le apetezca pulsar un botón.
-   */
-  readonly idToken: string;
-  /** Su tipo de credencial, si el banco ya lo sabe. Opcional a propósito. */
-  readonly type?: string;
-}
-
-/**
- * `POST /v1/b2b/links` — ata el cliente del banco al perfil de TripleEnable.
- *
- * Es lo que hace que `POST /v1/b2b/wakeups` pueda hacer sonar el teléfono de
- * esta persona: sin vínculo activo, el despertador resuelve como señuelo y
- * nadie se entera de nada, que es el comportamiento correcto.
- */
-export async function linkCustomer(
-  organization: OrganizationConfig,
-  input: LinkCustomerInput,
-): Promise<CustomerLink> {
-  return callB2b<CustomerLink>(organization, organization.issuerUrl, '/v1/b2b/links', {
-    method: 'POST',
-    body: {
-      subjectReference: input.subjectReference,
-      idToken: input.idToken,
-      ...(input.type === undefined ? {} : { type: input.type }),
-    },
-  });
-}
-
 /** `POST /v1/b2b/credentials` — crea la oferta OID4VCI pre-autorizada. */
 export async function issueCredential(
   organization: OrganizationConfig,
@@ -831,24 +783,27 @@ async function toTeApiError(response: Response, path: string): Promise<TeApiErro
  * Qué se estaba haciendo cuando te-api contestó mal.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  EL MISMO 403 SIGNIFICA DOS COSAS DISTINTAS SEGÚN LA RUTA
+ *  EL 403 DE LA PRESENTACIÓN NO SIGNIFICA LO QUE EL 403 DE LOS DEMÁS
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * te-api usa `cannot_complete` (403) en dos sitios que no se parecen en nada:
+ * te-api usa `cannot_complete` (403) para cosas que no se parecen en nada, y la
+ * que hay que separar es ésta:
  *
- * - **`POST /v1/b2b/links`** — el ID token no vale, o la persona todavía no
- *   tiene perfil de TripleEnable. Lo arregla el titular.
  * - **`POST /v1/b2b/presentations`** — el tipo de credencial no tiene `vct` en
  *   el padrón (`src/routes/b2b.ts`, justo después de resolver el tipo). Ese
  *   tipo **se puede emitir pero no se puede pedir de vuelta**, y no lo arregla
  *   ni el titular ni el agente: hay que volver a sembrarlo con su `vct`.
  *
  * Sin este parámetro, a un agente que intenta comprobar una identidad se le
- * decía que el cliente no tiene cartera cuando lo que pasa es que falta una
- * columna en el padrón. Son dos personas distintas las que tienen que
- * enterarse, así que son dos frases distintas.
+ * decía algo sobre el titular cuando lo que pasa es que falta una columna en el
+ * padrón. Son dos personas distintas las que tienen que enterarse, así que son
+ * dos frases distintas.
+ *
+ * Aquí hubo un tercer valor, `'link'`, para el `POST /v1/b2b/links` que hacía
+ * el portal de clientes. El portal se retiró —esta consola es interna del
+ * banco— y con él la única llamada que creaba vínculos desde aquí.
  */
-export type TeApiOperation = 'link' | 'presentation' | 'issue';
+export type TeApiOperation = 'presentation' | 'issue';
 
 /**
  * Qué falló, **como clave y datos**, sin traducir todavía.
@@ -857,11 +812,11 @@ export type TeApiOperation = 'link' | 'presentation' | 'issue';
  *  UN FALLO NO PUEDE VIAJAR YA ESCRITO EN UN IDIOMA
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * El del vínculo del portal se guarda en la cookie de sesión del titular y se
- * pinta en la siguiente petición, o en la de mañana. Si se guardara la frase
- * hecha, quedaría escrita en el idioma que estaba activo cuando falló: cambiar
- * a inglés dejaría la pantalla entera en inglés y ese aviso —el único que
- * importa— en castellano. Se guarda qué pasó, y se escribe al pintarlo.
+ * Un fallo puede nacer en una petición y pintarse en la siguiente, o en la de
+ * mañana. Si se guardara la frase hecha, quedaría escrita en el idioma que
+ * estaba activo cuando falló: cambiar a inglés dejaría la pantalla entera en
+ * inglés y ese aviso —el único que importa— en castellano. Se guarda qué pasó,
+ * y se escribe al pintarlo.
  */
 export interface TeApiFailure {
   readonly key: MessageKey;
@@ -885,13 +840,11 @@ export function describeTeApiFailure(
     return { key: 'errors.teApiNoVct', values };
   }
   if (error.status === 403) {
-    // El `403 cannot_complete` del vínculo tapa cuatro cosas a la vez y es
-    // deliberado: ID token con firma mala, `aud` de otra organización, `iat`
-    // fuera de la ventana de cinco minutos, o un `sub` que no tiene perfil en
-    // te-api — o sea, alguien que todavía no tiene cartera de TripleEnable. Ese
-    // último es el caso normal y el único accionable por el titular, así que la
-    // frase lo nombra sin afirmar que sea ése.
-    return { key: 'errors.teApiLink', values };
+    // El `cannot_complete` que queda tapa varias causas a la vez y es
+    // deliberado: te-api no dice cuál para no convertir sus respuestas en un
+    // oráculo. Así que aquí **no se inventa un motivo** — se dice que se negó y
+    // dónde está la razón de verdad.
+    return { key: 'errors.teApiCannotComplete', values };
   }
   if (error.status === 503) return { key: 'errors.teApiUnavailable', values };
   if (error.status === 429) return { key: 'errors.teApiRateLimited', values };

@@ -14,10 +14,10 @@ import { es } from './messages/es';
  * Las de Next —`next-intl` y compañía— resuelven el idioma **por la ruta**
  * (`/en/customers`) o con un `middleware` que la reescribe. Este producto no
  * puede pagar eso: sus direcciones son públicas y estables —el enlace de una
- * verificación se pega en un chat, el `redirect_uri` está declarado en Logto
- * carácter a carácter, y `/.well-known/did.json` tiene que responder en la raíz
- * o la cartera no resuelve el `did:web`—. Meter un segmento delante las cambia
- * todas, y eso es cambiar comportamiento para ganar un desplegable.
+ * verificación se pega en un chat, y `/.well-known/did.json` tiene que
+ * responder en la raíz o la cartera no resuelve el `did:web`—. Meter un
+ * segmento delante las cambia todas, y eso es cambiar comportamiento para ganar
+ * un desplegable.
  *
  * Lo que hacía falta cabía aquí: dos idiomas, respaldo al inglés, y cambio en
  * caliente sin reconstruir. Traer una dependencia para eso habría sido traer

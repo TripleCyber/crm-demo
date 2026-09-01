@@ -46,8 +46,8 @@ export async function setLocaleAction(formData: FormData): Promise<void> {
  *
  * ⚠ Este valor lo escribe el formulario, o sea el navegador, así que **no se
  *   puede redirigir a él tal cual**: `//otro-sitio.example` es una dirección
- *   absoluta disfrazada de ruta, y una redirección abierta en el portal de un
- *   banco es exactamente el ingrediente de un fraude por correo.
+ *   absoluta disfrazada de ruta, y una redirección abierta en una aplicación
+ *   de un banco es exactamente el ingrediente de un fraude por correo.
  *
  * Se exige una ruta interna: una sola barra al principio, y nada de `\` (que
  * algunos navegadores normalizan a `/`, con lo que `/\ejemplo.com` volvería a

@@ -27,9 +27,9 @@
 export const en = {
   /** El `<title>` y la descripción del documento. */
   app: {
-    fallbackTitle: 'CRM',
-    fallbackDescription: 'Agent console and customer portal',
-    description: 'Agent console and customer portal for {organization}',
+    fallbackTitle: 'Agent console',
+    fallbackDescription: 'Agent console',
+    description: 'Agent console for {organization}',
   },
 
   /** La barra lateral de la consola. */
@@ -94,7 +94,7 @@ export const en = {
     customer: 'Account holder',
   },
 
-  /** Los cuatro canales de entrega (`lib/delivery.ts`). */
+  /** Los tres canales de entrega (`lib/delivery.ts`). */
   delivery: {
     emailLabel: 'Email',
     emailHint: 'To the email on file, from your own mailbox',
@@ -105,8 +105,9 @@ export const en = {
     qrLabel: 'QR',
     qrHint: 'The customer is in front of you and scans it off this screen',
     qrPhrase: 'by QR',
-    appLabel: 'From our app',
-    appHint: 'Waiting in the portal, already signed in',
+    // El canal `app` ya no se ofrece —se fue con el portal—, pero su frase se
+    // queda: el historial de la ficha todavía tiene filas suyas y hay que poder
+    // leerlas. Ver `RETIRED_PHRASES` en `lib/delivery.ts`.
     appPhrase: 'in their customer area',
   },
 
@@ -279,11 +280,6 @@ export const en = {
     mailOpenDraft: 'Open the draft',
     mailNote:
       'The one-time code is <b>not</b> in that text, and that is not an oversight: if it travelled in the same email as the link, whoever read the mailbox would have both halves.',
-    portalTitle: 'Waiting in the portal',
-    portalBody:
-      'The offer is stored for this customer. They will see it when they sign in at <code>{url}</code> with their TripleEnable account, and only they see it: it is the only one of the four channels where whoever collects the offer is authenticated.',
-    portalNote:
-      'Tell them over the phone to sign in to their customer area. And the one-time code out loud, on this same call.',
     walletLinkLabel: 'the offer',
     officialNumbersSent: 'Sent inside: {numbers}',
     offerId: 'Offer {id}',
@@ -352,7 +348,7 @@ export const en = {
      * al canal que sí funciona.
      */
     alertNoWallet:
-      '<b>{name} has no wallet linked to this entity</b>, so alerting their mobile would ring nowhere. Use the QR if they are in front of you, or issue them a credential first.',
+      '<b>{name} has no wallet linked to this entity</b>, so alerting their mobile would ring nowhere. Use the QR if they are in front of you, or issue them a credential: they are linked once they accept it in their wallet.',
     alertPhoneNoWallet: 'No wallet to alert',
     requestFailed: 'the request failed ({status})',
     noServer: 'the server could not be reached',
@@ -469,7 +465,7 @@ export const en = {
 
     machineTitle: 'Machine-to-machine application',
     machineNote:
-      'What authenticates this CRM server against te-api. It is not the portal application, and it cannot be: this one authenticates a server, that one authenticates a person.',
+      'What authenticates this installation against te-api. It is the only application it declares, and it authenticates a server — never a person.',
     m2mClientId: 'Client ID',
     m2mSecret: 'Client secret',
     m2mSecretNote:
@@ -484,23 +480,10 @@ export const en = {
 
     brandTitle: 'Brand',
     brandNote:
-      'Two colours and a monogram. The accent goes on white; the surface is the sidebar and the portal header. Status colours are not brand and are not set here.',
+      'Two colours and a monogram. The accent goes on white; the surface is the sidebar. Status colours are not brand and are not set here.',
     brandAccent: 'Accent',
     brandSurface: 'Surface',
     brandMonogram: 'Monogram',
-
-    portalTitle: 'Customer portal',
-    portalNote:
-      'Optional. Without it /portal says so on screen instead of breaking halfway through a login.',
-    portalClientId: 'Client ID',
-    portalClientSecret: 'Client secret',
-    portalClientSecretNote: 'The code exchange goes with client_secret_basic, server side only.',
-    portalLinkType: 'Link type',
-    portalLinkTypeNote:
-      'Optional. It has to be a credential type from this organization\u2019s roster in te-api, or linking fails with invalid_request.',
-    portalBaseUrl: 'Portal address',
-    portalBaseUrlNote:
-      'The redirect_uri is built from it, and Logto compares it character by character with the one declared in the application.',
 
     platformTitle: 'Platform addresses',
     platformNote:
@@ -524,7 +507,6 @@ export const en = {
     colourInvalid: 'A hex colour: #rgb, #rrggbb, or rrggbb without the hash.',
     brandPair: 'Both colours together, or neither. Half a brand reads as a half-painted screen.',
     monogramTooLong: 'One or two characters. More than that is a smudge at 32 pixels.',
-    portalPair: 'The portal client ID and secret go together, or neither.',
     urlInvalid: 'An absolute http or https address.',
     secretWhitespace: 'That value has a space in it. Paste it again without leading or trailing space.',
     secretLooksLikeFingerprint:
@@ -782,8 +764,6 @@ export const en = {
     officialNumbersNone: 'none declared ·',
     issuerBase: 'te-api (issuing)',
     verifierBase: 'te-api (verification)',
-    customerPortal: 'Customer portal',
-    portalUndeclared: 'no application declared ·',
     brand: 'Brand',
     brandNone: 'the default palette ·',
     setInSettings: 'set it in Settings',
@@ -825,60 +805,6 @@ export const en = {
     localeFallback: 'Fallback',
     localeFallbackDetail:
       'English. A key with no translation is shown in English; the key name is never painted on screen.',
-  },
-
-  /** El portal del cliente. */
-  portal: {
-    header: 'Customer portal',
-    fallbackName: 'Customer portal',
-    titleGeneric: 'Your account',
-    title: 'Your {organization} account',
-    intro:
-      'Link your account with your TripleEnable identity. From that moment on we can alert you on your mobile when something needs confirming, without calling you and without asking you for details by email.',
-    signInTitle: 'Sign in to link',
-    signInBody:
-      'We take you to TripleEnable so you can confirm it is you. We never see your password at any point.',
-    signIn: 'Sign in with TripleEnable',
-    signInDisabled: 'Sign-in is disabled because configuration is missing. See the notice above.',
-    linked: 'Your {organization} account is linked to your TripleEnable identity.',
-    offerTitle: 'You have a credential waiting',
-    offerBody:
-      'We have issued it to you from customer service. Open it on the phone where you have your TripleEnable wallet and save it: from that moment on we can check that it is you without asking you for details over the phone.',
-    offerSave: 'Save to my wallet',
-    offerType: 'Type',
-    offerExpires: 'Expires',
-    offerPinNote:
-      'It will ask you for a numeric code. We give it to you over the phone or in the branch, and <b>it never appears on this screen or in an email</b>: that is what stops this credential ending up on somebody else’s phone.',
-    whoTitle: 'Who you are',
-    signedInAs: 'You signed in as',
-    verifiedEmail: 'Verified email',
-    yourRecord: 'Your record at {organization}',
-    account: 'Account',
-    linkTitle: 'The link',
-    linkReference: 'Reference',
-    linkConfirmedAt: 'Confirmed on',
-    linkPrevious: 'Previous link',
-    linkPreviousReplaced: 'Replaced by this one.',
-    linkNote:
-      '{organization} does not know which TripleEnable identity is behind this, and TripleEnable does not know you are our customer: the only thing that exists is this reference. You can withdraw it from your wallet whenever you want.',
-    supportTitle: 'For support',
-    supportBody: 'If you call us, give us this reference: {requestId}',
-    relink: 'Link again',
-    signOut: 'Sign out',
-    errorGeneric: 'Something did not go right.',
-    errorNoPortal:
-      'Signing in with TripleEnable is not available in this portal yet. If you need to link your account, call us and we will do it with you.',
-    errorSessionLost:
-      'The sign-in thread was lost. It usually happens when you come back with the “back” button or if the tab has been open for a long time. Start again.',
-    errorState: 'The response does not correspond to this sign-in request. Start again.',
-    errorProvider: 'We could not complete the sign-in. Try again.',
-    errorExchange: 'We could not complete the sign-in with TripleEnable. Try again.',
-    errorUnavailable:
-      'This portal is not available right now. Try again in a while or call us.',
-    linkNoEmail: 'TripleEnable did not give us your email, so we cannot find your customer record.',
-    linkNoCustomer: 'We found no customer record with that email at {organization}.',
-    linkFailedGeneric: 'We could not complete the link.',
-    linkNoTeApi: 'We could not talk to TripleEnable right now.',
   },
 
   /** Lo que se le dice a un agente cuando algo no ha cargado. */
@@ -928,11 +854,11 @@ export const en = {
      * que lo pinta.
      */
     noWalletLink:
-      'No alert was sent: this customer has no wallet linked to your organisation, so there was nobody to ring. Show them the QR if they are in front of you, or issue them a credential first — that is what creates the link.',
+      'No alert was sent: this customer has no wallet linked to your organisation, so there was nobody to ring. Show them the QR if they are in front of you, or issue them a credential: they are linked once they accept it in their wallet.',
     teApiNoVct:
       'That credential type can be issued but not asked for back: the platform does not build a presentation request for its format yet. To verify this customer, use a credential type issued as SD-JWT or as a W3C JWT credential{reference}.',
-    teApiLink:
-      'te-api could not complete the link. The most common reason is that this account does not yet have a TripleEnable wallet registered; the real reason is in te-api’s log{reference}.',
+    teApiCannotComplete:
+      'The platform refused to complete this operation and does not say which of the possible reasons applies. The real one is in te-api’s log{reference}.',
     teApiUnavailable: 'The credential issuer is not operational right now{reference}.',
     teApiRateLimited: 'Too many requests for this organisation; wait a moment{reference}.',
     teApiBadRequest: 'te-api rejected the call data: {code}{reference}.',

@@ -35,7 +35,7 @@ import {
  *  POR QUÉ SON ACCIONES DE SERVIDOR Y NO RUTAS DE API
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Porque aquí se manejan **tres secretos**, y una acción de servidor no expone
+ * Porque aquí se manejan **dos secretos**, y una acción de servidor no expone
  * ningún endpoint que alguien pueda llamar con `curl` desde fuera: Next las
  * publica con un identificador que sólo conoce la propia página. El alta de
  * cliente ya se hacía así y por la razón contraria —no hay secreto, así que
@@ -128,7 +128,6 @@ export async function saveSettingsAction(
 
   readSecret('m2mSecret', 'm2mSecret');
   readSecret('webhookSecret', 'webhookSecret');
-  readSecret('portalClientSecret', 'portalClientSecret');
 
   // Sin secreto M2M —ni guardado ni escrito— no hay token que pedir y no hay
   // integración. Se señala en la casilla y no como aviso general: es lo único
@@ -160,29 +159,17 @@ export async function saveSettingsAction(
   const monogram = read('brandMonogram');
   if ([...monogram].length > 2) fields['brandMonogram'] = t('settings.monogramTooLong');
 
-  // ── El portal: el par también va junto ──────────────────────────────────
-  const portalClientId = read('portalClientId');
-  const willHavePortalSecret =
-    secrets.portalClientSecret !== undefined ||
-    (stored.portalClientSecret !== undefined && !clearSecrets.includes('portalClientSecret'));
-  if (portalClientId !== '' && !willHavePortalSecret) {
-    fields['portalClientSecret'] = t('settings.portalPair');
-  }
-  if (portalClientId === '' && willHavePortalSecret) {
-    fields['portalClientId'] = t('settings.portalPair');
-  }
-
   // ── Las direcciones ─────────────────────────────────────────────────────
-  const urlFields: ReadonlyArray<{ name: string; required: boolean }> = [
-    { name: 'logtoEndpoint', required: true },
-    { name: 'teApiBaseUrl', required: true },
-    { name: 'b2bResource', required: true },
-    { name: 'portalBaseUrl', required: false },
-  ];
-  for (const { name, required } of urlFields) {
+  //
+  // Las tres son obligatorias, y por eso ya no hay bandera de «opcional»: la
+  // única que lo era —la dirección pública del portal— se fue con el portal.
+  // Las tres traen valor por defecto (`PLATFORM_DEFAULTS`), así que exigirlas no
+  // le pide nada a quien despliega: sólo impide dejarlas en blanco a mano.
+  const urlFields: readonly string[] = ['logtoEndpoint', 'teApiBaseUrl', 'b2bResource'];
+  for (const name of urlFields) {
     const value = read(name);
     if (value === '') {
-      if (required) fields[name] = t('settings.required');
+      fields[name] = t('settings.required');
       continue;
     }
     if (!isAbsoluteHttpUrl(value)) fields[name] = t('settings.urlInvalid');
@@ -202,9 +189,6 @@ export async function saveSettingsAction(
     brandAccent: brandAccent ?? '',
     brandSurface: brandSurface ?? '',
     brandMonogram: monogram,
-    portalClientId,
-    portalLinkType: read('portalLinkType'),
-    portalBaseUrl: read('portalBaseUrl'),
     logtoEndpoint: read('logtoEndpoint'),
     teApiBaseUrl: read('teApiBaseUrl'),
     b2bResource: read('b2bResource'),

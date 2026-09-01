@@ -1,16 +1,16 @@
 import type { MessageKey, Translator } from '@/i18n/translate';
 
 /**
- * Los cuatro canales de entrega, con su nombre y para qué sirve cada uno.
+ * Los tres canales de entrega, con su nombre y para qué sirve cada uno.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  *  EL CANAL ES TRANSPORTE, NUNCA AUTORIDAD
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Correo, enlace, QR y «desde nuestra app» entregan **la misma oferta**: la
- * misma URI, la misma firma y el mismo `tx_code`. Elegir canal no cambia lo que
- * la cartera va a comprobar. Lo que cambia es a quién le llega y qué tiene que
- * hacer el agente a continuación, y eso es lo que dicen estos rótulos.
+ * Correo, enlace y QR entregan **la misma oferta**: la misma URI, la misma
+ * firma y el mismo `tx_code`. Elegir canal no cambia lo que la cartera va a
+ * comprobar. Lo que cambia es a quién le llega y qué tiene que hacer el agente
+ * a continuación, y eso es lo que dicen estos rótulos.
  *
  * Están aquí y no dentro del formulario porque ahora los lee también el
  * historial de la ficha: la pantalla que ofrece «QR» y la que después cuenta
@@ -21,7 +21,7 @@ import type { MessageKey, Translator } from '@/i18n/translate';
  * saber qué es una oferta pre-autorizada de OID4VCI para acertar.
  */
 
-export type DeliveryChannel = 'qr' | 'link' | 'email' | 'app';
+export type DeliveryChannel = 'qr' | 'link' | 'email';
 
 export interface DeliveryOption {
   readonly value: DeliveryChannel;
@@ -33,7 +33,7 @@ export interface DeliveryOption {
    * Cómo se lee el canal **dentro de una frase** del historial.
    *
    * Hace falta porque el rótulo del selector no encaja en prosa: «se le ofreció
-   * por Desde nuestra app» no lo escribiría nadie. El diario del banco lo lee
+   * por Correo» no lo escribiría nadie —se dice «por correo»—. El diario lo lee
    * un empleado meses después y tiene que sonar al idioma en el que se habla,
    * no a valor de un desplegable — y por eso es una clave aparte y no el mismo
    * rótulo reutilizado: la traducción de un rótulo no encaja en una frase.
@@ -41,7 +41,7 @@ export interface DeliveryOption {
   readonly phraseKey: MessageKey;
 }
 
-/** Los cuatro, en el orden del artifact. */
+/** Los tres, en el orden del artifact. */
 export const DELIVERY_OPTIONS: readonly DeliveryOption[] = [
   {
     value: 'email',
@@ -61,13 +61,29 @@ export const DELIVERY_OPTIONS: readonly DeliveryOption[] = [
     hintKey: 'delivery.qrHint',
     phraseKey: 'delivery.qrPhrase',
   },
-  {
-    value: 'app',
-    labelKey: 'delivery.appLabel',
-    hintKey: 'delivery.appHint',
-    phraseKey: 'delivery.appPhrase',
-  },
 ];
+
+/**
+ * Los canales **retirados**, que ya no se ofrecen pero siguen en el historial.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  UN CANAL RETIRADO NO SE BORRA DEL PASADO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `app` —«le espera en el portal, ya autenticado»— dejó de ofrecerse cuando se
+ * retiró el portal de clientes: sin portal, esa oferta no la recoge nadie. Pero
+ * las filas que se crearon con él **son el registro de algo que ocurrió**, y el
+ * historial de la ficha las sigue enseñando. Quitar su rótulo no borraría la
+ * fila: la dejaría escrita en jerga (`app`) en la pantalla que un empleado lee
+ * meses después.
+ *
+ * Está separado de `DELIVERY_OPTIONS` a propósito. Ésa es la lista de lo que se
+ * **puede elegir hoy**, y es la que pinta el formulario; ésta es la de lo que
+ * hay que **saber leer**. Juntarlas devolvería el canal al selector.
+ */
+const RETIRED_PHRASES: Readonly<Record<string, MessageKey>> = {
+  app: 'delivery.appPhrase',
+};
 
 /**
  * El canal, tal y como se lee en una frase del historial.
@@ -78,5 +94,7 @@ export const DELIVERY_OPTIONS: readonly DeliveryOption[] = [
  */
 export function deliveryPhrase(t: Translator, value: string): string {
   const option = DELIVERY_OPTIONS.find((entry) => entry.value === value);
-  return option === undefined ? value : t(option.phraseKey);
+  if (option !== undefined) return t(option.phraseKey);
+  const retired = RETIRED_PHRASES[value];
+  return retired === undefined ? value : t(retired);
 }

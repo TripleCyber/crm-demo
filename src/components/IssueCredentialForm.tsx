@@ -86,8 +86,6 @@ interface IssueResult {
   readonly qrSvg?: string;
   /** Sólo en el canal correo. */
   readonly mail?: MailDraft;
-  /** Sólo en el canal «desde nuestra app». */
-  readonly portalUrl?: string;
 }
 
 export function IssueCredentialForm({
@@ -320,17 +318,7 @@ export function IssueCredentialForm({
               </div>
             )}
 
-            {result.delivery === 'app' && (
-              <div className="delivery">
-                <h3>{t('credential.portalTitle')}</h3>
-                <p>{t.rich('credential.portalBody', { url: result.portalUrl ?? '' })}</p>
-                <p className="muted" style={{ margin: 0 }}>
-                  {t('credential.portalNote')}
-                </p>
-              </div>
-            )}
-
-            {/* El enlace, siempre. Es la misma URI en los cuatro canales: hay
+            {/* El enlace, siempre. Es la misma URI en los tres canales: hay
                 carteras que se abren desde el enlace y pantallas desde las que
                 no se puede fotografiar nada. Y ahora se puede TOCAR, que es lo
                 que hace falta cuando la consola se abre desde el móvil. */}

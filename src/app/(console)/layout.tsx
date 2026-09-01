@@ -7,10 +7,8 @@ import { monogramOf } from '@/lib/brand';
 import { getEmployeeSession } from '@/lib/session';
 
 /**
- * La consola de agentes. **No es el portal del cliente** (`/portal`), y la
- * separación es de estructura: son dos grupos de rutas con dos cabeceras y dos
- * sesiones distintas, así que la navegación del banco no aparece nunca en la
- * pantalla de un titular.
+ * La consola de agentes. **Es una herramienta interna del banco**: la abre un
+ * empleado, y ninguna pantalla de esta aplicación la abre un cliente.
  *
  * El grupo `(console)` no cambia ninguna URL: `/customers` y `/diagnostics`
  * siguen respondiendo exactamente donde respondían.

@@ -12,7 +12,7 @@ import { REFERENCE_CLAIMS, type ReferenceClaim } from '@/lib/reference-claims';
  * **El formulario que configura esta instalación.** Lo que antes era el `.env`.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  LOS TRES SECRETOS SE ESCRIBEN Y NO SE RELEEN. NUNCA
+ *  LOS DOS SECRETOS SE ESCRIBEN Y NO SE RELEEN. NUNCA
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Los campos de secreto llegan **siempre vacíos**, aunque haya uno guardado, y
@@ -57,9 +57,6 @@ export interface SettingsFormValues {
   readonly brandAccent: string;
   readonly brandSurface: string;
   readonly brandMonogram: string;
-  readonly portalClientId: string;
-  readonly portalLinkType: string;
-  readonly portalBaseUrl: string;
   readonly logtoEndpoint: string;
   readonly teApiBaseUrl: string;
   readonly b2bResource: string;
@@ -79,7 +76,6 @@ export interface SettingsFormProps {
   readonly values: SettingsFormValues;
   readonly m2mSecret: SecretState;
   readonly webhookSecret: SecretState;
-  readonly portalClientSecret: SecretState;
 }
 
 const REFERENCE_LABELS: Record<ReferenceClaim, MessageKey> = {
@@ -97,12 +93,7 @@ function SubmitButton() {
   );
 }
 
-export function SettingsForm({
-  values,
-  m2mSecret,
-  webhookSecret,
-  portalClientSecret,
-}: SettingsFormProps) {
+export function SettingsForm({ values, m2mSecret, webhookSecret }: SettingsFormProps) {
   const [state, formAction] = useActionState(saveSettingsAction, initialState);
   const t = useTranslator();
 
@@ -280,47 +271,6 @@ export function SettingsForm({
             {fieldError('brandMonogram')}
           </label>
         </div>
-      </div>
-
-      {/* ── El portal ─────────────────────────────────────────────────── */}
-      <div className="card">
-        <h2>{t('settings.portalTitle')}</h2>
-        <p className="muted">{t('settings.portalNote')}</p>
-        <div className="row">
-          <label className="field">
-            <span>{t('settings.portalClientId')}</span>
-            <input name="portalClientId" defaultValue={values.portalClientId} autoComplete="off" />
-            {fieldError('portalClientId')}
-          </label>
-          <label className="field">
-            <span>{t('settings.portalLinkType')}</span>
-            <input
-              name="portalLinkType"
-              defaultValue={values.portalLinkType}
-              placeholder="customer"
-            />
-            <small className="muted">{t('settings.portalLinkTypeNote')}</small>
-            {fieldError('portalLinkType')}
-          </label>
-        </div>
-
-        {secretField(
-          'portalClientSecret',
-          'settings.portalClientSecret',
-          'settings.portalClientSecretNote',
-          portalClientSecret,
-        )}
-
-        <label className="field">
-          <span>{t('settings.portalBaseUrl')}</span>
-          <input
-            name="portalBaseUrl"
-            defaultValue={values.portalBaseUrl}
-            placeholder="https://bank.demo-te.com"
-          />
-          <small className="muted">{t('settings.portalBaseUrlNote')}</small>
-          {fieldError('portalBaseUrl')}
-        </label>
       </div>
 
       {/* ── La plataforma ─────────────────────────────────────────────── */}

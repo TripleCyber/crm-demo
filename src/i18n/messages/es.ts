@@ -22,8 +22,8 @@ import type { PartialMessages } from '../translate';
 export const es: PartialMessages = {
   app: {
     fallbackTitle: 'CRM',
-    fallbackDescription: 'Consola de agentes y portal de clientes',
-    description: 'Consola de agentes y portal de clientes de {organization}',
+    fallbackDescription: 'Consola de agentes',
+    description: 'Consola de agentes de {organization}',
   },
 
   nav: {
@@ -86,8 +86,9 @@ export const es: PartialMessages = {
     qrLabel: 'QR',
     qrHint: 'El cliente está delante y lo escanea de esta pantalla',
     qrPhrase: 'por QR',
-    appLabel: 'Desde nuestra app',
-    appHint: 'Le espera en el portal, ya autenticado',
+    // El canal `app` ya no se ofrece —se fue con el portal—, pero su frase se
+    // queda: el historial de la ficha todavía tiene filas suyas y hay que poder
+    // leerlas. Ver `RETIRED_PHRASES` en `lib/delivery.ts`.
     appPhrase: 'en su área de cliente',
   },
 
@@ -246,11 +247,6 @@ export const es: PartialMessages = {
     mailOpenDraft: 'Abrir el borrador',
     mailNote:
       'El código de un solo uso <b>no está</b> en ese texto, y no es un olvido: si viajara en el mismo correo que el enlace, quien leyera el buzón tendría las dos mitades.',
-    portalTitle: 'Esperándole en el portal',
-    portalBody:
-      'La oferta queda guardada para este cliente. La verá al entrar en <code>{url}</code> con su cuenta de TripleEnable, y sólo la ve él: es el único de los cuatro canales en el que quien recoge la oferta está autenticado.',
-    portalNote:
-      'Dile por teléfono que entre en su área de cliente. Y el código de un solo uso, en voz alta por esta misma llamada.',
     walletLinkLabel: 'la oferta',
     officialNumbersSent: 'Ha ido dentro: {numbers}',
     offerId: 'Oferta {id}',
@@ -310,7 +306,7 @@ export const es: PartialMessages = {
     alertQr: 'Está delante · enseñar QR',
     alertQrBusy: 'Pidiendo…',
     alertNoWallet:
-      '<b>{name} no tiene cartera vinculada con esta entidad</b>, así que avisar a su móvil no haría sonar nada. Usa el QR si está delante, o emítele antes una credencial.',
+      '<b>{name} no tiene cartera vinculada con esta entidad</b>, así que avisar a su móvil no haría sonar nada. Usa el QR si está delante, o emítele una credencial: queda vinculado cuando la acepta en su cartera.',
     alertPhoneNoWallet: 'No hay cartera a la que avisar',
     requestFailed: 'la petición ha fallado ({status})',
     noServer: 'no se ha podido contactar con el servidor',
@@ -417,7 +413,7 @@ export const es: PartialMessages = {
 
     machineTitle: 'Aplicación de máquina',
     machineNote:
-      'Lo que autentica al servidor de este CRM contra te-api. No es la aplicación del portal, y no puede serlo: ésta autentica a un servidor y aquélla a una persona.',
+      'Lo que autentica a esta instalación contra te-api. Es la única aplicación que declara, y autentica a un servidor — nunca a una persona.',
     m2mClientId: 'Identificador de cliente',
     m2mSecret: 'Secreto de cliente',
     m2mSecretNote:
@@ -432,23 +428,10 @@ export const es: PartialMessages = {
 
     brandTitle: 'Marca',
     brandNote:
-      'Dos colores y un monograma. El acento va sobre blanco; la superficie es la barra lateral y la cabecera del portal. Los colores de estado no son la marca y no se tocan aquí.',
+      'Dos colores y un monograma. El acento va sobre blanco; la superficie es la barra lateral. Los colores de estado no son la marca y no se tocan aquí.',
     brandAccent: 'Acento',
     brandSurface: 'Superficie',
     brandMonogram: 'Monograma',
-
-    portalTitle: 'Portal de clientes',
-    portalNote:
-      'Opcional. Sin él, /portal lo dice en pantalla en vez de romperse a mitad de un login.',
-    portalClientId: 'Identificador de cliente',
-    portalClientSecret: 'Secreto de cliente',
-    portalClientSecretNote: 'El canje del código va con client_secret_basic, sólo en el servidor.',
-    portalLinkType: 'Tipo de vínculo',
-    portalLinkTypeNote:
-      'Opcional. Tiene que ser un tipo de credencial del padrón de esta organización en te-api, o el vínculo sale con invalid_request.',
-    portalBaseUrl: 'Dirección del portal',
-    portalBaseUrlNote:
-      'De ella sale el redirect_uri, y Logto lo compara carácter a carácter con el declarado en la aplicación.',
 
     platformTitle: 'Direcciones de la plataforma',
     platformNote:
@@ -472,7 +455,6 @@ export const es: PartialMessages = {
     colourInvalid: 'Un color hexadecimal: #rgb, #rrggbb, o rrggbb sin la almohadilla.',
     brandPair: 'Los dos colores van juntos o no van. Media marca se lee como una pantalla a medio pintar.',
     monogramTooLong: 'Uno o dos caracteres. Más que eso es una mancha en un disco de 32 píxeles.',
-    portalPair: 'El identificador y el secreto del portal van juntos, o no va ninguno.',
     urlInvalid: 'Una dirección absoluta http o https.',
     secretWhitespace: 'Ese valor lleva un espacio dentro. Vuelve a pegarlo sin espacios delante ni detrás.',
     secretLooksLikeFingerprint:
@@ -725,8 +707,6 @@ export const es: PartialMessages = {
     officialNumbersNone: 'ninguno declarado ·',
     issuerBase: 'te-api (emisión)',
     verifierBase: 'te-api (verificación)',
-    customerPortal: 'Portal del cliente',
-    portalUndeclared: 'sin aplicación declarada ·',
     brand: 'Marca',
     brandNone: 'la paleta por defecto ·',
     setInSettings: 'se pone en Ajustes',
@@ -770,58 +750,6 @@ export const es: PartialMessages = {
       'Inglés. Una clave sin traducir se enseña en inglés; el nombre de la clave no se pinta nunca en pantalla.',
   },
 
-  portal: {
-    header: 'Portal de clientes',
-    fallbackName: 'Portal de clientes',
-    titleGeneric: 'Tu cuenta',
-    title: 'Tu cuenta de {organization}',
-    intro:
-      'Vincula tu cuenta con tu identidad de TripleEnable. A partir de ese momento podremos avisarte en tu móvil cuando haya que confirmar algo, sin llamarte por teléfono y sin pedirte datos por correo.',
-    signInTitle: 'Entra para vincular',
-    signInBody:
-      'Te llevamos a TripleEnable para que confirmes que eres tú. Nosotros no vemos tu contraseña en ningún momento.',
-    signIn: 'Entrar con TripleEnable',
-    signInDisabled: 'El acceso está deshabilitado porque falta configuración. Mira el aviso de arriba.',
-    linked: 'Tu cuenta de {organization} está vinculada con tu identidad de TripleEnable.',
-    offerTitle: 'Tienes una credencial esperándote',
-    offerBody:
-      'Te la hemos emitido desde atención al cliente. Ábrela en el móvil donde tengas tu cartera de TripleEnable y guárdala: a partir de ese momento podremos comprobar que eres tú sin preguntarte datos por teléfono.',
-    offerSave: 'Guardar en mi cartera',
-    offerType: 'Tipo',
-    offerExpires: 'Caduca',
-    offerPinNote:
-      'Te pedirá un código numérico. Te lo damos por teléfono o en la oficina, y <b>nunca aparece en esta pantalla ni en un correo</b>: es lo que impide que esta credencial acabe en el móvil de otro.',
-    whoTitle: 'Quién eres',
-    signedInAs: 'Has entrado como',
-    verifiedEmail: 'Correo verificado',
-    yourRecord: 'Tu ficha en {organization}',
-    account: 'Cuenta',
-    linkTitle: 'El vínculo',
-    linkReference: 'Referencia',
-    linkConfirmedAt: 'Confirmado el',
-    linkPrevious: 'Vínculo anterior',
-    linkPreviousReplaced: 'Sustituido por éste.',
-    linkNote:
-      '{organization} no sabe qué identidad de TripleEnable hay detrás, y TripleEnable no sabe que eres cliente nuestro: lo único que existe es esta referencia. Puedes retirarla desde tu cartera cuando quieras.',
-    supportTitle: 'Para soporte',
-    supportBody: 'Si nos llamas, dinos esta referencia: {requestId}',
-    relink: 'Volver a vincular',
-    signOut: 'Cerrar sesión',
-    errorGeneric: 'Algo no ha salido bien.',
-    errorNoPortal:
-      'El acceso con TripleEnable todavía no está disponible en este portal. Si necesitas vincular tu cuenta, llámanos y lo hacemos contigo.',
-    errorSessionLost:
-      'Se perdió el hilo del login. Suele pasar al volver con el botón «atrás» o si la pestaña ha estado abierta mucho rato. Vuelve a empezar.',
-    errorState: 'La respuesta no corresponde a esta petición de acceso. Vuelve a empezar.',
-    errorProvider: 'No hemos podido completar el acceso. Vuelve a intentarlo.',
-    errorExchange: 'No hemos podido completar el login con TripleEnable. Vuelve a intentarlo.',
-    errorUnavailable: 'Este portal no está disponible ahora mismo. Vuelve a intentarlo en un rato o llámanos.',
-    linkNoEmail: 'TripleEnable no nos ha dado tu correo, así que no podemos encontrar tu ficha de cliente.',
-    linkNoCustomer: 'No encontramos ninguna ficha de cliente con ese correo en {organization}.',
-    linkFailedGeneric: 'No hemos podido completar el vínculo.',
-    linkNoTeApi: 'No hemos podido hablar con TripleEnable ahora mismo.',
-  },
-
   errors: {
     misconfigured:
       'Esta consola todavía no está configurada y no puede mostrar los datos de la organización. Quien lleva la integración la configura en la pantalla de Ajustes, que dice exactamente qué falta.',
@@ -849,11 +777,11 @@ export const es: PartialMessages = {
     // motivo tampoco era el que parecía: cada formato se pide por una clave
     // distinta y la plataforma todavía no construye la de los `mso_mdoc`.
     noWalletLink:
-      'No se ha enviado ningún aviso: este cliente no tiene una cartera vinculada con vuestra organización, así que no había a quién llamar. Enséñale el QR si está delante, o emítele antes una credencial — que es lo que crea el vínculo.',
+      'No se ha enviado ningún aviso: este cliente no tiene una cartera vinculada con vuestra organización, así que no había a quién llamar. Enséñale el QR si está delante, o emítele una credencial: queda vinculado cuando la acepta en su cartera.',
     teApiNoVct:
       'Ese tipo de credencial se puede emitir, pero no pedir de vuelta: la plataforma todavía no construye una petición de presentación para su formato. Para verificar a este cliente, usa un tipo emitido como SD-JWT o como credencial JWT del modelo W3C{reference}.',
-    teApiLink:
-      'te-api no ha podido completar el vínculo. El motivo más habitual es que esa cuenta todavía no tiene una cartera de TripleEnable dada de alta; el motivo real está en el registro de te-api{reference}.',
+    teApiCannotComplete:
+      'La plataforma se ha negado a completar esta operación y no dice cuál de los motivos posibles es. El de verdad está en el registro de te-api{reference}.',
     teApiUnavailable: 'El emisor de credenciales no está operativo ahora mismo{reference}.',
     teApiRateLimited: 'Demasiadas peticiones para esta organización; espera un momento{reference}.',
     teApiBadRequest: 'te-api ha rechazado los datos de la llamada: {code}{reference}.',

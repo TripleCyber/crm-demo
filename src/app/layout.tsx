@@ -32,26 +32,29 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 /**
- * La raíz sólo pone el documento. **La cabecera vive en cada sección.**
+ * La raíz sólo pone el documento. **La cabecera vive en la sección.**
  *
- * Hay dos secciones y no se parecen en nada:
+ * Hoy hay una sola: `(console)`, la consola de agentes. La usa un empleado del
+ * banco desde el mostrador, ve el padrón entero de clientes y emite
+ * credenciales — es una herramienta **interna**, y no hay ninguna pantalla de
+ * esta aplicación a la que entre un cliente.
  *
- *   · `(console)` — la consola de agentes. La usa un empleado del banco desde
- *     el mostrador, ve el padrón entero de clientes y emite credenciales.
- *   · `portal`    — el portal del cliente. Lo usa el titular, ve **su** ficha y
- *     nada más, y lo único que puede hacer es vincular su cuenta.
+ * Hubo una segunda, `portal`, para que el titular entrara con su cuenta y
+ * vinculara su cartera. Se retiró: un banco no registra su CRM como aplicación
+ * OIDC para que entren sus clientes —ya tiene su banca electrónica—, y el
+ * vínculo no nacía de ese login de todas formas. Nace cuando el titular acepta
+ * una credencial de esta entidad en su cartera.
  *
- * Están separadas por una razón que no es estética: si compartieran cabecera,
- * compartirían navegación, y un enlace a «Clientes» pintado en el portal es un
- * enlace que un titular va a pulsar. La separación estructural —dos grupos de
- * rutas, dos disposiciones, dos sesiones distintas— hace que ese enlace no
- * exista en vez de que esté escondido.
+ * La raíz sigue sin poner cabecera, y no por inercia: el día que haya una
+ * segunda sección, compartir cabecera sería compartir navegación. Que cada
+ * grupo de rutas ponga la suya hace que un enlace a «Clientes» no exista fuera
+ * de la consola, en vez de que esté escondido.
  *
  * Lo que sí es de la raíz es **el idioma**, y por dos motivos que no se pueden
  * repartir: el atributo `lang` del documento es de aquí —lo lee el corrector
  * ortográfico del navegador y el lector de pantalla para elegir voz— y el
  * contexto que da el idioma a los componentes de navegador tiene que envolver
- * las dos secciones, porque las dos tienen.
+ * la aplicación entera.
  *
  * Y **la marca**, por lo mismo: los tokens de color de la organización del
  * dominio se ponen en el `<body>`, que es el único elemento que envuelve a las

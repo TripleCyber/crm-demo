@@ -129,38 +129,7 @@ export interface OrganizationConfig {
    */
   readonly officialNumbers: readonly string[];
   /**
-   * F2 · La aplicación OIDC del **portal de clientes**.
-   *
-   * `undefined` = esta instalación no tiene portal declarado, y entonces
-   * `/portal` lo dice en pantalla en vez de romperse a mitad del login.
-   *
-   * **No es la aplicación M2M de arriba y no puede serlo.** La M2M autentica al
-   * servidor del CRM contra te-api; ésta autentica a una **persona** contra
-   * Logto. Su `client_id` es además el `aud` que te-api exige en el ID token
-   * (`te.partner_org.portal_client_id`), así que compartirlas haría que el mismo
-   * identificador significara dos cosas distintas.
-   */
-  readonly portal: PortalAppConfig | undefined;
-  /**
-   * La dirección pública del portal.
-   *
-   * De aquí sale el `redirect_uri`, y Logto lo compara carácter a carácter con
-   * el declarado en la aplicación. No se compone a partir de `domain` —que sería
-   * `https://<domain>`— porque en local el portal vive en `http://localhost:3000`
-   * y ni el esquema ni el puerto se deducen de un dominio.
-   *
-   * Y **nunca** de la cabecera `Host`, que la escribe quien llama.
-   */
-  readonly portalBaseUrl: string | undefined;
-  /**
-   * La clave con la que se firma la cookie de sesión del portal.
-   *
-   * No la escribe nadie: se genera al sembrar la fila de configuración. Ver
-   * `./tenant-settings.ts`.
-   */
-  readonly portalCookieSecret: string | undefined;
-  /**
-   * Su marca: el color con el que se pinta su consola y su portal.
+   * Su marca: el color con el que se pinta su consola.
    *
    * `undefined` = no declara marca y se queda con el azul de la hoja
    * (`globals.css`). Sigue siendo legítimo y no es una rama muerta: es el
@@ -204,8 +173,8 @@ export interface OrganizationConfig {
  * La marca de una organización: dos colores y un monograma.
  *
  * Son **dos** colores porque la hoja tiene dos oficios separados y no más: una
- * superficie oscura —la barra de la consola, la cabecera del portal— y un acento
- * sobre papel blanco —enlaces, foco, el filo de la tarjeta de oferta—. Los otros
+ * superficie oscura —la barra lateral de la consola— y un acento sobre papel
+ * blanco —enlaces, foco, el filo de la tarjeta de oferta—. Los otros
  * tonos de la familia (`--navy-line`, `--navy-ink`, `--navy-tint`) se
  * **derivan** de esos dos con `color-mix()` en `src/lib/brand.ts`: son mezclas
  * con blanco, no decisiones, y pedirlas por configuración sería regalar cinco
@@ -227,10 +196,7 @@ export interface BrandConfig {
    * 7,9:1 sobre blanco.
    */
   readonly accent: string;
-  /**
-   * La superficie oscura: la barra lateral de la consola y la cabecera del
-   * portal. Es lo que hoy es `--navy-deep`.
-   */
+  /** La superficie oscura: la barra lateral de la consola. Hoy es `--navy-deep`. */
   readonly surface: string;
   /**
    * El monograma del disco de la barra — «LE» —, o `undefined` para componerlo
@@ -241,26 +207,6 @@ export interface BrandConfig {
    * queda es una mancha.
    */
   readonly monogram: string | undefined;
-}
-
-/** La aplicación OIDC del portal de clientes: *traditional web*, con secreto. */
-export interface PortalAppConfig {
-  readonly clientId: string;
-  /** Sólo servidor. El canje del código va con `client_secret_basic`. */
-  readonly clientSecret: string;
-  /**
-   * El `type` que el portal declara al vincular (`cliente`, `customer`, …).
-   *
-   * Opcional en te-api y opcional aquí: el vínculo nace del login, no de la
-   * credencial, y exigirlo obligaría a emitir antes de poder vincular. Se pone
-   * cuando el portal sirve a un solo tipo de titular —el caso de un portal de
-   * clientes— porque entonces es lo que la cartera enseña en la lista de
-   * vínculos, y «Banco Demo · cliente» se lee mejor que «Banco Demo».
-   *
-   * Tiene que ser un `type_key` del padrón de **esta** organización en te-api, o
-   * la llamada sale con `400 invalid_request` y el vínculo no se crea.
-   */
-  readonly linkType: string | undefined;
 }
 
 /** Lo que es común a cualquier instalación: hay un solo Logto. */
@@ -391,11 +337,10 @@ export function normalizeBrandColor(raw: string | undefined): string | null {
 /**
  * La marca, o `undefined` si no se declara ninguna.
  *
- * Los dos colores **van juntos o no van**, por la misma razón que el par del
- * portal: media marca es peor que ninguna. Una barra violeta con los enlaces
- * azules de la hoja no se lee como «otra empresa», se lee como una pantalla a
- * medio pintar, y encima el que la ve no tiene forma de saber cuál de los dos
- * colores es el que sobra.
+ * Los dos colores **van juntos o no van**: media marca es peor que ninguna. Una
+ * barra violeta con los enlaces azules de la hoja no se lee como «otra
+ * empresa», se lee como una pantalla a medio pintar, y encima el que la ve no
+ * tiene forma de saber cuál de los dos colores es el que sobra.
  *
  * Media marca guardada **no tumba la consola**: se ignora entera y la pantalla
  * de ajustes lo dice. Es la diferencia con la versión de entorno, y es
@@ -498,21 +443,6 @@ export async function getOrganization(): Promise<OrganizationConfig> {
   const resolvedDomain = domain as string;
   const resolvedReference = referenceClaim as ReferenceClaim;
 
-  // El portal es opcional, pero **a medias no**: con el `client_id` y sin el
-  // secreto, el login llegaría hasta el canje del código y moriría allí, con la
-  // persona ya autenticada y un error que parece de Logto. Sin los dos, `/portal`
-  // dice en pantalla que esta instalación no lo tiene declarado.
-  const portalClientId = settings.portalClientId;
-  const portalClientSecret = settings.portalClientSecret;
-  const portal =
-    portalClientId === undefined || portalClientSecret === undefined
-      ? undefined
-      : {
-          clientId: portalClientId,
-          clientSecret: portalClientSecret,
-          linkType: settings.portalLinkType,
-        };
-
   return {
     orgId,
     displayName: settings.displayName ?? orgId,
@@ -525,10 +455,6 @@ export async function getOrganization(): Promise<OrganizationConfig> {
     officialNumbers: settings.officialNumbers,
     brand: readBrand(settings),
     referenceClaim: resolvedReference,
-    portalBaseUrl:
-      settings.portalBaseUrl === undefined ? undefined : trimTrailingSlash(settings.portalBaseUrl),
-    portalCookieSecret: settings.portalCookieSecret,
-    portal,
     webhookSecret: settings.webhookSecret,
   };
 }

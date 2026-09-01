@@ -110,10 +110,9 @@ export async function getEmployeeSession(): Promise<EmployeeSession> {
   // será asíncrono, y `getTranslator()` de aquí abajo ya lo es. Cambiar la firma
   // el día del login obligaría a tocar cada llamada de este proyecto.
   //
-  // La configuración la lee `getOrganization()`, que es la misma que usa el
-  // portal del cliente: dos copias del mismo «cuál es mi empresa» acaban
-  // discrepando, y entonces la consola emite para una organización y el portal
-  // vincula contra otra.
+  // La configuración la lee `getOrganization()`, y la lee **todo el que la
+  // necesite**: dos copias del mismo «cuál es mi empresa» acaban discrepando, y
+  // entonces una pantalla emite para una organización y otra consulta otra.
   const organization = await getOrganization();
   const fallback = unidentifiedAgent(await getTranslator(), organization);
 

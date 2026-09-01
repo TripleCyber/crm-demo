@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { randomBytes } from 'node:crypto';
 import { cache } from 'react';
 
 import { query } from './db';
@@ -139,11 +138,6 @@ export interface TenantSettings {
   readonly brandMonogram: string | undefined;
   readonly referenceClaim: string | undefined;
   readonly officialNumbers: readonly string[];
-  readonly portalClientId: string | undefined;
-  readonly portalClientSecret: string | undefined;
-  readonly portalLinkType: string | undefined;
-  readonly portalBaseUrl: string | undefined;
-  readonly portalCookieSecret: string | undefined;
   readonly webhookSecret: string | undefined;
   readonly logtoEndpoint: string;
   readonly teApiBaseUrl: string;
@@ -157,7 +151,7 @@ export interface TenantSettings {
 /**
  * Lo que la pantalla puede cambiar.
  *
- * Los tres secretos van aparte del resto y con un tipo distinto a propósito:
+ * Los dos secretos van aparte del resto y con un tipo distinto a propósito:
  * `undefined` significa **«no lo toques»** y no «bórralo». Un formulario que
  * enseña la huella y deja el campo en blanco manda el blanco en cada guardado, y
  * con `undefined = borrar` cualquier cambio de color se llevaría por delante el
@@ -173,23 +167,19 @@ export interface TenantSettingsPatch {
   readonly brandMonogram?: string | undefined;
   readonly referenceClaim?: string | undefined;
   readonly officialNumbers?: readonly string[] | undefined;
-  readonly portalClientId?: string | undefined;
-  readonly portalLinkType?: string | undefined;
-  readonly portalBaseUrl?: string | undefined;
   readonly logtoEndpoint?: string | undefined;
   readonly teApiBaseUrl?: string | undefined;
   readonly b2bResource?: string | undefined;
   readonly b2bScope?: string | undefined;
   /** Sólo si se ha escrito uno nuevo. `undefined` = se queda el que había. */
   readonly m2mSecret?: string | undefined;
-  readonly portalClientSecret?: string | undefined;
   readonly webhookSecret?: string | undefined;
   /** Los secretos que hay que dejar vacíos de verdad. */
   readonly clearSecrets?: readonly SecretField[];
 }
 
-/** Los tres secretos que la pantalla escribe pero no relee. */
-export type SecretField = 'm2mSecret' | 'portalClientSecret' | 'webhookSecret';
+/** Los dos secretos que la pantalla escribe pero no relee. */
+export type SecretField = 'm2mSecret' | 'webhookSecret';
 
 interface SettingsRow extends Record<string, unknown> {
   org_id: string | null;
@@ -202,11 +192,6 @@ interface SettingsRow extends Record<string, unknown> {
   brand_monogram: string | null;
   reference_claim: string | null;
   official_numbers: string[] | null;
-  portal_client_id: string | null;
-  portal_client_secret: string | null;
-  portal_link_type: string | null;
-  portal_base_url: string | null;
-  portal_cookie_secret: string | null;
   webhook_secret: string | null;
   logto_endpoint: string | null;
   te_api_base_url: string | null;
@@ -218,10 +203,9 @@ interface SettingsRow extends Record<string, unknown> {
 
 const COLUMNS = `org_id, display_name, domain, m2m_client_id, m2m_secret,
                  brand_accent, brand_surface, brand_monogram, reference_claim,
-                 official_numbers, portal_client_id, portal_client_secret,
-                 portal_link_type, portal_base_url, portal_cookie_secret,
-                 webhook_secret, logto_endpoint, te_api_base_url, b2b_resource,
-                 b2b_scope, seeded_from_env, updated_at`;
+                 official_numbers, webhook_secret, logto_endpoint,
+                 te_api_base_url, b2b_resource, b2b_scope, seeded_from_env,
+                 updated_at`;
 
 function toSettings(row: SettingsRow): TenantSettings {
   return {
@@ -235,11 +219,6 @@ function toSettings(row: SettingsRow): TenantSettings {
     brandMonogram: nullToUndefined(row.brand_monogram),
     referenceClaim: nullToUndefined(row.reference_claim),
     officialNumbers: row.official_numbers ?? [],
-    portalClientId: nullToUndefined(row.portal_client_id),
-    portalClientSecret: nullToUndefined(row.portal_client_secret),
-    portalLinkType: nullToUndefined(row.portal_link_type),
-    portalBaseUrl: nullToUndefined(row.portal_base_url),
-    portalCookieSecret: nullToUndefined(row.portal_cookie_secret),
     webhookSecret: nullToUndefined(row.webhook_secret),
     // Los de plataforma nunca salen vacíos: si la fila los tiene a `null`
     // —sembrada por un despliegue que no los declaraba— vale el valor por
@@ -318,23 +297,12 @@ function seedFromEnvironment(): Record<string, unknown> {
     brand_monogram: env('CRM_BRAND_MONOGRAM') ?? null,
     reference_claim: env('CRM_REFERENCE_CLAIM') ?? null,
     official_numbers: parseOfficialNumbers(env('CRM_OFFICIAL_NUMBERS')),
-    portal_client_id: env('CRM_PORTAL_CLIENT_ID') ?? null,
-    portal_client_secret: env('CRM_PORTAL_CLIENT_SECRET') ?? null,
-    portal_link_type: env('CRM_PORTAL_LINK_TYPE') ?? null,
-    portal_base_url: env('CRM_PORTAL_BASE_URL') ?? null,
-    // Si no viene, se GENERA. Ver la columna en `db/008_tenant_settings.sql`:
-    // pedirle a quien despliega que invente 32 caracteres aleatorios es pedirle
-    // que ponga `changeme`, y una cookie de sesión firmada con `changeme` la
-    // escribe cualquiera.
-    portal_cookie_secret: env('CRM_PORTAL_COOKIE_SECRET') ?? randomBytes(32).toString('base64url'),
     webhook_secret: env('CRM_WEBHOOK_SECRET') ?? null,
     logto_endpoint: env('LOGTO_ENDPOINT') ?? null,
     te_api_base_url: teApiBase ?? null,
     b2b_resource: env('TE_B2B_RESOURCE') ?? null,
     b2b_scope: env('TE_B2B_SCOPE') ?? null,
-    // «Nació del entorno» = alguna variable de configuración estaba puesta. La
-    // clave de la cookie no cuenta: se genera siempre, así que contarla marcaría
-    // como sembrada una instalación completamente en blanco.
+    // «Nació del entorno» = alguna variable de configuración estaba puesta.
     seeded_from_env:
       env('CRM_ORG_ID') !== undefined ||
       env('CRM_M2M_CLIENT_ID') !== undefined ||
@@ -362,12 +330,10 @@ async function readOrSeed(): Promise<TenantSettings> {
     `insert into tenant_settings
        (id, org_id, display_name, domain, m2m_client_id, m2m_secret,
         brand_accent, brand_surface, brand_monogram, reference_claim,
-        official_numbers, portal_client_id, portal_client_secret,
-        portal_link_type, portal_base_url, portal_cookie_secret,
-        webhook_secret, logto_endpoint, te_api_base_url, b2b_resource,
-        b2b_scope, seeded_from_env)
+        official_numbers, webhook_secret, logto_endpoint, te_api_base_url,
+        b2b_resource, b2b_scope, seeded_from_env)
      values (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-             $15, $16, $17, $18, $19, $20, $21)
+             $15, $16)
      on conflict (id) do nothing`,
     [
       seed['org_id'],
@@ -380,11 +346,6 @@ async function readOrSeed(): Promise<TenantSettings> {
       seed['brand_monogram'],
       seed['reference_claim'],
       seed['official_numbers'],
-      seed['portal_client_id'],
-      seed['portal_client_secret'],
-      seed['portal_link_type'],
-      seed['portal_base_url'],
-      seed['portal_cookie_secret'],
       seed['webhook_secret'],
       seed['logto_endpoint'],
       seed['te_api_base_url'],
@@ -440,7 +401,7 @@ export async function saveTenantSettings(patch: TenantSettingsPatch): Promise<Te
     if (value === undefined) return;
     // La cadena vacía se guarda como `null`. Es lo que espera quien vacía una
     // casilla del formulario para dejar de declarar algo opcional —el monograma,
-    // el tipo de vínculo del portal— y guardarla como `''` haría que
+    // por ejemplo— y guardarla como `''` haría que
     // `nullToUndefined` la tratara igual pero la pantalla la enseñara distinta.
     set(column, value.trim() === '' ? null : value.trim());
   };
@@ -453,9 +414,6 @@ export async function saveTenantSettings(patch: TenantSettingsPatch): Promise<Te
   setText('brand_surface', patch.brandSurface);
   setText('brand_monogram', patch.brandMonogram);
   setText('reference_claim', patch.referenceClaim);
-  setText('portal_client_id', patch.portalClientId);
-  setText('portal_link_type', patch.portalLinkType);
-  setText('portal_base_url', patch.portalBaseUrl);
   setText('logto_endpoint', patch.logtoEndpoint);
   setText('te_api_base_url', patch.teApiBaseUrl);
   setText('b2b_resource', patch.b2bResource);
@@ -465,7 +423,6 @@ export async function saveTenantSettings(patch: TenantSettingsPatch): Promise<Te
 
   // Los secretos: sólo si se ha escrito uno. Nunca se vacían por omisión.
   setText('m2m_secret', patch.m2mSecret);
-  setText('portal_client_secret', patch.portalClientSecret);
   setText('webhook_secret', patch.webhookSecret);
 
   for (const field of patch.clearSecrets ?? []) {
@@ -489,6 +446,5 @@ export async function saveTenantSettings(patch: TenantSettingsPatch): Promise<Te
 
 const SECRET_COLUMNS: Record<SecretField, string> = {
   m2mSecret: 'm2m_secret',
-  portalClientSecret: 'portal_client_secret',
   webhookSecret: 'webhook_secret',
 };

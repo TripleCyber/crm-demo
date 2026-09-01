@@ -51,9 +51,8 @@ import { loadTenantSettings } from '@/lib/tenant-settings';
  * lee la configuración del proceso y unas variables de entorno con el nombre del
  * empleado (`src/lib/session.ts`, que lo dice con estas palabras: «hasta
  * entonces esta consola no está autenticada y no puede publicarse en una URL a
- * la que llegue nadie de fuera»). El portal del cliente **sí** tiene OIDC contra
- * Logto; la consola no. El login de empleado es la casilla de F4a que queda
- * pendiente.
+ * la que llegue nadie de fuera»). El login de empleado es la casilla de F4a que
+ * queda pendiente.
  *
  * Eso vale, con esa advertencia, para una consola que enseña un padrón de
  * clientes de demostración. **No vale igual para un secreto de máquina**: el
@@ -63,11 +62,11 @@ import { loadTenantSettings } from '@/lib/tenant-settings';
  *
  * Lo que se hace con eso, y lo que no:
  *
- *  · **Los secretos se escriben y no se releen.** Ni el M2M, ni el de firma del
- *    webhook, ni el del portal vuelven a salir de este servidor una vez
- *    guardados. Lo que se enseña es su huella —SHA-256 recortado y los cuatro
- *    últimos caracteres—, calculada **igual que en tenant-admin** para poder
- *    compararlas a ojo. Una captura de esta pantalla no contiene ningún secreto.
+ *  · **Los secretos se escriben y no se releen.** Ni el M2M ni el de firma del
+ *    webhook vuelven a salir de este servidor una vez guardados. Lo que se
+ *    enseña es su huella —SHA-256 recortado y los cuatro últimos caracteres—,
+ *    calculada **igual que en tenant-admin** para poder compararlas a ojo. Una
+ *    captura de esta pantalla no contiene ningún secreto.
  *  · **No se inventa aquí un inicio de sesión.** Un login de mentira —una
  *    contraseña en una variable, un token en la URL— es peor que no tener
  *    ninguno: parece que protege y no protege, y quien lo vea dejará de
@@ -234,9 +233,6 @@ export default async function SettingsPage() {
           brandAccent: settings.brandAccent ?? '',
           brandSurface: settings.brandSurface ?? '',
           brandMonogram: settings.brandMonogram ?? '',
-          portalClientId: settings.portalClientId ?? '',
-          portalLinkType: settings.portalLinkType ?? '',
-          portalBaseUrl: settings.portalBaseUrl ?? '',
           logtoEndpoint: settings.logtoEndpoint,
           teApiBaseUrl: settings.teApiBaseUrl,
           b2bResource: settings.b2bResource,
@@ -244,7 +240,6 @@ export default async function SettingsPage() {
         }}
         m2mSecret={secretState(settings.m2mSecret)}
         webhookSecret={secretState(settings.webhookSecret)}
-        portalClientSecret={secretState(settings.portalClientSecret)}
       />
 
       <SettingsChecks />

@@ -306,10 +306,9 @@ a {
  *  EL SELECTOR DE IDIOMA
  * ═════════════════════════════════════════════════════════════════════════
  *
- * Vive en dos sitios oscuros —el pie de la barra de la consola y la cabecera
- * del portal— y por eso lleva un solo juego de colores, claros sobre fondo
- * oscuro. Es deliberadamente pequeño: se usa una vez y no compite con la
- * navegación, que es lo que se pulsa todo el día.
+ * Vive en el pie de la barra lateral, que es oscuro, y por eso lleva colores
+ * claros sobre fondo oscuro. Es deliberadamente pequeño: se usa una vez y no
+ * compite con la navegación, que es lo que se pulsa todo el día.
  *
  * Los botones son botones de verdad y no enlaces: esto envía un formulario que
  * escribe una cookie, y un `<a>` que cambia el estado del servidor con un GET
@@ -975,9 +974,10 @@ button.secondary:hover:not([disabled]) {
 
 /*
  * Un enlace con aspecto de botón. Se usa donde hay una navegación de verdad
- * —`/portal/login` redirige a Logto, «emitir credencial» abre otra pantalla—
- * y tiene que ser un `<a>` para que funcione con JavaScript apagado y para que
- * se pueda abrir en otra pestaña. Lo que se ajusta es cómo se ve, no lo que es.
+ * —«emitir credencial» abre otra pantalla, el borrador de correo abre el
+ * programa de correo— y tiene que ser un `<a>` para que funcione con JavaScript
+ * apagado y para que se pueda abrir en otra pestaña. Lo que se ajusta es cómo
+ * se ve, no lo que es.
  */
 .button-link {
   display: inline-block;
@@ -2123,30 +2123,6 @@ dl.facts dt .mono,
   margin: 20px 0 10px;
 }
 
-/* ═════════════════════════════════════════════════════════════════════════
- *  EL PORTAL DEL CLIENTE (`/portal`)
- * ═════════════════════════════════════════════════════════════════════════
- *
- * Se distingue a propósito de la consola de agentes: cabecera con el color del
- * banco, columna estrecha y **ninguna barra lateral**. No es decoración — quien
- * mira una de las dos pantallas tiene que saber sin pensarlo en cuál está,
- * porque una enseña el padrón entero de clientes y la otra la ficha de una sola
- * persona.
- */
-.topbar {
-  display: flex;
-  align-items: baseline;
-  gap: 24px;
-  padding: 14px 28px;
-  background: var(--paper);
-  border-bottom: 1px solid var(--rule);
-}
-
-.topbar strong {
-  font-family: var(--serif);
-  font-size: 17px;
-}
-
 /*
  * La muestra de color de Diagnóstico: un cuadradito del color, delante de su
  * código. El código hexadecimal no le dice a nadie qué color es, y lo que se
@@ -2163,67 +2139,6 @@ dl.facts dt .mono,
   border: 1px solid var(--rule);
   border-radius: 3px;
   vertical-align: -1px;
-}
-
-/*
- * El disco en la cabecera del portal. Más pequeño que en la barra —la cabecera
- * es una línea— y centrado: los demás hijos se alinean por la línea base, y un
- * cuadrado alineado por su línea base queda colgando.
- *
- * El margen negativo recorta el `gap: 24px` de la cabecera a 10 px, y sólo para
- * este hijo: 24 px es la distancia entre bloques distintos, y el disco y el
- * nombre son UNA cosa. Cambiar el `gap` de la cabecera los separaría a todos.
- */
-.topbar .brand-mark {
-  align-self: center;
-  width: 28px;
-  height: 28px;
-  margin-bottom: 0;
-  margin-right: -14px;
-  border-radius: 8px;
-  font-size: 13px;
-}
-
-.topbar .org {
-  margin-left: auto;
-  font-size: 13px;
-  color: var(--ink-2);
-}
-
-.topbar.portal {
-  background: var(--navy-deep);
-  border-bottom-color: var(--navy-deep);
-  color: #fff;
-}
-
-.topbar.portal .org {
-  color: rgba(255, 255, 255, 0.75);
-}
-
-/* El selector en la cabecera del portal: sin su rótulo y sin el hueco vertical
-   de la barra lateral, que aquí descuadraría la línea base de la cabecera.
-   El `margin-left` lo pone ya `.org`, que es quien empuja hacia la derecha. */
-.topbar .locale-switch {
-  padding: 0;
-  margin-left: 0;
-}
-
-.topbar .locale-switch-legend {
-  display: none;
-}
-
-main.narrow {
-  max-width: 640px;
-}
-
-/* La oferta que espera al titular en el portal. Es lo primero que tiene que
-   ver al entrar, así que lleva el color de la marca y no el gris de las demás. */
-.card.offer {
-  border-left: 3px solid var(--navy);
-}
-
-.card.offer p {
-  font-size: 13.5px;
 }
 
 /* ═════════════════════════════════════════════════════════════════════════

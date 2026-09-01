@@ -9,10 +9,11 @@
 #    dependencias de desarrollo: sólo la salida `standalone` de Next. Lo que no
 #    está no se puede ejecutar por accidente.
 #
-# Lo que NO hace, a diferencia de te-api: migrar al arrancar. La base del CRM es
-# suya y las migraciones se aplican a mano (`npm run db:migrate`), porque este
-# servicio es una maqueta de un banco y no queremos que una imagen desplegada
-# por error toque el esquema de nadie.
+# Y migra al arrancar, igual que te-api. Aquí decía lo contrario —«las
+# migraciones se aplican a mano»— y dejó de ser verdad cuando se añadió el `CMD`
+# del final: publicar la imagen tiene que bastar para que una instalación nueva
+# funcione, sin que nadie entre por una consola de servidor. El porqué entero
+# está junto a ese `CMD`.
 
 FROM node:22-alpine AS deps
 WORKDIR /app
