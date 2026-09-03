@@ -664,6 +664,88 @@ export async function requestAgeCheck(
 }
 
 /**
+ * **Una petición cualquiera del marco.** `POST /v1/requests`, genérica.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA MISMA RUTA QUE LA TRANSFERENCIA Y LA PUERTA DE EDAD, SIN LOS RÓTULOS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `requestTransferApproval` y `requestAgeCheck` son **dos usos concretos** de
+ * esta ruta: cada una fija su plantilla, sus claves y sus rótulos porque cada
+ * una tiene su pantalla en la consola y sus reglas de validación. Esto no fija
+ * nada: recibe la plantilla y los campos ya compuestos y los manda.
+ *
+ * Existe para el catálogo de verificaciones, donde la pantalla del agente **no
+ * escribe valores** —los trae el catálogo— y por tanto no hay nada que rotular
+ * aquí. Añadir una función por plantilla habría sido escribir diez veces la
+ * misma llamada para cambiarle el nombre de la plantilla.
+ *
+ * ## Lo que sigue sin poder decidir quien llama
+ *
+ *  - **`style`**. Va en cada campo, pero lo valida el catálogo de te-api contra
+ *    la plantilla: sólo la clave que la plantilla declara héroe puede llevar
+ *    `hero`, y una clave que el catálogo no conoce **nunca** puede llevarlo.
+ *    Mandarlo mal sale con `400 invalid_request`, no con una pantalla torcida.
+ *  - **La revisión del texto que se firma.** La pone el catálogo de te-api.
+ *  - **El nombre de quien pregunta.** Lo copia te-api del token, así que en el
+ *    teléfono pone esta organización aunque el caso esté escrito para otra.
+ *
+ * ## `credentialType` y `requestUri` van juntos en la práctica
+ *
+ * te-api los declara por separado y los dos son opcionales, pero firmar con una
+ * credencial sin sesión de verificador crea una petición que **nadie puede
+ * aprobar**: la credencial es la prueba y quien la comprueba es el verificador.
+ * Quien llame con `signWith: 'credential'` debería abrir antes la sesión con
+ * `requestPresentation` y pasar aquí su `requestUri`, que es exactamente lo que
+ * hace `requestAgeCheck`.
+ */
+export interface CeremonyRequestInput {
+  readonly subjectReference: string;
+  readonly kind: 'authenticate' | 'verify' | 'authorize' | 'present';
+  readonly signWith: 'identity' | 'credential';
+  /** Obligatorio con `signWith: 'credential'`, y prohibido con `identity`. */
+  readonly credentialType?: string;
+  /** El nombre con el que la plantilla viaja: `doc.sign.v1`. */
+  readonly template: string;
+  /** La sesión del verificador, cuando la ceremonia tiene una. */
+  readonly requestUri?: string;
+  readonly fields: readonly {
+    readonly key: string;
+    readonly label: string;
+    readonly value: string;
+    readonly type: 'text' | 'mono' | 'numeric';
+    readonly style: 'hero' | 'normal' | 'quiet';
+  }[];
+}
+
+export async function requestCeremony(
+  organization: OrganizationConfig,
+  input: CeremonyRequestInput,
+): Promise<TransferApprovalResult> {
+  return callB2b<TransferApprovalResult>(organization, organization.verifierUrl, '/v1/requests', {
+    method: 'POST',
+    body: {
+      subjectReference: input.subjectReference,
+      kind: input.kind,
+      signWith: input.signWith,
+      // Se omiten en vez de mandarse a `null`: te-api rechaza `credentialType`
+      // junto a `signWith: 'identity'` por su propio `superRefine`, y un `null`
+      // explícito no pasa su `z.string()`.
+      ...(input.credentialType === undefined ? {} : { credentialType: input.credentialType }),
+      ...(input.requestUri === undefined ? {} : { requestUri: input.requestUri }),
+      template: input.template,
+      fields: input.fields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        value: field.value,
+        type: field.type,
+        style: field.style,
+      })),
+    },
+  });
+}
+
+/**
  * ¿Tiene este cliente una cartera vinculada con nosotros?
  *
  * ═══════════════════════════════════════════════════════════════════════════

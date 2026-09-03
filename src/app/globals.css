@@ -2455,3 +2455,342 @@ a.rail-org {
 a.rail-org:hover {
   text-decoration: underline;
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+ *  EL CATÁLOGO DE VERIFICACIONES · 36 casos, trece industrias
+ * ═════════════════════════════════════════════════════════════════════════
+ *
+ * Tres piezas y ninguna decorativa:
+ *
+ *  1. **La fila de industrias** reduce 36 a dos o cuatro. Sin ella la pantalla
+ *     es una lista larga que nadie recorre entera.
+ *  2. **La columna estrecha** es el índice: título, qué resuelve y qué
+ *     plantilla lo pinta. Se lee de un vistazo y no se abre nada al pasar.
+ *  3. **La ficha ancha** es la pantalla del titular, ensayada. El héroe se
+ *     pinta como lo que es —lo único que se lee si sólo se lee una cosa— y los
+ *     verbos con el mismo peso que van a tener en el teléfono.
+ */
+
+.ceremony-note {
+  margin: 0 0 16px;
+  padding: 11px 14px;
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 92ch;
+}
+
+.ceremony-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.ceremony-tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-2);
+}
+
+.ceremony-tab:hover:not([disabled]) {
+  background: var(--navy-tint);
+  border-color: var(--navy);
+  color: var(--navy);
+}
+
+.ceremony-tab.on,
+.ceremony-tab.on:hover:not([disabled]) {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.ceremony-tab-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.ceremony-tab.on .ceremony-tab-count {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* El índice a la izquierda, la ficha a la derecha: la ficha es lo que se lee,
+   así que se lleva el ancho. Al revés que la partición de la ficha del cliente,
+   donde lo que manda es el registro del banco. */
+.ceremony-split {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1120px) {
+  .ceremony-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.ceremony-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  position: sticky;
+  top: 30px;
+}
+
+.ceremony-item {
+  display: block;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+  font-weight: 400;
+}
+
+.ceremony-item:hover:not([disabled]) {
+  border-color: var(--navy);
+  background: var(--navy-tint);
+}
+
+.ceremony-item.on,
+.ceremony-item.on:hover:not([disabled]) {
+  border-color: var(--navy);
+  background: var(--paper);
+  box-shadow: inset 3px 0 0 var(--navy);
+}
+
+.ceremony-item strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.ceremony-item-why {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.ceremony-item-mark {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.ceremony-detail {
+  margin-bottom: 0;
+}
+
+.ceremony-written {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.ceremony-heading {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+}
+
+/*
+ * El ensayo de la pantalla del titular.
+ *
+ * Fondo propio y filete: lo de dentro **no es interfaz de esta consola**, es lo
+ * que hay en otro teléfono. Que se distinga es lo que permite al agente decirlo
+ * en voz alta sin confundir un rótulo suyo con uno de allí.
+ */
+.ceremony-screen {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--canvas);
+  padding: 18px;
+}
+
+.ceremony-hero {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.ceremony-hero > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+}
+
+.ceremony-hero > strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 23px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ceremony-hero > strong.mono {
+  font-size: 20px;
+}
+
+/* Las tres plantillas sin héroe lo dicen en vez de dejar el escalón vacío: el
+   par de abajo ES la decisión, y un hueco en blanco parecería un fallo. */
+.ceremony-nohero {
+  margin: 0 0 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--rule);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.ceremony-pairs {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.ceremony-pairs dt {
+  color: var(--ink-2);
+}
+
+.ceremony-pairs dd {
+  margin: 0;
+}
+
+/* `quiet` es peso, no adorno: la plantilla dice que ese valor está para
+   consultarlo, no para decidir con él. */
+.ceremony-pairs .quiet {
+  color: var(--ink-3);
+}
+
+@media (max-width: 620px) {
+  .ceremony-pairs {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .ceremony-pairs dt {
+    margin-top: 10px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+}
+
+/*
+ * Los dos verbos, con el peso que van a tener en el teléfono.
+ *
+ * `deny-first` los invierte, y sólo lo lleva `account.change.v1`: es la única
+ * plantilla en la que negar pesa más que aprobar, porque es el cambio que abre
+ * todas las demás cuentas.
+ */
+.ceremony-verbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.ceremony-verbs.deny-first {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+}
+
+.ceremony-verb,
+.ceremony-deny {
+  display: inline-block;
+  padding: 9px 16px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.ceremony-verb {
+  background: var(--navy);
+  border: 1px solid var(--navy);
+  color: #fff;
+}
+
+.ceremony-deny {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+
+/* Invertidos: el que manda es el que se ve, esté donde esté en la fila. */
+.ceremony-verbs.deny-first .ceremony-verb {
+  background: var(--paper);
+  border-color: var(--rule);
+  color: var(--ink-2);
+}
+
+.ceremony-verbs.deny-first .ceremony-deny {
+  background: var(--danger-bg);
+  border-color: var(--danger-bg);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.ceremony-problem {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/*
+ * Lo que el marco NO hace, en la ficha del caso que lo roza.
+ *
+ * Ámbar y no rojo: no es un fallo ni un fraude, es una promesa que no se puede
+ * hacer. Va aquí y no en un pie de página porque es donde lo va a leer quien
+ * está a punto de enseñárselo a un cliente.
+ */
+.ceremony-flag {
+  margin: 14px 0 0;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ceremony-detail > button,
+.ceremony-sent {
+  margin-top: 18px;
+}
+
+.ceremony-sent p {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+}

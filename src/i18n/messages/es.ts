@@ -214,6 +214,8 @@ export const es: PartialMessages = {
     authoriseTransactionHint: 'Nivel 2 · firmar un importe. Todavía no se puede ejecutar.',
     checkAge: 'Comprobar que es mayor de edad',
     checkAgeHint: 'Una pregunta. Su fecha de nacimiento se queda en su teléfono.',
+    ceremonies: 'Catálogo de verificaciones',
+    ceremoniesHint: '36 peticiones ya escritas, de trece industrias.',
     channelPhone: 'Aviso a su móvil',
     channelQr: 'QR en el mostrador',
     onBehalfOf: 'a nombre de {agent}',
@@ -345,6 +347,44 @@ export const es: PartialMessages = {
      * honestidad que ya practica la hermana con el timbre.
      */
     asked: 'Pedido. Lo autoriza en su teléfono, no aquí — dile que abra la app.',
+  },
+
+  /**
+   * El catálogo de verificaciones.
+   *
+   * Sólo los rótulos de la consola. Los 36 casos viven en
+   * `src/lib/ceremony-catalogue.ts` y **no se traducen**: son la carga que viaja
+   * a te-api y que el titular lee en su teléfono. Ver la cabecera de `en.ts`.
+   */
+  ceremonies: {
+    pageTitle: 'Catálogo de verificaciones',
+    pageSub:
+      '{cases} peticiones ya escritas, de {industries} industrias. Elige una y le llega al teléfono de {holder} tal y como se ve aquí.',
+    askerNote:
+      'Estos casos están escritos para otras clases de organización. Quien pregunta sigue siendo {organization}: lo que se enseña es la forma de la ceremonia, no que el banco sea un hospital.',
+    noWallet:
+      'Este cliente no tiene cartera vinculada con nosotros, así que no hay teléfono al que pedírselo. Las peticiones se crearán y caducarán solas.',
+    industriesLabel: 'Industrias',
+    writtenFor: 'Escrito para {organization}',
+    previewTitle: 'Lo que va a leer',
+    noHero: 'Sin héroe: esta pantalla la sostiene el par de abajo, no un solo valor.',
+    flagTitle: 'Lo que este marco no hace:',
+    send: 'Mandar esta petición',
+    sending: 'Mandando…',
+    sent: 'Mandado. Contesta en su teléfono, no aquí — dile que abra la app.',
+    industryDoc: 'Documentos',
+    industryPro: 'Profesional',
+    industryHealth: 'Salud',
+    industryEdu: 'Educación',
+    industryHr: 'Empresa',
+    industryLog: 'Logística',
+    industryIns: 'Seguros',
+    industryRe: 'Inmobiliario',
+    industryGov: 'Sector público',
+    industryMob: 'Movilidad',
+    industryRetail: 'Comercio',
+    industryEnergy: 'Energía',
+    industryTelco: 'Telecomunicaciones',
   },
   verify: {
     title: 'Verificar identidad',
@@ -888,5 +928,11 @@ export const es: PartialMessages = {
     teApiBadRequest: 'te-api ha rechazado los datos de la llamada: {code}{reference}.',
     teApiOther: 'te-api ha respondido {status} ({code}){reference}.',
     teApiReference: ' (requestId {requestId})',
+    ceremonyUnknownCase: 'Ese caso no está en el catálogo.',
+    ceremonyNoCredentialType:
+      'Este caso se firma con una credencial y esta organización no declara ninguna, así que no hay nada que pedir.',
+    ceremonyNoClaims:
+      'Este caso se firma con una credencial pero no nombra ningún atributo que presentar. Así como está no se puede pedir.',
+    ceremonyUpstream: 'No se ha podido mandar la petición. Míralo en Diagnóstico.',
   },
 };

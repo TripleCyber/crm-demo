@@ -294,6 +294,18 @@ export default async function CustomerPage({
                 <strong>{t('customer.checkAge')}</strong>
                 <span>{t('customer.checkAgeHint')}</span>
               </Link>
+              {/*
+                **El catálogo va el último, y es otra cosa.** Las cuatro
+                entradas de arriba son lo que este banco hace con sus clientes.
+                Ésta abre las treinta y seis formas de ceremonia que el marco
+                sabe pintar, escritas para trece industrias: es una
+                demostración, y va detrás de lo que sí es del día a día para que
+                no se confunda con ello.
+              */}
+              <Link className="action" href={`${href}/ceremonies`}>
+                <strong>{t('customer.ceremonies')}</strong>
+                <span>{t('customer.ceremoniesHint')}</span>
+              </Link>
             </div>
           </div>
         </div>

@@ -246,6 +246,8 @@ export const en = {
     authoriseTransactionHint: 'Level 2 · sign an amount. Not executable yet.',
     checkAge: 'Check they are over 18',
     checkAgeHint: 'One question. Their date of birth stays on their phone.',
+    ceremonies: 'Verification catalogue',
+    ceremoniesHint: '36 ready-made requests across 13 industries.',
     channelPhone: 'Alert to their phone',
     channelQr: 'QR at the counter',
     onBehalfOf: 'on behalf of {agent}',
@@ -387,6 +389,54 @@ export const en = {
      * honestidad que ya practica la hermana con el timbre.
      */
     asked: 'Asked. They authorise it on their phone, not here — tell them to open the app.',
+  },
+
+  /**
+   * El catálogo de verificaciones.
+   *
+   * Aquí están sólo los **rótulos de la consola**. Los 36 casos —títulos,
+   * problemas, campos y verbos— viven en `src/lib/ceremony-catalogue.ts` y **no
+   * pasan por i18n**: son la carga que viaja a te-api y que el titular lee en su
+   * teléfono, así que van en inglés como los rótulos de la transferencia y los
+   * de la puerta de edad. Ver la cabecera de ese fichero.
+   */
+  ceremonies: {
+    pageTitle: 'Verification catalogue',
+    pageSub:
+      '{cases} ready-made requests across {industries} industries. Pick one and it goes to {holder}’s phone exactly as shown.',
+    /**
+     * La línea que evita la confusión de toda la pantalla.
+     *
+     * Los casos están escritos para una notaría, un hospital o una eléctrica, y
+     * ese nombre no viaja: te-api copia el del partner que trae el token. Lo que
+     * se demuestra es la forma de la ceremonia, no que el banco sea un hospital.
+     */
+    askerNote:
+      'These cases were written for other kinds of organisation. Whoever is asking is still {organization}: what this shows is the shape of the ceremony, not that the bank is a hospital.',
+    noWallet:
+      'This customer has no wallet linked with us, so there is no phone to ask. Requests will be created and will simply expire.',
+    industriesLabel: 'Industries',
+    writtenFor: 'Written for {organization}',
+    previewTitle: 'What they will read',
+    /** `account.change.v1`, `custody.handover.v1` y `agent.identify.v1`. */
+    noHero: 'No hero: this screen is carried by the pair below, not by one value.',
+    flagTitle: 'What this framework does not do:',
+    send: 'Send this request',
+    sending: 'Sending…',
+    sent: 'Sent. They answer on their phone, not here — tell them to open the app.',
+    industryDoc: 'Documents',
+    industryPro: 'Professional',
+    industryHealth: 'Health',
+    industryEdu: 'Education',
+    industryHr: 'Workplace',
+    industryLog: 'Logistics',
+    industryIns: 'Insurance',
+    industryRe: 'Property',
+    industryGov: 'Public sector',
+    industryMob: 'Mobility',
+    industryRetail: 'Retail',
+    industryEnergy: 'Energy',
+    industryTelco: 'Telecom',
   },
   verify: {
     title: 'Verify identity',
@@ -985,6 +1035,19 @@ export const en = {
     teApiBadRequest: 'te-api rejected the call data: {code}{reference}.',
     teApiOther: 'te-api answered {status} ({code}){reference}.',
     teApiReference: ' (requestId {requestId})',
+    /**
+     * Los tres del catálogo de verificaciones.
+     *
+     * Ninguno es accionable por el agente y los tres lo dicen: un caso que no
+     * existe o un catálogo mal declarado son fallos de configuración, no cosas
+     * que se arreglen volviendo a pulsar.
+     */
+    ceremonyUnknownCase: 'That case is not in the catalogue.',
+    ceremonyNoCredentialType:
+      'This case is signed with a credential and this organisation declares no credential type, so there is nothing to ask for.',
+    ceremonyNoClaims:
+      'This case is signed with a credential but names no attribute to present. It cannot be asked as it stands.',
+    ceremonyUpstream: 'The request could not be sent. Check Diagnostics.',
   },
 };
 
