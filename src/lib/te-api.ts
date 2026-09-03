@@ -589,6 +589,8 @@ export interface AgeCheckResult {
   readonly presentationId: string;
   readonly expiresAt: string;
   readonly delivered: boolean;
+  /** La sesión del verificador, para anotarla. Ver el `return`. */
+  readonly session: PresentationRequestResult;
 }
 
 export async function requestAgeCheck(
@@ -646,6 +648,11 @@ export async function requestAgeCheck(
   return {
     requestId: asked.requestId,
     presentationId: session.presentationId,
+    // La sesión entera, para que quien llame pueda anotarla en el diario del
+    // banco: sin fila local, el webhook `presentation.settled` no tiene qué
+    // actualizar y el resultado de la comprobación **no llega nunca** a la
+    // consola. Lo enseñó el recorrido de la 6.3 en el simulador.
+    session,
     expiresAt: asked.expiresAt,
     delivered: asked.delivered,
   };

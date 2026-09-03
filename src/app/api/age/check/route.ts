@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 import { getTranslator } from '@/i18n/server';
 import { findCustomer } from '@/lib/customers';
 import { getEmployeeSession } from '@/lib/session';
-import { requestAgeCheck } from '@/lib/te-api';
+import { fetchB2bOrganizationCached, requestAgeCheck } from '@/lib/te-api';
+import { recordVerification } from '@/lib/verifications';
 
 /**
  * **Pedirle al titular que demuestre que es mayor de edad.** Fase 6 del marco.
@@ -94,6 +95,45 @@ export async function POST(request: Request): Promise<NextResponse> {
       ...(reason === '' ? {} : { reason }),
       // En inglés: es lo que lee el titular. Ver la cabecera.
       labels: { age: 'Over 18', reason: 'Why' },
+    });
+
+    // ── El diario del banco ────────────────────────────────────────────────
+    //
+    // Se anota **después** de que la petición exista, igual que en la hermana
+    // y por el mismo motivo: una comprobación «pendiente» que nunca se llegó a
+    // pedir aparecería en el historial del cliente y el agente creería que le
+    // preguntó.
+    //
+    // Y no es cosmética. El resultado vuelve por el webhook
+    // `presentation.settled`, que **actualiza la fila por `presentationId`**:
+    // sin ella el sí o el no de la persona no llega nunca a la consola, y el
+    // enlace de seguimiento apunta a una página que no existe. Lo enseñó el
+    // recorrido de la 6.3 contra el despliegue.
+    //
+    // `channel: 'phone'` porque esta pantalla no pinta QR: se le pregunta al
+    // teléfono que ya tiene en el bolsillo. Ver la cabecera del lanzador.
+    await recordVerification({
+      orgId: session.organization.orgId,
+      externalId: customer.externalId,
+      presentationId: checked.presentationId,
+      typeKey: credentialType,
+      // Uno, y es el argumento entero de esta pantalla.
+      requestedClaims: ['age_over_18'],
+      channel: 'phone',
+      // El DID sale del **padrón de te-api**, no de la configuración local:
+      // es contra quién se comprueba, y el recibo lo enseña.
+      issuerDid: (await fetchB2bOrganizationCached(session.organization)).did,
+      authorizationRequestUrl: checked.session.authorizationRequestUrl,
+      requestUri: checked.session.requestUri,
+      expiresAt: checked.expiresAt,
+      agentId: session.agent.id,
+      agentName: session.agent.displayName,
+      actor: session.actor,
+      requestedAt: new Date().toISOString(),
+      // El timbre de esta ceremonia es la petición del marco, no un
+      // `wakeup`: no hay identificador de despertador que anotar.
+      wakeupId: undefined,
+      wakeupAt: undefined,
     });
 
     return NextResponse.json({
