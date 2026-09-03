@@ -315,6 +315,15 @@ export const en = {
 
   /** La pantalla que lanza una comprobación. */
   age: {
+    /**
+     * El rótulo de la **página**, que no es el de la tarjeta.
+     *
+     * Los dos decían lo mismo, uno debajo del otro: «Pedir a Teofilo que
+     * demuestre que es mayor de edad» dos veces. La cabecera nombra el sitio
+     * —como «Verificar identidad» en la hermana— y la tarjeta nombra lo que se
+     * va a hacer.
+     */
+    pageTitle: 'Age check',
     title: 'Ask {holder} to prove they are over 18',
     body:
       'One question, one answer. Their date of birth stays on their phone: only the yes or no travels.',

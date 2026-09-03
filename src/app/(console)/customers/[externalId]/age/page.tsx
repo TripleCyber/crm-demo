@@ -43,7 +43,12 @@ export default async function AgeCustomerPage({
             <Link href="/customers">{t('nav.customers')}</Link> ·{' '}
             <Link href={href}>{holderName}</Link>
           </p>
-          <h1>{t('age.title', { holder: holderName })}</h1>
+          {/*
+            El rótulo del **sitio**, no el de la acción: la tarjeta de abajo
+            dice a quién se le pregunta y qué. Los dos decían lo mismo, uno
+            debajo del otro.
+          */}
+          <h1>{t('age.pageTitle')}</h1>
         </div>
       </header>
 

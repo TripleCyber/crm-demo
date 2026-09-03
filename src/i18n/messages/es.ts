@@ -280,6 +280,8 @@ export const es: PartialMessages = {
   },
 
   age: {
+    /** Ver `pageTitle` en `en.ts`: la cabecera nombra el sitio, la tarjeta lo que se hace. */
+    pageTitle: 'Comprobación de edad',
     title: 'Pedir a {holder} que demuestre que es mayor de edad',
     body:
       'Una pregunta, una respuesta. Su fecha de nacimiento se queda en su teléfono: sólo viaja el sí o el no.',
