@@ -301,6 +301,16 @@ export const es: PartialMessages = {
     claimsTechnical:
       'Se piden por nombre en la sesión de presentación y te-api devuelve la intersección entre lo pedido y lo que la cartera reveló.',
     alertTitle: 'Cómo se le avisa',
+    // Ver la nota larga en `en.ts`: el marcador de posición es un ASUNTO y no
+    // una instrucción, porque el ejemplo que ve el agente en el hueco es el que
+    // va a imitar.
+    callSubject: 'De qué va la llamada',
+    callSubjectPlaceholder: 'Un pago con tarjeta que no reconoce',
+    callSubjectHint:
+      'Es lo primero que lee en su móvil, y a lo que dice que sí o que no. <b>Di de qué va la llamada \u2014 no le pidas nada aquí</b>: ni códigos, ni contraseñas, ni números de tarjeta.',
+    callCase: 'Referencia del expediente',
+    callCasePlaceholder: 'CASE-2026-4471',
+    callCaseHint: 'Opcional. Sólo si puede cotejarla con algo que ya le hayáis mandado.',
     alertPhone: 'Está al teléfono · avisar a su móvil',
     alertPhoneBusy: 'Avisando…',
     alertQr: 'Está delante · enseñar QR',
@@ -311,6 +321,8 @@ export const es: PartialMessages = {
     requestFailed: 'la petición ha fallado ({status})',
     noServer: 'no se ha podido contactar con el servidor',
     previewTitle: 'Lo que le llega a él',
+    callSubjectPreview: 'Lee primero',
+    callSubjectPreviewEmpty: 'Nada todavía. Di de qué va la llamada.',
     onBehalfOf: 'A nombre de',
     onBehalfOfValue: '{name}, agente {id}',
     about: 'Sobre',
@@ -770,6 +782,12 @@ export const es: PartialMessages = {
     bodyNotJson: 'el cuerpo no es JSON',
     badChannel: 'channel tiene que ser qr o phone',
     noClaimsRequested: 'hay que pedir al menos un atributo',
+    missingCallSubject: 'falta el asunto de la llamada, y su móvil no tendría nada que enseñar',
+    callSubjectTooLong:
+      'el asunto de la llamada es una línea en la pantalla de un móvil: {max} caracteres como mucho',
+    callCaseTooLong: 'la referencia del expediente no puede pasar de {max} caracteres',
+    callNotOnQr:
+      'el asunto de la llamada sólo viaja cuando se avisa a su móvil; el QR no lo lleva',
     claimsNotCarried:
       'la credencial «{label}» de este cliente no lleva {claims}, así que no se puede pedir',
     missingPresentationId: 'falta presentationId',

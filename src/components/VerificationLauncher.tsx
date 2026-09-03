@@ -54,6 +54,44 @@ import type { Translator } from '@/i18n/translate';
  * - **En el mostrador.** El titular está delante y mira esta misma pantalla.
  *
  * El canal cambia **cómo se avisa**, no qué se pide ni qué se comprueba.
+ *
+ * ## De qué va la llamada: siempre a la vista, pero sólo manda en el teléfono
+ *
+ * `POST /v1/b2b/wakeups` **exige** `call.subject` desde la tarea 4.0 del marco
+ * de peticiones, y lo pinta de héroe: es lo más grande de la pantalla del
+ * titular y la respuesta a la única pregunta que se hace alguien a quien acaban
+ * de llamar — «¿esto de qué es?». No es un campo administrativo: es lo que le
+ * deja decidir si aprueba.
+ *
+ * El campo se enseña **siempre**, y no sólo al ir a pulsar el botón del
+ * teléfono, porque en esta pantalla **el canal no se elige antes: el canal es el
+ * botón**. Un campo que apareciera al pulsar obligaría a pulsar, leer, escribir
+ * y volver a pulsar con el cliente esperando al aparato. Lo que sí es
+ * condicional es a quién gobierna: **deshabilita el botón del teléfono y no toca
+ * el del QR**, porque el QR no llama al timbre y por tanto no pinta ningún
+ * asunto en ninguna parte. Escribirlo y mandarlo por QR sería escribir un dato
+ * para tirarlo, así que ni se manda — y si llegara, la ruta lo rechaza en vez de
+ * ignorarlo.
+ *
+ * ## `case` sí, `branch` no
+ *
+ * La plantilla acepta dos opcionales más. Se expone uno:
+ *
+ * - **`case`** — la referencia del expediente. Es la única de las dos que la
+ *   persona puede **cotejar**: si el banco ya le mandó una carta o un correo con
+ *   ese número, verlo en el móvil es una comprobación de verdad y no un adorno.
+ *   Va opcional y en blanco de salida, para que quien no tenga una referencia no
+ *   se invente ninguna — un número que nadie coteja enseña a dictar números por
+ *   teléfono, que es el reflejo que un estafador explota (el mismo argumento
+ *   está escrito abajo, en [TransactionLevel], sobre las cuatro cifras).
+ *   Salvedad honesta: **esta maqueta no tiene expedientes**, así que hoy lo
+ *   teclea el agente; en una integración de verdad sale del ticket que tiene
+ *   delante, que es la forma que este campo existe para enseñar.
+ * - **`branch`** — la sucursal. No se expone. Nadie teclea de qué oficina llama
+ *   en cada llamada, y este CRM no guarda la oficina de nadie: sería una segunda
+ *   línea de texto libre en la misma pantalla, escrita a mano cada vez, para
+ *   decir algo que el titular no puede contrastar con nada. El día que la
+ *   instalación sepa desde dónde se llama, sale de ahí y no de un hueco.
  */
 
 /** Un atributo pedible, ya resuelto en el servidor. */
@@ -75,6 +113,16 @@ type Channel = 'qr' | 'phone';
 
 /** Los dos niveles de la ceremonia. Ver la cabecera. */
 type Level = 'identity' | 'transaction';
+
+/**
+ * Lo que te-api acepta en cada texto de la llamada.
+ *
+ * Aquí sirve para que el campo **no deje teclear de más** —enterarse al pulsar
+ * de que sobran cuarenta caracteres, con el cliente al teléfono, es enterarse
+ * tarde—, pero el que decide es el servidor: la ruta lo vuelve a medir, porque
+ * un `maxLength` del navegador no es una comprobación de nadie.
+ */
+const CALL_TEXT_MAX = 120;
 
 export function VerificationLauncher({
   externalId,
@@ -127,6 +175,11 @@ export function VerificationLauncher({
   const [selected, setSelected] = useState<readonly string[]>(
     () => credentialTypes[0]?.defaultClaims ?? [],
   );
+  // De qué va la llamada, y la referencia opcional. Nacen vacíos a propósito:
+  // un asunto por defecto sería un asunto que nadie ha escrito, y lo leería el
+  // titular como si alguien lo hubiera pensado para él.
+  const [callSubject, setCallSubject] = useState('');
+  const [callCase, setCallCase] = useState('');
   /** Qué botón se está atendiendo, para deshabilitar sólo ése. */
   const [busy, setBusy] = useState<Channel | undefined>();
   const [error, setError] = useState<string | undefined>();
@@ -148,11 +201,35 @@ export function VerificationLauncher({
   const startRequest = async (channel: Channel) => {
     setBusy(channel);
     setError(undefined);
+    // Recortado antes de salir: te-api acepta `subject` con `.min(1)`, así que
+    // una cadena de espacios pasaría su esquema y llegaría al móvil del titular
+    // como un héroe en blanco — el hueco vacío que el campo existe para evitar.
+    const subject = callSubject.trim();
+    const reference = callCase.trim();
     try {
       const response = await fetch('/api/credentials/present', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ externalId, type, claims: selected, channel }),
+        body: JSON.stringify({
+          externalId,
+          type,
+          claims: selected,
+          channel,
+          // Sólo con el canal que lo pinta. Ver la cabecera: por QR no hay
+          // timbre, así que no hay pantalla donde salga el asunto, y la ruta
+          // rechaza el que llegue de más en vez de descartarlo en silencio.
+          //
+          // `case` se omite si está en blanco, no se manda vacío: te-api lo
+          // declara `.min(1)` dentro de un objeto `.strict()`.
+          ...(channel === 'phone'
+            ? {
+                call: {
+                  subject,
+                  ...(reference === '' ? {} : { case: reference }),
+                },
+              }
+            : {}),
+        }),
       });
       const payload = (await response.json()) as { presentationId?: string; error?: string };
       if (!response.ok || typeof payload.presentationId !== 'string') {
@@ -309,6 +386,37 @@ export function VerificationLauncher({
                   {t.rich('verify.alertNoWallet', { name: holderName })}
                 </p>
               )}
+              {/*
+                DE QUÉ VA LA LLAMADA. Va en esta tarjeta y no en la de arriba
+                porque el asunto es una propiedad de CÓMO SE AVISA —sólo viaja
+                en el timbre— y no de qué se pide. Ver la cabecera.
+              */}
+              <label className="field">
+                <span>{t('verify.callSubject')}</span>
+                <input
+                  value={callSubject}
+                  maxLength={CALL_TEXT_MAX}
+                  placeholder={t('verify.callSubjectPlaceholder')}
+                  onChange={(event) => setCallSubject(event.target.value)}
+                />
+              </label>
+              <small style={{ display: 'block', margin: '-8px 0 16px', color: 'var(--ink-2)' }}>
+                {t.rich('verify.callSubjectHint')}
+              </small>
+
+              <label className="field">
+                <span>{t('verify.callCase')}</span>
+                <input
+                  value={callCase}
+                  maxLength={CALL_TEXT_MAX}
+                  placeholder={t('verify.callCasePlaceholder')}
+                  onChange={(event) => setCallCase(event.target.value)}
+                />
+              </label>
+              <small style={{ display: 'block', margin: '-8px 0 18px', color: 'var(--ink-2)' }}>
+                {t('verify.callCaseHint')}
+              </small>
+
               <div className="row" style={{ alignItems: 'stretch' }}>
                 <button
                   type="button"
@@ -317,6 +425,12 @@ export function VerificationLauncher({
                     busy !== undefined ||
                     type === '' ||
                     selected.length === 0 ||
+                    // Sin asunto no se puede tocar el timbre: te-api lo exige y
+                    // contestaría `400`. Se para en el botón y no en la
+                    // respuesta porque el agente está al teléfono, y un error
+                    // que llega después de pulsar es un error que llega tarde.
+                    // El botón del QR no lo mira: ese canal no lleva asunto.
+                    callSubject.trim() === '' ||
                     // No es un aviso que se pueda ignorar pulsando igual: el
                     // botón no puede cumplir lo que su rótulo promete.
                     walletLinked === false
@@ -351,6 +465,21 @@ export function VerificationLauncher({
                 <span className="panel-mark">TripleEnable</span>
               </h2>
               <dl className="facts">
+                {/*
+                  Primero, porque es lo primero que se lee en el móvil. Y
+                  sobre todo porque de este panel sale lo que el agente tiene
+                  que DECIR EN VOZ ALTA —lo dice la nota de abajo—, y el asunto
+                  es justo la frase que tiene que coincidir con lo que el
+                  titular está leyendo mientras le habla.
+                */}
+                <dt>{t('verify.callSubjectPreview')}</dt>
+                <dd>
+                  {callSubject.trim() === '' ? (
+                    <span className="none">{t('verify.callSubjectPreviewEmpty')}</span>
+                  ) : (
+                    callSubject.trim()
+                  )}
+                </dd>
                 <dt>{t('verify.onBehalfOf')}</dt>
                 <dd>{t('verify.onBehalfOfValue', { name: agent.displayName, id: agent.id })}</dd>
                 <dt>{t('verify.about')}</dt>

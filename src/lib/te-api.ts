@@ -142,6 +142,26 @@ export interface WakeupInput {
   /** El id del cliente en la organización. El mismo que en la presentación. */
   readonly subjectReference: string;
   /**
+   * **De qué va la llamada.** Es el héroe de la pantalla que ve el titular: la
+   * respuesta a la única pregunta que se hace alguien a quien acaban de llamar.
+   *
+   * te-api lo **exige** desde la tarea 4.0 del marco de peticiones y lo valida
+   * contra la plantilla que lo va a pintar (`bank.call.v2`), así que sin esto la
+   * llamada sale con `400`. Es deliberado por su parte: un héroe opcional
+   * despliega la pantalla con el hueco vacío, y ese hueco lo sufre la persona a
+   * la que están llamando, no quien integra.
+   *
+   * `branch` y `case` son los opcionales que la plantilla acepta. **No se manda
+   * nada más**: te-api rechaza una clave que el catálogo no conozca en vez de
+   * recortarla, para que este CRM no se quede creyendo que mandó algo que la
+   * pantalla nunca va a enseñar.
+   */
+  readonly call: {
+    readonly subject: string;
+    readonly branch?: string;
+    readonly case?: string;
+  };
+  /**
    * `identity` = «demuéstrame que eres tú»; `transaction` = aprobar una
    * operación con importe y destinatario.
    *
@@ -435,6 +455,7 @@ export async function sendWakeup(
       subjectReference: input.subjectReference,
       kind: input.kind,
       requestUri: input.requestUri,
+      call: input.call,
       actor: { id: input.actor.id, displayName: input.actor.displayName },
     },
   });

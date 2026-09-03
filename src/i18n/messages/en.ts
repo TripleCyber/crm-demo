@@ -336,6 +336,29 @@ export const en = {
     claimsTechnical:
       'They are asked for by name in the presentation session and te-api returns the intersection of what was asked and what the wallet disclosed.',
     alertTitle: 'How they are alerted',
+    /*
+     * DE QUÉ VA LA LLAMADA — el héroe de la pantalla del titular.
+     *
+     * Los rótulos viven en la tarjeta del aviso y no en la de arriba porque el
+     * asunto es una propiedad de **cómo se avisa**, no de qué se pide: sólo
+     * viaja en el timbre, y el QR no lo lleva.
+     *
+     * El marcador de posición es un ASUNTO, no una instrucción, y eso no es
+     * decoración. El texto lo escribe un agente y lo lee alguien a quien acaban
+     * de llamar por teléfono: el ejemplo que vea en el hueco es el que va a
+     * imitar, y «un pago con tarjeta que no reconoce» enseña a describir la
+     * llamada donde «confirma tu clave» enseñaría a pedir. Es lo único que esta
+     * consola puede hacer al respecto — el texto sigue siendo libre, y lo que
+     * impide que se lea como la frase del sistema es que la plantilla pinta el
+     * asunto APARTE del enunciado, no que aquí se filtre nada.
+     */
+    callSubject: 'What the call is about',
+    callSubjectPlaceholder: 'A card payment you did not recognise',
+    callSubjectHint:
+      'The first line they read on their phone, and what they say yes or no to. <b>Say what the call is about \u2014 never ask them for anything here</b>: no codes, no passwords, no card numbers.',
+    callCase: 'Case reference',
+    callCasePlaceholder: 'CASE-2026-4471',
+    callCaseHint: 'Optional. Only if they can check it against something you already sent them.',
     alertPhone: 'They are on the phone · alert their mobile',
     alertPhoneBusy: 'Alerting…',
     alertQr: 'They are in front of you · show QR',
@@ -353,6 +376,8 @@ export const en = {
     requestFailed: 'the request failed ({status})',
     noServer: 'the server could not be reached',
     previewTitle: 'What reaches them',
+    callSubjectPreview: 'They read first',
+    callSubjectPreviewEmpty: 'Nothing yet. Say what the call is about.',
     onBehalfOf: 'On behalf of',
     onBehalfOfValue: '{name}, agent {id}',
     about: 'About',
@@ -828,6 +853,12 @@ export const en = {
     bodyNotJson: 'the body is not JSON',
     badChannel: 'channel has to be qr or phone',
     noClaimsRequested: 'at least one attribute has to be requested',
+    missingCallSubject: 'the call subject is missing, and their phone would have nothing to show',
+    callSubjectTooLong:
+      'the call subject is one line on a phone screen: {max} characters at most',
+    callCaseTooLong: 'the case reference cannot be longer than {max} characters',
+    callNotOnQr:
+      'the call subject only travels when their mobile is alerted; the QR does not carry it',
     claimsNotCarried:
       'this customer’s “{label}” credential does not carry {claims}, so it cannot be requested',
     missingPresentationId: 'presentationId is missing',

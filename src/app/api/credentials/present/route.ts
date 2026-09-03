@@ -54,15 +54,19 @@ import { findVerification, recordVerification } from '@/lib/verifications';
  *
  * ## Qué decide el navegador y qué decide este servidor
  *
- * Del navegador llegan **cuatro cosas, y las cuatro son elecciones legítimas
- * del operador**: a qué cliente (`externalId`), qué tipo de credencial
- * (`type`), qué atributos de ese tipo (`claims`) y por qué canal se avisa
- * (`channel`). Ninguna de las cuatro se cree tal cual:
+ * Del navegador llegan **cinco cosas, y las cinco son elecciones legítimas del
+ * operador**: a qué cliente (`externalId`), qué tipo de credencial (`type`),
+ * qué atributos de ese tipo (`claims`), por qué canal se avisa (`channel`) y
+ * **de qué va la llamada** (`call.subject`, y el opcional `call.case`). Ninguna
+ * de las cinco se cree tal cual:
  *
  * - `externalId` se busca **con la organización de la sesión** en el `where`.
  * - `type` se resuelve **contra el padrón de te-api** (`GET /v1/b2b/organization`).
  * - `claims` se comprueban **contra los que ese tipo lleva en esta ficha**.
  * - `channel` se compara contra una lista cerrada.
+ * - `call` se recorta, se mide contra el límite de te-api y **se exige sólo en
+ *   el canal que lo pinta** — el del teléfono. Por QR se rechaza en vez de
+ *   descartarse, porque ahí no habría pantalla donde enseñarlo.
  *
  * Y hay tres cosas que el navegador **no manda y no puede mandar**, porque las
  * sabe el servidor: el `subjectReference` (sale de la ficha del padrón, no del
@@ -89,7 +93,21 @@ interface PresentBody {
   type?: unknown;
   claims?: unknown;
   channel?: unknown;
+  call?: unknown;
 }
+
+/**
+ * Lo que te-api acepta en cada texto de la llamada: `z.string().min(1).max(120)`
+ * (`src/routes/b2b.ts`, `wakeupCall`).
+ *
+ * Se repite aquí en vez de importarse porque son dos despliegues distintos y no
+ * hay un paquete compartido — pero **se comprueba aquí de todas formas**, y no
+ * por ahorrar una llamada: un asunto de 200 caracteres saldría de te-api como
+ * `400 invalid_request` con su `requestId`, y el agente, que está al teléfono,
+ * leería «te-api ha rechazado los datos de la llamada» para algo que este
+ * servidor sabe decir con el nombre del campo y el número.
+ */
+const CALL_TEXT_MAX = 120;
 
 export async function POST(request: Request): Promise<NextResponse> {
   // El idioma de quien tiene la consola delante: lo que devuelve esta ruta se
@@ -114,6 +132,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   const channel: PresentChannel | undefined =
     body.channel === 'qr' || body.channel === 'phone' ? body.channel : undefined;
 
+  // ── De qué va la llamada ───────────────────────────────────────────────
+  //
+  // Se **recorta antes de medir**, y eso no es cosmética: te-api declara
+  // `subject` como `.min(1)`, así que una cadena de espacios pasa su esquema y
+  // llega hasta la pantalla del titular como un héroe en blanco — que es
+  // exactamente el hueco vacío que la tarea 4.0 hizo obligatorio el campo para
+  // evitar. Aquí un asunto que no dice nada es un asunto que falta.
+  const call =
+    typeof body.call === 'object' && body.call !== null
+      ? (body.call as { subject?: unknown; case?: unknown })
+      : undefined;
+  const callSubject = typeof call?.subject === 'string' ? call.subject.trim() : '';
+  const callCase = typeof call?.case === 'string' ? call.case.trim() : '';
+
   if (externalId === '' || type === '') {
     return NextResponse.json({ error: t('errors.missingFields') }, { status: 400 });
   }
@@ -125,6 +157,41 @@ export async function POST(request: Request): Promise<NextResponse> {
   // `.min(1)` en su esquema). No hay que gastar una llamada para saberlo.
   if (requested.length === 0) {
     return NextResponse.json({ error: t('errors.noClaimsRequested') }, { status: 400 });
+  }
+
+  // ── El asunto se exige donde se pinta, y sólo ahí ──────────────────────
+  //
+  // El timbre es lo único que lleva la llamada: el canal del QR abre la misma
+  // sesión de presentación y **no llama a `POST /v1/b2b/wakeups`**, así que un
+  // asunto escrito para un QR no lo enseñaría ninguna pantalla. Pedirlo ahí
+  // sería pedir un dato para tirarlo.
+  //
+  // Y por eso mandarlo con el QR **se rechaza en vez de ignorarse**, que es la
+  // misma disciplina que este fichero aplica a los atributos que un tipo no
+  // lleva y que te-api aplica con su objeto `.strict()`: descartarlo en
+  // silencio deja a quien llama convencido de que el titular leyó algo que no
+  // se pintó nunca. El día que el QR pinte la petición del marco, esta rama es
+  // la línea que cambia.
+  if (channel === 'qr') {
+    if (call !== undefined) {
+      return NextResponse.json({ error: t('errors.callNotOnQr') }, { status: 400 });
+    }
+  } else {
+    if (callSubject === '') {
+      return NextResponse.json({ error: t('errors.missingCallSubject') }, { status: 400 });
+    }
+    if (callSubject.length > CALL_TEXT_MAX) {
+      return NextResponse.json(
+        { error: t('errors.callSubjectTooLong', { max: CALL_TEXT_MAX }) },
+        { status: 400 },
+      );
+    }
+    if (callCase.length > CALL_TEXT_MAX) {
+      return NextResponse.json(
+        { error: t('errors.callCaseTooLong', { max: CALL_TEXT_MAX }) },
+        { status: 400 },
+      );
+    }
   }
 
   try {
@@ -236,6 +303,17 @@ export async function POST(request: Request): Promise<NextResponse> {
           // no se manda desde aquí: esta pantalla no tiene ninguna operación
           // que aprobar.
           kind: 'identity',
+          // **De qué va la llamada**, ya recortado y medido arriba. Es el héroe
+          // de la pantalla del titular: lo más grande de lo que va a leer, y la
+          // respuesta a la única pregunta que se hace alguien a quien acaban de
+          // llamar. Sin esto te-api contesta `400 invalid_request` y no suena
+          // ningún teléfono.
+          //
+          // `case` va **ausente y no vacío** cuando el agente no lo escribe:
+          // te-api lo declara `.min(1)` dentro de un objeto `.strict()`, así que
+          // `case: ''` es un rechazo y `case` sin poner es lo correcto. `branch`
+          // no se manda: ver la cabecera de `VerificationLauncher`.
+          call: { subject: callSubject, ...(callCase === '' ? {} : { case: callCase }) },
           // Tal cual salió de te-api. Es el puntero a **su** verificador, y por
           // eso el timbre suena apuntando a la infraestructura de TripleEnable
           // y no a la de Banco Demo.
