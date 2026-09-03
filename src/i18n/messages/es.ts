@@ -277,6 +277,27 @@ export const es: PartialMessages = {
     unexpected: 'Si no has pedido esta credencial, no abras el enlace y avísanos.',
   },
 
+  transfer: {
+    title: 'Autorizar una transferencia de {holder}',
+    noWallet:
+      'Este cliente no tiene cartera vinculada con nosotros, así que no hay teléfono al que pedírselo. La petición se creará y caducará sola.',
+    amountLabel: 'Importe',
+    amountPlaceholder: 'EUR 1.240,00',
+    amountHelp:
+      'Escríbelo como lo tiene que leer el cliente, con su moneda. Es lo más grande de su pantalla y el botón lo dice.',
+    destinationLabel: 'A',
+    destinationPlaceholder: 'ES91 2100 0418 4502 0005 1332',
+    destinationHelp: 'La cuenta que pueda reconocer. Entra en lo que firma.',
+    previewTitle: 'Lo que va a leer',
+    previewAmount: 'Importe',
+    previewDestination: 'A',
+    ask: 'Pedirle que la autorice',
+    asking: 'Pidiendo…',
+    askedTitle: 'Pedido',
+    askedDelivered: 'Se ha avisado a su teléfono. Lo autoriza ahí, no aquí.',
+    askedNotDelivered:
+      'La petición existe, pero no se ha avisado a ningún teléfono: puede que no tenga aparato elegible o que ya haya recibido demasiados avisos. Localízalo por otra vía.',
+  },
   verify: {
     title: 'Verificar identidad',
     phone: 'Teléfono',
@@ -779,6 +800,11 @@ export const es: PartialMessages = {
     missingFields: 'faltan externalId o type',
     badDelivery: 'delivery tiene que ser uno de: {channels}',
     unknownType: '«{type}» no es un tipo de credencial de esta organización',
+    transferAmountMissing: 'falta el importe, y es lo más grande de su pantalla',
+    transferAmountTooLong: 'el importe no puede pasar de {max} caracteres',
+    transferDestinationMissing: 'falta el destino: estaría autorizando una transferencia a ninguna parte',
+    transferDestinationTooLong: 'el destino no puede pasar de {max} caracteres',
+    transferUpstream: 'No se ha podido pedir la autorización a TripleEnable. El detalle está en Diagnóstico.',
     bodyNotJson: 'el cuerpo no es JSON',
     badChannel: 'channel tiene que ser qr o phone',
     noClaimsRequested: 'hay que pedir al menos un atributo',

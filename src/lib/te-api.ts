@@ -462,6 +462,88 @@ export async function sendWakeup(
 }
 
 /**
+ * **Una autorización de transferencia**, para que el titular la firme en su
+ * teléfono. Fase 5 del marco de peticiones.
+ *
+ * ## Por qué esto no pasa por el timbre
+ *
+ * `POST /v1/b2b/wakeups` es la fachada de **la validación de llamada**: dice
+ * «avisa a esta persona de que quiero verificar algo» y apunta a una sesión de
+ * verificador. Una transferencia no verifica nada — pide **autorizar una
+ * operación concreta**, y lo que la persona firma es el importe y el destino.
+ * Son dos ceremonias (`kind: verify` y `kind: authorize`) y la ruta que las
+ * compone es la genérica del marco, `POST /v1/requests`.
+ *
+ * ## Lo que la persona ve, y por qué se manda así
+ *
+ * te-api valida los campos contra la plantilla `exchange.transfer.v1`, que pide
+ * `amount` y `destination` y pinta el importe **de héroe**. Los dos entran
+ * además en el texto que se firma, y ése es el punto entero: sin eso, «una firma
+ * de "verifica que eres tú" y una de "transfiere 1.240 €" son indistinguibles».
+ *
+ * Por eso los rótulos van desde aquí: te-api no traduce nada. Lo que se manda en
+ * `label` es lo que el titular lee en su pantalla, así que va en **su** idioma y
+ * no en el de la consola.
+ *
+ * ## Y el cliente se nombra con NUESTRO id
+ *
+ * `subjectReference` es el `externalId` de la ficha, igual que en todo lo demás
+ * de la puerta B2B. te-api resuelve el vínculo con una huella que lleva su
+ * `org_id` dentro; el identificador de titular de te-api no llega aquí, y no
+ * debe.
+ */
+export interface TransferApprovalInput {
+  readonly subjectReference: string;
+  /** Ya formateado y con su moneda. Es el héroe: se lee desde lejos. */
+  readonly amount: string;
+  /** A dónde va. El IBAN, la cuenta, lo que el titular pueda reconocer. */
+  readonly destination: string;
+  /** Los rótulos, en el idioma del titular. Ver la cabecera. */
+  readonly labels: { readonly amount: string; readonly destination: string };
+}
+
+export interface TransferApprovalResult {
+  readonly requestId: string;
+  readonly expiresAt: string;
+  readonly delivered: boolean;
+}
+
+export async function requestTransferApproval(
+  organization: OrganizationConfig,
+  input: TransferApprovalInput,
+): Promise<TransferApprovalResult> {
+  return callB2b<TransferApprovalResult>(organization, organization.verifierUrl, '/v1/requests', {
+    method: 'POST',
+    body: {
+      subjectReference: input.subjectReference,
+      kind: 'authorize',
+      // La identidad de la cartera y no una credencial: lo que hay que probar es
+      // que quien autoriza es el titular, no que tenga ningún atributo.
+      signWith: 'identity',
+      template: 'exchange.transfer.v1',
+      fields: [
+        {
+          key: 'amount',
+          label: input.labels.amount,
+          value: input.amount,
+          // Monoespaciada y de héroe: son cifras que hay que poder leer sin
+          // confundir un cero con una O, y el botón dice la cantidad.
+          type: 'mono',
+          style: 'hero',
+        },
+        {
+          key: 'destination',
+          label: input.labels.destination,
+          value: input.destination,
+          type: 'mono',
+          style: 'normal',
+        },
+      ],
+    },
+  });
+}
+
+/**
  * ¿Tiene este cliente una cartera vinculada con nosotros?
  *
  * ═══════════════════════════════════════════════════════════════════════════

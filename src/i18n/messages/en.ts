@@ -312,6 +312,27 @@ export const en = {
   },
 
   /** La pantalla que lanza una comprobación. */
+  transfer: {
+    title: 'Authorise a transfer for {holder}',
+    noWallet:
+      'This customer has no wallet linked with us, so there is no phone to ask. The request will be created and will simply expire.',
+    amountLabel: 'Amount',
+    amountPlaceholder: 'EUR 1,240.00',
+    amountHelp:
+      'Write it as the customer should read it, with its currency. It is the biggest thing on their screen and the button says it.',
+    destinationLabel: 'To',
+    destinationPlaceholder: 'ES91 2100 0418 4502 0005 1332',
+    destinationHelp: 'The account they can recognise. It goes into what they sign.',
+    previewTitle: 'What they will read',
+    previewAmount: 'Amount',
+    previewDestination: 'To',
+    ask: 'Ask them to authorise',
+    asking: 'Asking…',
+    askedTitle: 'Asked',
+    askedDelivered: 'Their phone has been notified. They authorise it there, not here.',
+    askedNotDelivered:
+      'The request exists, but no phone was notified: they may have no eligible device, or too many notifications already. Reach them another way.',
+  },
   verify: {
     title: 'Verify identity',
     phone: 'Phone',
@@ -850,6 +871,11 @@ export const en = {
     missingFields: 'externalId or type is missing',
     badDelivery: 'delivery has to be one of: {channels}',
     unknownType: '“{type}” is not a credential type of this organisation',
+    transferAmountMissing: 'the amount is missing, and it is the biggest thing on their screen',
+    transferAmountTooLong: 'the amount cannot be longer than {max} characters',
+    transferDestinationMissing: 'the destination is missing: they would be authorising a transfer to nowhere',
+    transferDestinationTooLong: 'the destination cannot be longer than {max} characters',
+    transferUpstream: 'TripleEnable could not be asked for the approval. The detail is in Diagnostics.',
     bodyNotJson: 'the body is not JSON',
     badChannel: 'channel has to be qr or phone',
     noClaimsRequested: 'at least one attribute has to be requested',

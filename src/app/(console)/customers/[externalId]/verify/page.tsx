@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { TransferLauncher } from '@/components/TransferLauncher';
 import { VerificationLauncher } from '@/components/VerificationLauncher';
 import { getTranslator } from '@/i18n/server';
 import { loadCustomerContext } from '@/lib/customer-context';
@@ -77,14 +78,35 @@ export default async function VerifyCustomerPage({
         secreto, es lo que el titular va a ver en su móvil, y el agente tiene que
         poder leerlo en pantalla para decirlo en voz alta.
       */}
-      <VerificationLauncher
-        externalId={customer.externalId}
-        holderName={holderName}
-        credentialTypes={credentialTypes}
-        agent={session.agent}
-        initialLevel={initialLevel}
-        walletLinked={walletLinked}
-      />
+      {/*
+        **Los dos niveles dejan de compartir formulario, y es la fase 5.**
+        Hasta ahora el nivel 2 pintaba el mismo lanzador con otro `kind`, que
+        sólo cambiaba a qué pantalla enrutaba el aviso: no llevaba importe ni
+        destino, así que el titular aprobaba «una operación» sin que nada dijera
+        cuál. Una transferencia es otra ceremonia del marco —`kind: authorize`
+        con la plantilla `exchange.transfer.v1`— y lo que la persona firma son
+        esos dos datos.
+
+        Se elige aquí y no dentro de un lanzador con un `if` por campo: el
+        primero que se olvidara mandaría una transferencia por la tubería de una
+        verificación.
+      */}
+      {initialLevel === 'transaction' ? (
+        <TransferLauncher
+          externalId={customer.externalId}
+          holderName={holderName}
+          walletLinked={walletLinked}
+        />
+      ) : (
+        <VerificationLauncher
+          externalId={customer.externalId}
+          holderName={holderName}
+          credentialTypes={credentialTypes}
+          agent={session.agent}
+          initialLevel={initialLevel}
+          walletLinked={walletLinked}
+        />
+      )}
     </>
   );
 }
