@@ -48,10 +48,7 @@ export function AgeGateLauncher({
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [asked, setAsked] = useState<{
-    presentationId: string;
-    delivered: boolean;
-  } | null>(null);
+  const [asked, setAsked] = useState<{ presentationId: string } | null>(null);
 
   const ask = async () => {
     setBusy(true);
@@ -68,17 +65,13 @@ export function AgeGateLauncher({
       });
       const payload = (await response.json()) as {
         presentationId?: string;
-        delivered?: boolean;
         error?: string;
       };
       if (!response.ok || payload.presentationId === undefined) {
         setError(payload.error ?? t('errors.generic'));
         return;
       }
-      setAsked({
-        presentationId: payload.presentationId,
-        delivered: payload.delivered === true,
-      });
+      setAsked({ presentationId: payload.presentationId });
     } catch {
       setError(t('errors.generic'));
     } finally {
@@ -90,7 +83,7 @@ export function AgeGateLauncher({
     return (
       <div className="card">
         <h2>{t('age.askedTitle')}</h2>
-        <p>{asked.delivered ? t('age.askedDelivered') : t('age.askedNotDelivered')}</p>
+        <p>{t('age.asked')}</p>
         {/*
           El identificador de la **sesión del verificador**, que es el que el
           webhook va a nombrar. El de la petición del marco es del titular y de

@@ -505,7 +505,6 @@ export interface TransferApprovalInput {
 export interface TransferApprovalResult {
   readonly requestId: string;
   readonly expiresAt: string;
-  readonly delivered: boolean;
 }
 
 export async function requestTransferApproval(
@@ -588,7 +587,6 @@ export interface AgeCheckResult {
   readonly requestId: string;
   readonly presentationId: string;
   readonly expiresAt: string;
-  readonly delivered: boolean;
   /** La sesión del verificador, para anotarla. Ver el `return`. */
   readonly session: PresentationRequestResult;
 }
@@ -604,7 +602,15 @@ export async function requestAgeCheck(
     claims: ['age_over_18'],
   });
 
-  const asked = await callB2b<{ requestId: string; expiresAt: string; delivered: boolean }>(
+  /**
+   * **No hay `delivered`, y no es un olvido.** `POST /v1/requests` lo deja
+   * fuera de su respuesta a propósito: si llegó a algún teléfono —y por qué no
+   * si no— va a su diario y no al contrato, «por lo mismo que el timbre calla
+   * cuatro de sus cinco razones». Tipar aquí un campo que no viaja hacía que
+   * el cliente leyera `undefined` y afirmara «no se avisó a ningún teléfono»
+   * siempre, entregara o no.
+   */
+  const asked = await callB2b<{ requestId: string; expiresAt: string }>(
     organization,
     organization.verifierUrl,
     '/v1/requests',
@@ -654,7 +660,6 @@ export async function requestAgeCheck(
     // consola. Lo enseñó el recorrido de la 6.3 en el simulador.
     session,
     expiresAt: asked.expiresAt,
-    delivered: asked.delivered,
   };
 }
 

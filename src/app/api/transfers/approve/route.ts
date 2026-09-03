@@ -109,7 +109,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       // presupuesto de avisos está agotado. Quien lo pinta decide qué decirle al
       // agente; convertirlo aquí en un error borraría la diferencia entre «no se
       // pudo pedir» y «se pidió y no hay a quién avisar».
-      delivered: approval.delivered,
     });
   } catch (error) {
     // El mensaje de te-api no se enseña tal cual: viene en su idioma y con su

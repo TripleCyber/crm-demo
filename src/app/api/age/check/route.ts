@@ -142,7 +142,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       // así que es el que deja seguir esto desde la consola.
       presentationId: checked.presentationId,
       expiresAt: checked.expiresAt,
-      delivered: checked.delivered,
     });
   } catch (error) {
     console.error('age check failed', error);

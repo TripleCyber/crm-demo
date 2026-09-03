@@ -62,7 +62,7 @@ export function TransferLauncher({
   const [destination, setDestination] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [asked, setAsked] = useState<{ requestId: string; delivered: boolean } | null>(null);
+  const [asked, setAsked] = useState<{ requestId: string } | null>(null);
 
   const ready = amount.trim() !== '' && destination.trim() !== '';
 
@@ -77,14 +77,13 @@ export function TransferLauncher({
       });
       const payload = (await response.json()) as {
         requestId?: string;
-        delivered?: boolean;
         error?: string;
       };
       if (!response.ok || payload.requestId === undefined) {
         setError(payload.error ?? t('errors.generic'));
         return;
       }
-      setAsked({ requestId: payload.requestId, delivered: payload.delivered === true });
+      setAsked({ requestId: payload.requestId });
     } catch {
       setError(t('errors.generic'));
     } finally {
@@ -97,13 +96,13 @@ export function TransferLauncher({
       <div className="card">
         <h2>{t('transfer.askedTitle')}</h2>
         {/*
-          `delivered: false` **no es un error y no se pinta como tal**: es que
-          esa persona no tiene ningún aparato al que avisar, o que su presupuesto
-          de avisos está agotado. La petición existe y sigue viva; lo que no hay
-          es un teléfono que suene. Decírselo al agente es lo que le deja llamar
-          por otra vía en vez de esperar mirando una pantalla.
+          **Una frase, no dos.** Aquí se elegía entre «se ha avisado a su
+          teléfono» y «no se avisó a ninguno» según un `delivered` que te-api
+          **no manda**: lo deja fuera de la respuesta a propósito y va sólo a su
+          diario. El cliente lo leía `undefined` y pintaba la segunda siempre.
+          Se dice lo que esta pantalla sabe de verdad.
         */}
-        <p>{asked.delivered ? t('transfer.askedDelivered') : t('transfer.askedNotDelivered')}</p>
+        <p>{t('transfer.asked')}</p>
         <p className="page-facts">
           <span className="mono">{asked.requestId}</span>
         </p>

@@ -296,9 +296,21 @@ export const es: PartialMessages = {
     ask: 'Preguntar',
     asking: 'Preguntando…',
     askedTitle: 'Preguntado',
-    askedDelivered: 'Se ha avisado a su teléfono. Contesta ahí, no aquí.',
-    askedNotDelivered:
-      'La petición existe, pero no se ha avisado a ningún teléfono: puede que no tenga aparato elegible o que ya haya recibido demasiados avisos.',
+    /**
+     * **Lo que la consola puede afirmar, que no es que sonara el teléfono.**
+     *
+     * Había dos frases —«se ha avisado a su teléfono» y «no se avisó a
+     * ninguno»— elegidas por un `delivered` que **te-api no manda**:
+     * `POST /v1/requests` lo deja fuera de su respuesta a propósito, y lo dice
+     * en su propio comentario —va sólo al diario, «por lo mismo que el timbre
+     * calla cuatro de sus cinco razones»—. El cliente lo leía `undefined` y
+     * pintaba «no se avisó a ningún teléfono» **siempre**, entregara o no.
+     *
+     * Así que se dice lo único que esta pantalla sabe: la petición está hecha y
+     * se contesta en el teléfono. Que suene no lo confirma nadie, y es la misma
+     * honestidad que ya practica la hermana con el timbre.
+     */
+    asked: 'Pedido. Contesta en su teléfono, no aquí — dile que abra la app.',
     follow: 'Seguirlo',
   },
   transfer: {
@@ -318,9 +330,21 @@ export const es: PartialMessages = {
     ask: 'Pedirle que la autorice',
     asking: 'Pidiendo…',
     askedTitle: 'Pedido',
-    askedDelivered: 'Se ha avisado a su teléfono. Lo autoriza ahí, no aquí.',
-    askedNotDelivered:
-      'La petición existe, pero no se ha avisado a ningún teléfono: puede que no tenga aparato elegible o que ya haya recibido demasiados avisos. Localízalo por otra vía.',
+    /**
+     * **Lo que la consola puede afirmar, que no es que sonara el teléfono.**
+     *
+     * Había dos frases —«se ha avisado a su teléfono» y «no se avisó a
+     * ninguno»— elegidas por un `delivered` que **te-api no manda**:
+     * `POST /v1/requests` lo deja fuera de su respuesta a propósito, y lo dice
+     * en su propio comentario —va sólo al diario, «por lo mismo que el timbre
+     * calla cuatro de sus cinco razones»—. El cliente lo leía `undefined` y
+     * pintaba «no se avisó a ningún teléfono» **siempre**, entregara o no.
+     *
+     * Así que se dice lo único que esta pantalla sabe: la petición está hecha y
+     * se contesta en el teléfono. Que suene no lo confirma nadie, y es la misma
+     * honestidad que ya practica la hermana con el timbre.
+     */
+    asked: 'Pedido. Lo autoriza en su teléfono, no aquí — dile que abra la app.',
   },
   verify: {
     title: 'Verificar identidad',
