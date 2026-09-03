@@ -283,6 +283,17 @@ export default async function CustomerPage({
                 <strong>{t('customer.authoriseTransaction')}</strong>
                 <span>{t('customer.authoriseTransactionHint')}</span>
               </Link>
+              {/*
+                **Entrada propia, no un tercer nivel.** Lo que se pide aquí no
+                es «estos atributos» sino una sola pregunta, y la pantalla del
+                titular es otra. Meterlo en `?level=` habría obligado a un `if`
+                por campo en el lanzador de verificación, que es lo que se
+                evitó al separar la transferencia.
+              */}
+              <Link className="action" href={`${href}/age`}>
+                <strong>{t('customer.checkAge')}</strong>
+                <span>{t('customer.checkAgeHint')}</span>
+              </Link>
             </div>
           </div>
         </div>

@@ -544,6 +544,114 @@ export async function requestTransferApproval(
 }
 
 /**
+ * **Una puerta de edad**: que el titular demuestre que es mayor sin enseñar su
+ * fecha de nacimiento. Fase 6 del marco de peticiones.
+ *
+ * ## Son dos llamadas, y el orden importa
+ *
+ * 1. **La sesión del verificador** (`requestPresentation`): es donde va a acabar
+ *    la presentación de la credencial. La abre te-api en **su** verificador —la
+ *    regla del dueño: «la verificación de credenciales siempre debe hacerse en
+ *    nuestra infraestructura»— y devuelve el `requestUri`.
+ * 2. **La petición del marco** (`POST /v1/requests`): es lo que **la persona ve
+ *    y consiente**, con la plantilla `age.gate.v1`, y lleva ese `requestUri`
+ *    dentro para que su cartera sepa a dónde ir.
+ *
+ * Al revés no funciona: la petición necesita el `requestUri` para existir.
+ *
+ * ## Por qué esto no es una verificación normal
+ *
+ * Una verificación normal (`api/credentials/present`) pide atributos y avisa por
+ * QR o por teléfono; lo que el titular ve es «comparte estos datos». Aquí lo que
+ * ve es **una sola pregunta con una sola respuesta**: mayor de edad, sí o no. Es
+ * otra pantalla —`age.gate.v1`, con el sí de héroe y enfrente lo que **no** se
+ * enseña— y por eso es otra ceremonia.
+ *
+ * ## Y sólo viaja un atributo
+ *
+ * `age_over_18` y nada más. No es una restricción de esta función: es el punto
+ * entero de la plantilla, y te-api lo filtra por su lado —la credencial lleva la
+ * fecha de nacimiento y no sale—. Añadir aquí un segundo atributo convertiría
+ * una puerta de edad en una divulgación de datos con otro nombre.
+ */
+export interface AgeCheckInput {
+  readonly subjectReference: string;
+  /** El tipo de credencial de esta organización que lleva la edad dentro. */
+  readonly credentialType: string;
+  /** Por qué se pregunta. Opcional; lo lee el titular. Ver la ruta. */
+  readonly reason?: string;
+  /** Los rótulos, en el idioma del titular. */
+  readonly labels: { readonly age: string; readonly reason: string };
+}
+
+export interface AgeCheckResult {
+  readonly requestId: string;
+  readonly presentationId: string;
+  readonly expiresAt: string;
+  readonly delivered: boolean;
+}
+
+export async function requestAgeCheck(
+  organization: OrganizationConfig,
+  input: AgeCheckInput,
+): Promise<AgeCheckResult> {
+  const session = await requestPresentation(organization, {
+    type: input.credentialType,
+    subjectReference: input.subjectReference,
+    // **Un solo atributo.** Ver la cabecera.
+    claims: ['age_over_18'],
+  });
+
+  const asked = await callB2b<{ requestId: string; expiresAt: string; delivered: boolean }>(
+    organization,
+    organization.verifierUrl,
+    '/v1/requests',
+    {
+      method: 'POST',
+      body: {
+        subjectReference: input.subjectReference,
+        kind: 'present',
+        // La credencial **es** la prueba: una firma de identidad diría quién
+        // contesta y no cuántos años tiene. te-api no aprueba esta petición
+        // hasta que su verificador confirma la presentación.
+        signWith: 'credential',
+        credentialType: input.credentialType,
+        template: 'age.gate.v1',
+        requestUri: session.requestUri,
+        fields: [
+          {
+            key: 'age_over_18',
+            label: input.labels.age,
+            // Lo que se afirma, no un dato: la pantalla lo pinta de héroe.
+            value: 'Yes',
+            type: 'text',
+            style: 'hero',
+          },
+          ...(input.reason === undefined
+            ? []
+            : [
+                {
+                  key: 'reason',
+                  label: input.labels.reason,
+                  value: input.reason,
+                  type: 'text',
+                  style: 'normal',
+                },
+              ]),
+        ],
+      },
+    },
+  );
+
+  return {
+    requestId: asked.requestId,
+    presentationId: session.presentationId,
+    expiresAt: asked.expiresAt,
+    delivered: asked.delivered,
+  };
+}
+
+/**
  * ¿Tiene este cliente una cartera vinculada con nosotros?
  *
  * ═══════════════════════════════════════════════════════════════════════════

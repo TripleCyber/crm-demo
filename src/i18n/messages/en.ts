@@ -244,6 +244,8 @@ export const en = {
     verifyCallerHint: 'Level 1 · that whoever is on the phone is the holder.',
     authoriseTransaction: 'Authorise transaction',
     authoriseTransactionHint: 'Level 2 · sign an amount. Not executable yet.',
+    checkAge: 'Check they are over 18',
+    checkAgeHint: 'One question. Their date of birth stays on their phone.',
     channelPhone: 'Alert to their phone',
     channelQr: 'QR at the counter',
     onBehalfOf: 'on behalf of {agent}',
@@ -312,6 +314,26 @@ export const en = {
   },
 
   /** La pantalla que lanza una comprobación. */
+  age: {
+    title: 'Ask {holder} to prove they are over 18',
+    body:
+      'One question, one answer. Their date of birth stays on their phone: only the yes or no travels.',
+    noWallet:
+      'This customer has no wallet linked with us, so there is no phone to ask. The request will be created and will simply expire.',
+    typeLabel: 'Credential',
+    typeHelp: 'The credential of this organisation that carries their age.',
+    reasonLabel: 'Why (optional)',
+    reasonPlaceholder: 'Buying age-restricted goods',
+    reasonHelp:
+      'They will read this next to the question. Say why you are asking — do not ask them for anything here.',
+    ask: 'Ask',
+    asking: 'Asking…',
+    askedTitle: 'Asked',
+    askedDelivered: 'Their phone has been notified. They answer there, not here.',
+    askedNotDelivered:
+      'The request exists, but no phone was notified: they may have no eligible device, or too many notifications already.',
+    follow: 'Follow it',
+  },
   transfer: {
     title: 'Authorise a transfer for {holder}',
     noWallet:
@@ -876,6 +898,9 @@ export const en = {
     transferDestinationMissing: 'the destination is missing: they would be authorising a transfer to nowhere',
     transferDestinationTooLong: 'the destination cannot be longer than {max} characters',
     transferUpstream: 'TripleEnable could not be asked for the approval. The detail is in Diagnostics.',
+    ageReasonTooLong: 'the reason cannot be longer than {max} characters',
+    ageReasonOneLine: 'the reason is one line on a phone screen: no line breaks',
+    ageUpstream: 'TripleEnable could not be asked for the age check. The detail is in Diagnostics.',
     bodyNotJson: 'the body is not JSON',
     badChannel: 'channel has to be qr or phone',
     noClaimsRequested: 'at least one attribute has to be requested',

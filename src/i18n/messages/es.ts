@@ -212,6 +212,8 @@ export const es: PartialMessages = {
     verifyCallerHint: 'Nivel 1 · que quien está al teléfono sea el titular.',
     authoriseTransaction: 'Autorizar operación',
     authoriseTransactionHint: 'Nivel 2 · firmar un importe. Todavía no se puede ejecutar.',
+    checkAge: 'Comprobar que es mayor de edad',
+    checkAgeHint: 'Una pregunta. Su fecha de nacimiento se queda en su teléfono.',
     channelPhone: 'Aviso a su móvil',
     channelQr: 'QR en el mostrador',
     onBehalfOf: 'a nombre de {agent}',
@@ -277,6 +279,26 @@ export const es: PartialMessages = {
     unexpected: 'Si no has pedido esta credencial, no abras el enlace y avísanos.',
   },
 
+  age: {
+    title: 'Pedir a {holder} que demuestre que es mayor de edad',
+    body:
+      'Una pregunta, una respuesta. Su fecha de nacimiento se queda en su teléfono: sólo viaja el sí o el no.',
+    noWallet:
+      'Este cliente no tiene cartera vinculada con nosotros, así que no hay teléfono al que pedírselo. La petición se creará y caducará sola.',
+    typeLabel: 'Credencial',
+    typeHelp: 'La credencial de esta organización que lleva su edad dentro.',
+    reasonLabel: 'Por qué (opcional)',
+    reasonPlaceholder: 'Compra de un producto con restricción de edad',
+    reasonHelp:
+      'Lo va a leer junto a la pregunta. Di por qué se le pregunta — no le pidas nada aquí.',
+    ask: 'Preguntar',
+    asking: 'Preguntando…',
+    askedTitle: 'Preguntado',
+    askedDelivered: 'Se ha avisado a su teléfono. Contesta ahí, no aquí.',
+    askedNotDelivered:
+      'La petición existe, pero no se ha avisado a ningún teléfono: puede que no tenga aparato elegible o que ya haya recibido demasiados avisos.',
+    follow: 'Seguirlo',
+  },
   transfer: {
     title: 'Autorizar una transferencia de {holder}',
     noWallet:
@@ -805,6 +827,9 @@ export const es: PartialMessages = {
     transferDestinationMissing: 'falta el destino: estaría autorizando una transferencia a ninguna parte',
     transferDestinationTooLong: 'el destino no puede pasar de {max} caracteres',
     transferUpstream: 'No se ha podido pedir la autorización a TripleEnable. El detalle está en Diagnóstico.',
+    ageReasonTooLong: 'el motivo no puede pasar de {max} caracteres',
+    ageReasonOneLine: 'el motivo es una línea en la pantalla de un móvil: sin saltos de línea',
+    ageUpstream: 'No se ha podido pedir la comprobación de edad a TripleEnable. El detalle está en Diagnóstico.',
     bodyNotJson: 'el cuerpo no es JSON',
     badChannel: 'channel tiene que ser qr o phone',
     noClaimsRequested: 'hay que pedir al menos un atributo',
