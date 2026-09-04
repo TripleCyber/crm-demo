@@ -487,7 +487,7 @@ export const en = {
     callCaseHint: 'Optional. Only if they can check it against something you already sent them.',
     alertPhone: 'They are on the phone · alert their mobile',
     alertPhoneBusy: 'Alerting…',
-    alertQr: 'They are in front of you · send to their phone',
+    alertQr: 'They are in front of you · show a code',
     alertQrBusy: 'Requesting…',
     /**
      * El hecho, no el síntoma. Antes esta pantalla decía «We have alerted their
@@ -820,7 +820,7 @@ export const en = {
     codeTitle: 'Their code',
     inboxTitle: 'Where the request is',
     inboxBody:
-      'On their phone, in the TripleEnable app: it opens from the notification, and it keeps waiting inside the app if they dismissed it. There is no code to scan — the request travels to the wallet, not through this screen.',
+      'On their phone, in the TripleEnable app: it opens from the notification, and it keeps waiting inside the app if they dismissed it. There is no code on this screen — this deployment has the code channel switched off.',
     wakeupUnconfirmed:
       'That their mobile rang <b>is confirmed by nobody</b>. If they do not answer, ask them whether they have the app installed instead of assuming it.',
     wakeupTechnical:

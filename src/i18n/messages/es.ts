@@ -422,7 +422,7 @@ export const es: PartialMessages = {
     callCaseHint: 'Opcional. Sólo si puede cotejarla con algo que ya le hayáis mandado.',
     alertPhone: 'Está al teléfono · avisar a su móvil',
     alertPhoneBusy: 'Avisando…',
-    alertQr: 'Está delante · enviar a su móvil',
+    alertQr: 'Está delante · enseñar un código',
     alertQrBusy: 'Pidiendo…',
     alertNoWallet:
       '<b>{name} no tiene cartera vinculada con esta entidad</b>, así que no hay a quién mandarle la solicitud — ni al teléfono ni en el mostrador, porque las dos van a la cartera. Emítele una credencial: queda vinculado cuando la acepta en su cartera.',
@@ -735,7 +735,7 @@ export const es: PartialMessages = {
     codeTitle: 'Su código',
     inboxTitle: 'Dónde está la solicitud',
     inboxBody:
-      'En su móvil, en la app de TripleEnable: se abre desde el aviso, y si lo ha descartado sigue esperándole dentro de la app. No hay ningún código que escanear — la solicitud viaja a la cartera, no por esta pantalla.',
+      'En su móvil, en la app de TripleEnable: se abre desde el aviso, y si lo ha descartado sigue esperándole dentro de la app. En esta pantalla no hay código: este despliegue tiene el canal de código apagado.',
     wakeupUnconfirmed:
       'Que le haya sonado el móvil <b>no lo confirma nadie</b>. Si no contesta, pregúntele si tiene la app instalada en vez de darlo por hecho.',
     wakeupTechnical:

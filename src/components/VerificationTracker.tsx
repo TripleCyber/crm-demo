@@ -698,17 +698,18 @@ export function VerificationTracker({
         carencia nuestra —eso se arregla—; esto es un hecho del mundo, y
         callarlo haría que el agente diera por avisado a quien no lo está.
 
-        **Ahora sale en los dos canales, y antes sólo en el del teléfono.** No es
-        una ampliación de celo: desde que el mostrador entrega la petición del
-        marco, entrega por push igual que el teléfono, así que la misma duda le
-        aplica igual. Dejarla en una sola rama habría hecho que el canal más
-        nuevo fuera el que menos cuenta.
+        **Sale donde la entrega depende de que suene el teléfono**, y ahí no es
+        celo: el aviso puede no llegar y nadie se entera. Con el código delante
+        no aplica —la persona está escaneando, no esperando a que le suene—, y
+        ponerla igual sería sembrar una duda sobre algo que el agente está
+        viendo ocurrir. Por eso mira el código y no el canal: un mostrador sin
+        código entrega como el teléfono, y entonces sí sale.
 
         El detalle técnico sí sigue siendo del timbre, porque es lo único que
         tiene identificador que cruzar con un registro: `POST /v1/requests` no
         devuelve ninguno equivalente.
       */}
-      {status === 'pending' && (
+      {status === 'pending' && (verification.channel === 'phone' || counterQrSvg === null) && (
         <div className="muted">
           <p style={{ margin: 0 }}>{t.rich('tracker.wakeupUnconfirmed')}</p>
           {verification.wakeupId !== null && (
