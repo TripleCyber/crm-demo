@@ -124,6 +124,34 @@ export function CustomerForm({ referenceClaim }: CustomerFormProps) {
     </label>
   );
 
+  /*
+    ═══════════════════════════════════════════════════════════════════════════
+     LA FECHA DE NACIMIENTO LLEVA SU EXPLICACIÓN DEBAJO, Y NO SOBRA
+    ═══════════════════════════════════════════════════════════════════════════
+
+    Es el único campo del alta que **no se enseña en ninguna otra pantalla**: no
+    está en el listado, no está en la ficha y no se puede pedir en una
+    comprobación. Quien lo teclea tiene derecho a saber para qué. Sin la frase
+    parece un dato más que el banco recoge porque sí —y en un producto que se
+    vende diciendo «pide sólo lo que necesitas», eso se nota— cuando es
+    exactamente lo contrario: entra para poder contestar «mayor de 18» sin que la
+    fecha salga de aquí.
+
+    Va opcional, como las otras dos fechas. Un padrón real llega a medias, y
+    exigirla convertiría el alta de un cliente al que sólo se le va a emitir el
+    nombre en un formulario que no se puede terminar.
+  */
+  const birthDateField = (
+    <label className="field">
+      <span>{t('customerForm.birthDate')}</span>
+      <input name="birthDate" type="date" />
+      <small>{t('customerForm.birthDateHint')}</small>
+      {fieldError('birthDate') !== undefined && (
+        <small style={{ color: 'var(--danger)' }}>{fieldError('birthDate')}</small>
+      )}
+    </label>
+  );
+
   return (
     <form action={formAction} className="card">
       {state.error !== undefined && <p className="alert">{state.error}</p>}
@@ -159,6 +187,14 @@ export function CustomerForm({ referenceClaim }: CustomerFormProps) {
           )}
         </label>
       </div>
+
+      {/*
+        Va aquí, pegada al nombre y no junto a la fecha de alta, porque es de la
+        PERSONA y no de la relación: la de abajo dice desde cuándo es cliente de
+        este banco, ésta dice quién es. Y sola en su fila, con sitio para la
+        frase que explica que no sale de aquí.
+      */}
+      {birthDateField}
 
       <div className="row">
         <label className="field">

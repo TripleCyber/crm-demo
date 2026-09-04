@@ -199,7 +199,7 @@ export default async function CustomersPage({
                       </td>
                       {reference !== undefined && (
                         <td className="mono">
-                          {displayAttribute(reference, customer) ?? <span className="none">—</span>}
+                          {displayAttribute(t, reference, customer) ?? <span className="none">—</span>}
                         </td>
                       )}
                       <td>

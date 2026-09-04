@@ -45,6 +45,16 @@ export interface Customer {
   readonly supplyPointNumber: string | null;
   /** `YYYY-MM-DD` ya formateado por Postgres. Ver la nota de abajo. */
   readonly customerSince: string | null;
+  /**
+   * La fecha de nacimiento, `YYYY-MM-DD`. **No se divulga nunca.**
+   *
+   * Está en la ficha para poder contestar «¿es mayor de 18?» sin que la fecha
+   * salga: lo que entra en la credencial son los tres sí o no que se derivan de
+   * ella —`age_over_18`, `age_over_21`, `age_over_65`—, y `birth_date` **no
+   * está en el catálogo de atributos**, así que no hay pantalla que la ofrezca
+   * ni ruta que la acepte. Ver `db/012_birth_date.sql`.
+   */
+  readonly birthDate: string | null;
   readonly createdAt: string;
 }
 
@@ -59,17 +69,24 @@ interface CustomerRow extends Record<string, unknown> {
   account_last4: string | null;
   supply_point_number: string | null;
   customer_since: string | null;
+  birth_date: string | null;
   created_at: Date;
 }
 
 /**
- * `customer_since` se pide ya como texto.
+ * `customer_since` y `birth_date` se piden ya como texto.
  *
  * El driver convierte un `date` de Postgres en un `Date` de JavaScript a
  * medianoche **en la zona del servidor**, y al volver a `YYYY-MM-DD` con
  * `toISOString()` en una zona al oeste de UTC sale el día anterior. El cliente
  * dado de alta el día 1 aparecería como del 31, y eso acabaría dentro de una
  * credencial firmada. Formatearlo en Postgres quita el problema de raíz.
+ *
+ * En `birth_date` el mismo desplazamiento de un día cuesta más caro: no se
+ * enseña en ninguna pantalla —de ahí que nadie fuera a notar el error— y lo
+ * único que sale de ella son los tres sí o no de la edad, así que el día del
+ * cumpleaños de un cliente el banco firmaría «no es mayor de 18» sobre alguien
+ * que lo es.
  *
  * Las columnas llevan el alias `c.` porque el listado cruza esta tabla con la
  * última oferta y la última comprobación de cada cliente, y las tres tienen
@@ -87,6 +104,7 @@ const SELECT_COLUMNS = `
   c.account_last4,
   c.supply_point_number,
   to_char(c.customer_since, 'YYYY-MM-DD') as customer_since,
+  to_char(c.birth_date, 'YYYY-MM-DD') as birth_date,
   c.created_at
 `;
 
@@ -102,6 +120,7 @@ function toCustomer(row: CustomerRow): Customer {
     accountLast4: row.account_last4,
     supplyPointNumber: row.supply_point_number,
     customerSince: row.customer_since,
+    birthDate: row.birth_date,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -251,6 +270,7 @@ export interface CustomerInput {
   readonly accountLast4: string | null;
   readonly supplyPointNumber: string | null;
   readonly customerSince: string | null;
+  readonly birthDate: string | null;
 }
 
 /**
@@ -277,8 +297,8 @@ export async function createCustomer(orgId: string, input: CustomerInput): Promi
     const rows = await query<CustomerRow>(
       `insert into customer as c
          (org_id, external_id, given_name, family_name, email, phone, account_last4,
-          supply_point_number, customer_since)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          supply_point_number, customer_since, birth_date)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        returning ${SELECT_COLUMNS}`,
       [
         orgId,
@@ -290,6 +310,7 @@ export async function createCustomer(orgId: string, input: CustomerInput): Promi
         input.accountLast4,
         input.supplyPointNumber,
         input.customerSince,
+        input.birthDate,
       ],
     );
     const row = rows[0];
@@ -329,6 +350,7 @@ export function validateCustomerInput(raw: {
   accountLast4?: string;
   supplyPointNumber?: string;
   customerSince?: string;
+  birthDate?: string;
 }): { input: CustomerInput; issues: ValidationIssue[] } {
   const issues: ValidationIssue[] = [];
   const trim = (value: string | undefined): string => (value ?? '').trim();
@@ -343,6 +365,7 @@ export function validateCustomerInput(raw: {
   const accountLast4 = optional(raw.accountLast4);
   const supplyPointNumber = optional(raw.supplyPointNumber);
   const customerSince = optional(raw.customerSince);
+  const birthDate = optional(raw.birthDate);
 
   // El juego de caracteres es cerrado a propósito: el `external_id` viaja como
   // `sub` en un JWT y aparece en URLs. Dejar espacios o barras dentro es
@@ -378,6 +401,23 @@ export function validateCustomerInput(raw: {
     issues.push({ field: 'customerSince', messageKey: 'customerForm.errorCustomerSince' });
   }
 
+  // ── La fecha de nacimiento se comprueba MÁS que las otras dos ────────────
+  //
+  // Y no por rigor de más: es la única que nadie va a volver a mirar. Las otras
+  // se enseñan en el listado y en la ficha, así que una errata se ve; ésta no
+  // sale a ninguna pantalla —a propósito— y lo único que se ve de ella son tres
+  // sí o no dentro de una credencial firmada. Un año tecleado `1826` en vez de
+  // `1926` no da error en ningún sitio: da un «mayor de 65» que nadie pidió.
+  //
+  // Por eso, además del formato, se rechaza el futuro. Una fecha de mañana
+  // convierte los tres atributos en `false` sin decir nada, y «este cliente no
+  // es mayor de edad» firmado por el banco es peor que un campo vacío.
+  if (birthDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+    issues.push({ field: 'birthDate', messageKey: 'customerForm.errorBirthDate' });
+  } else if (birthDate !== null && birthDate > today()) {
+    issues.push({ field: 'birthDate', messageKey: 'customerForm.errorBirthDateFuture' });
+  }
+
   return {
     input: {
       externalId,
@@ -388,10 +428,73 @@ export function validateCustomerInput(raw: {
       accountLast4,
       supplyPointNumber,
       customerSince,
+      birthDate,
     },
     issues,
   };
 }
+
+/**
+ * Hoy, en `YYYY-MM-DD` y en la zona horaria de este servidor.
+ *
+ * Se compone a mano en vez de con `toISOString()` porque aquél da UTC: en una
+ * zona al este de Greenwich, a las 00:30 devolvería la fecha de ayer, y con
+ * ella un cliente cumpliría los 18 un día tarde. La zona del servidor es la
+ * aproximación honesta que hay —el padrón no guarda dónde vive nadie— y es la
+ * misma con la que el agente lee la pantalla.
+ */
+function today(): string {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * ¿Han pasado ya `years` años desde esa fecha? `null` si no hay fecha.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  SE COMPARAN CADENAS, Y ES LO CORRECTO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `YYYY-MM-DD` ordena igual alfabéticamente que cronológicamente, así que la
+ * pregunta «¿nació antes del día equivalente de hace 18 años?» es una
+ * comparación de texto. Hacerlo con `Date` obligaría a construir dos y a
+ * elegirles hora, que es de donde salen los errores de un día — el mismo motivo
+ * por el que estas dos columnas se leen ya formateadas por Postgres.
+ *
+ * El límite se fabrica restándole los años **al texto del año**, sin pasar por
+ * `Date`, y eso arregla solo el 29 de febrero: `new Date(2026, 1, 29)` se
+ * normaliza al 1 de marzo, mientras que la cadena `2008-02-29` se queda quieta
+ * y se compara bien contra cualquier límite. Quien nació un 29 de febrero
+ * cumple años el 1 de marzo en los años que no son bisiestos, que es la
+ * convención de siempre y la que menos sorprende.
+ */
+function hasCompletedYears(date: string | null, years: number): boolean | null {
+  if (date === null || date === '') return null;
+  const now = today();
+  const limit = `${Number(now.slice(0, 4)) - years}${now.slice(4)}`;
+  return date <= limit;
+}
+
+/**
+ * El valor de un atributo, tal y como entra en la credencial.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  UN SÍ O UN NO ENTRA COMO `boolean`, NO COMO LA CADENA `"false"`
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Y es una decisión de seguridad, no de estilo. `"false"` es una cadena no
+ * vacía, o sea **verdadera** en JavaScript, en Python y en la plantilla de
+ * cualquier verificador que escriba `if (claims.age_over_18)`. Una credencial
+ * que dice «no es mayor de edad» de una forma que casi todo el mundo lee como
+ * un sí no es un dato: es una trampa con la firma del banco encima.
+ *
+ * te-api los acepta sin tocarlos —`claims` es `Record<string, unknown>` y su
+ * `checkClaims` sólo mira los nombres—, así que el `true` llega hasta el JWT
+ * como `true`.
+ */
+export type AttributeValue = string | boolean;
 
 /**
  * Un atributo del padrón que puede acabar dentro de una credencial.
@@ -400,11 +503,17 @@ export function validateCustomerInput(raw: {
  *  ESTE CATÁLOGO ES LO ÚNICO DE ESTE BANCO QUE SIGUE SIENDO CÓDIGO
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Y tiene que serlo: un atributo sólo se puede poner en una credencial si hay
- * una columna del padrón de donde sacarlo, y las columnas de `customer` son el
- * núcleo bancario de esta maqueta. Declarar `supply_point_number` en un `.env`
- * no crea la columna, así que ponerlo en configuración sería configuración que
- * miente.
+ * Y tiene que serlo: un atributo sólo se puede poner en una credencial si el
+ * padrón sabe contestarlo, y las columnas de `customer` son el núcleo bancario
+ * de esta maqueta. Declarar `supply_point_number` en un `.env` no crea la
+ * columna, así que ponerlo en configuración sería configuración que miente.
+ *
+ * **Saberlo no es siempre tenerlo en una columna.** Los tres atributos de edad
+ * no son columnas: son la respuesta a una pregunta sobre `birth_date`, que se
+ * calcula aquí y no se guarda —guardar «mayor de 18» sería guardar un dato que
+ * caduca solo el día del cumpleaños—. La regla sigue en pie: lo que el padrón
+ * no sabe no se firma; lo que sabe puede salir **derivado**, y salir derivado
+ * es lo que permite contestar sin divulgar.
  *
  * Lo que **sí** es configuración es qué atributos de éstos lleva cada tipo de
  * credencial y cómo se rotula cada tipo. Eso vive en `credential-profiles.ts`
@@ -434,8 +543,17 @@ export interface CustomerAttribute {
    * es exactamente lo que se rompe con el segundo partner.
    */
   readonly identifying: boolean;
-  /** De dónde sale en la ficha. `null` = esta ficha no lo tiene. */
-  readonly read: (customer: Customer) => string | null;
+  /**
+   * De dónde sale en la ficha. `null` = esta ficha no lo tiene.
+   *
+   * `null` y `false` no son lo mismo y ninguna de las dos cosas se puede
+   * confundir con la otra: `null` es «este banco no lo sabe» —y entonces el
+   * atributo ni se ofrece ni se firma—, mientras que `false` es una respuesta,
+   * y una respuesta se firma como cualquier otra. Un «no es mayor de 18» que se
+   * cayera por el mismo agujero que un dato que falta dejaría al verificador
+   * sin poder distinguir al menor del cliente sin fecha de nacimiento.
+   */
+  readonly read: (customer: Customer) => AttributeValue | null;
   /**
    * Cómo se escribe el valor en pantalla, si no es tal cual.
    *
@@ -462,13 +580,21 @@ export interface CustomerAttribute {
 
 /**
  * ─────────────────────────────────────────────────────────────────────────
- * POR QUÉ NO ESTÁN EL CORREO NI EL TELÉFONO
+ * POR QUÉ NO ESTÁN EL CORREO, EL TELÉFONO NI LA FECHA DE NACIMIENTO
  * ─────────────────────────────────────────────────────────────────────────
  *
  * Porque no son divulgables: el CRM los guarda para su propio uso —avisar al
- * cliente, buscarlo en el listado— y no los mete en algo firmado que el titular
- * va a enseñar por ahí. Meter un dato «ya que estamos» en una credencial es
- * meterlo en todas las presentaciones que se hagan con ella.
+ * cliente, buscarlo en el listado, calcular la edad— y no los mete en algo
+ * firmado que el titular va a enseñar por ahí. Meter un dato «ya que estamos»
+ * en una credencial es meterlo en todas las presentaciones que se hagan con
+ * ella.
+ *
+ * `birth_date` es el caso más claro de los tres y el que explica los atributos
+ * de edad de abajo: la fecha de nacimiento identifica —con el nombre, es de los
+ * campos que más ayudan a cruzar a una persona entre dos bases— y encima dice
+ * mucho más de lo que nadie preguntó. La tienda quiere saber si puede vender
+ * alcohol, no cuándo es tu cumpleaños. Por eso el padrón la guarda y el
+ * catálogo ofrece la RESPUESTA en su lugar.
  *
  * No estar en este catálogo es la forma de que no puedan pedirse: la pantalla
  * ofrece lo que hay aquí, y el servidor **rechaza** lo que no esté.
@@ -525,6 +651,77 @@ export const CUSTOMER_ATTRIBUTES: readonly CustomerAttribute[] = [
     identifying: false,
     read: (c) => c.customerSince,
   },
+  /*
+    ═══════════════════════════════════════════════════════════════════════════
+     LOS DERIVADOS: LA RESPUESTA EN VEZ DEL DATO
+    ═══════════════════════════════════════════════════════════════════════════
+
+    Los cuatro de aquí abajo contestan una pregunta cerrada sobre una columna que
+    NO sale de la ficha. Es el argumento entero de una credencial y hasta ahora
+    esta maqueta no lo enseñaba: un carné de conducir en la mano dice la fecha de
+    nacimiento, la dirección y el número de documento aunque el portero sólo
+    quisiera saber una cosa. Aquí sólo viaja esa cosa.
+
+    Y son atributos normales, no una ceremonia aparte. La puerta de edad de la
+    fase 6 (`api/age/check`) es otra cosa y sigue estando: allí se pregunta a la
+    cartera —que responde desde su credencial de identidad— y no se marca nada.
+    Éstos los EMITE el banco dentro de la credencial de cliente, así que el
+    agente puede pedirlos sueltos o junto al nombre, en la misma comprobación y
+    con las mismas casillas. Uno no sustituye al otro: quien no tenga fecha en el
+    padrón sigue teniendo la puerta de edad, y quien la tenga puede contestar sin
+    sacar el documento.
+
+    Los tres umbrales de edad no son un capricho de la maqueta:
+
+      · 18 — la mayoría de edad. Contratar, firmar, comprar lo que la ley acota.
+      · 21 — el umbral de varios mercados y productos, y el que demuestra que
+             añadir uno nuevo no es una pantalla nueva: es una fila más aquí.
+      · 65 — las condiciones de mayores, que un banco aplica de verdad
+             (exenciones de comisiones, productos de jubilación). Se contesta
+             sin que el cliente enseñe la edad exacta, que es lo que hoy le pide
+             cualquier oficina.
+
+    El cuarto no es de edad y va a propósito: la ANTIGÜEDAD como relación es el
+    otro dato con el que un banco decide cosas —preaprobados, exenciones,
+    atención preferente—, y `customer_since` ya está en la credencial con la
+    fecha exacta. Que convivan es el punto: el agente que sólo necesita saber si
+    hace más de cinco años que es cliente marca la casilla del sí o el no, y la
+    fecha se queda en casa. Se elige un solo umbral y no cuatro porque cada uno
+    es un claim más en una credencial que dura años.
+
+    Van todos `identifying: false`. Ninguno confirma «quién eres» —de hecho
+    están para lo contrario, para contestar sin identificar— y marcarlos por
+    defecto sería pedir de más en cada comprobación.
+
+    Una ficha sin `birth_date` devuelve `null` en los tres primeros y entonces no
+    se ofrecen ni se firman: `resolveCredentialType` descarta lo que la ficha no
+    rellena, así que las credenciales ya emitidas y las organizaciones que no
+    guardan la fecha se quedan exactamente como estaban.
+  */
+  {
+    claim: 'age_over_18',
+    labelKey: 'attributes.ageOver18',
+    identifying: false,
+    read: (c) => hasCompletedYears(c.birthDate, 18),
+  },
+  {
+    claim: 'age_over_21',
+    labelKey: 'attributes.ageOver21',
+    identifying: false,
+    read: (c) => hasCompletedYears(c.birthDate, 21),
+  },
+  {
+    claim: 'age_over_65',
+    labelKey: 'attributes.ageOver65',
+    identifying: false,
+    read: (c) => hasCompletedYears(c.birthDate, 65),
+  },
+  {
+    claim: 'customer_over_5_years',
+    labelKey: 'attributes.customerOver5Years',
+    identifying: false,
+    read: (c) => hasCompletedYears(c.customerSince, 5),
+  },
 ];
 
 /** El atributo del catálogo con ese nombre de claim, si existe. */
@@ -554,12 +751,18 @@ export function findCustomerAttribute(claim: string): CustomerAttribute | undefi
  *
  * Los campos vacíos se omiten en vez de ir como `null`: un claim presente y
  * vacío es un claim que el verificador tiene que interpretar.
+ *
+ * ⚠ **Un `false` no está vacío y por eso entra.** Es la única comparación de
+ * esta función que hay que leer despacio: `value !== null && value !== ''` deja
+ * pasar el `false` a propósito, porque «no es mayor de 18» es una respuesta y no
+ * la ausencia de una. Omitirlo dejaría al menor de edad y al cliente sin fecha
+ * de nacimiento con exactamente la misma credencial.
  */
 export function buildCredentialClaims(
   customer: Customer,
   claimNames: readonly string[],
-): Record<string, string> {
-  const claims: Record<string, string> = {};
+): Record<string, AttributeValue> {
+  const claims: Record<string, AttributeValue> = {};
   for (const attribute of CUSTOMER_ATTRIBUTES) {
     if (!claimNames.includes(attribute.claim)) continue;
     const value = attribute.read(customer);
@@ -604,13 +807,20 @@ const REFERENCE_ATTRIBUTES: readonly CustomerAttribute[] = CUSTOMER_ATTRIBUTES.f
   (attribute) => (REFERENCE_CLAIMS as readonly string[]).includes(attribute.claim),
 );
 
-/** La referencia de UNA ficha: la primera de las cuatro que rellena. */
+/**
+ * La referencia de UNA ficha: la primera de las cuatro que rellena.
+ *
+ * El `typeof` no es una formalidad del compilador: una referencia es un número
+ * que el titular canta por teléfono, así que es texto por definición. Si alguien
+ * declarase una referencia derivada —un sí o un no— esto la ignoraría en vez de
+ * enseñar «true» donde va un número de cuenta.
+ */
 export function referenceOf(
   customer: Customer,
 ): { attribute: CustomerAttribute; value: string } | undefined {
   for (const attribute of REFERENCE_ATTRIBUTES) {
     const value = attribute.read(customer);
-    if (value !== null && value !== '') return { attribute, value };
+    if (typeof value === 'string' && value !== '') return { attribute, value };
   }
   return undefined;
 }
@@ -640,10 +850,30 @@ export function listReferenceAttribute(
   return best?.attribute;
 }
 
-/** El valor ya escrito como se lee en pantalla. */
-export function displayAttribute(attribute: CustomerAttribute, customer: Customer): string | null {
+/**
+ * El valor ya escrito como se lee en pantalla, en el idioma de quien mira.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  UN SÍ O UN NO SE PINTA COMO PALABRA, AUNQUE SE FIRME COMO `boolean`
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Por eso esta función pide el traductor, que antes no necesitaba. En la
+ * credencial va `true` —un verificador tiene que poder leerlo sin adivinar el
+ * idioma de nadie—, y en la pantalla del agente tiene que poner «Sí»: enseñarle
+ * `true` en la vista previa de lo que está a punto de firmar le obliga a
+ * traducir de cabeza justo en el momento en el que hay que leer despacio.
+ *
+ * `display` sigue siendo cosa del texto —`···· 4471`— y por eso sólo se aplica
+ * a lo que es texto.
+ */
+export function displayAttribute(
+  t: Translator,
+  attribute: CustomerAttribute,
+  customer: Customer,
+): string | null {
   const value = attribute.read(customer);
   if (value === null || value === '') return null;
+  if (typeof value === 'boolean') return t(value ? 'common.yes' : 'common.no');
   return attribute.display === undefined ? value : attribute.display(value);
 }
 

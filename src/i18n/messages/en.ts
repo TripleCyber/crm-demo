@@ -68,9 +68,21 @@ export const en = {
     noEmail: 'no email',
     never: 'never',
     unknownFailure: 'unknown failure',
+    // Cómo se lee un atributo derivado en pantalla. Dentro de la credencial va
+    // `true` o `false`, que es lo que un verificador puede leer sin saber en
+    // qué idioma está la consola del banco (`displayAttribute`).
+    yes: 'Yes',
+    no: 'No',
   },
 
-  /** Los seis atributos del catálogo del padrón (`lib/customers.ts`). */
+  /**
+   * Los atributos del catálogo del padrón (`lib/customers.ts`).
+   *
+   * Los cuatro últimos son **derivados**: no son columnas, son la respuesta a
+   * una pregunta cerrada sobre una fecha que no sale de la ficha. Se rotulan
+   * como la pregunta que contestan —«Over 18», no «Age»—, porque eso es
+   * literalmente lo que el titular va a ver que comparte.
+   */
   attributes: {
     givenName: 'First name',
     familyName: 'Surname',
@@ -79,6 +91,10 @@ export const en = {
     supplyPointNumber: 'Supply point number',
     supplyPointNumberShort: 'Supply point',
     customerSince: 'Customer since',
+    ageOver18: 'Over 18',
+    ageOver21: 'Over 21',
+    ageOver65: 'Over 65',
+    customerOver5Years: 'Customer for over 5 years',
   },
 
   /**
@@ -192,6 +208,9 @@ export const en = {
     accountLast4: 'Last four of the account',
     customerSince: 'Customer since',
     supplyPointNumber: 'Supply point number',
+    birthDate: 'Date of birth',
+    birthDateHint:
+      'It never leaves this record. The credential carries only the answers — over 18, over 21, over 65 — never the date itself.',
     externalIdExample: 'AC-40218804',
     givenNameExample: 'Emma',
     familyNameExample: 'Whitfield',
@@ -207,6 +226,8 @@ export const en = {
     errorAccountLast4: 'exactly four digits',
     errorReferenceCharset: 'letters, digits and . / _ : - only (up to 64 characters)',
     errorCustomerSince: 'the date goes in YYYY-MM-DD format',
+    errorBirthDate: 'the date goes in YYYY-MM-DD format',
+    errorBirthDateFuture: 'a date of birth cannot be in the future',
     duplicate: 'there is already a customer with the identifier {externalId}',
   },
 

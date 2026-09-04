@@ -1,0 +1,52 @@
+-- 012_birth_date · la fecha de nacimiento, para poder NO enseñarla.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+--  ESTA COLUMNA ENTRA PARA QUE NO SALGA NUNCA
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- El banco necesita poder preguntar «¿es mayor de 18?» y «¿es mayor de 21?», y
+-- la gracia entera de una credencial es que esa pregunta se conteste **sin que
+-- la fecha de nacimiento viaje**. Para contestarla hace falta tenerla, y hoy el
+-- padrón no la tiene: `customer` guarda el alta comercial (`customer_since`) y
+-- nada más.
+--
+-- Así que la columna es la FUENTE del cálculo, no un atributo divulgable. El
+-- catálogo (`CUSTOMER_ATTRIBUTES`, en `src/lib/customers.ts`) ofrece
+-- `age_over_18`, `age_over_21` y `age_over_65` —tres sí o no— y **no ofrece
+-- `birth_date`**, exactamente por la misma razón por la que no ofrece el correo
+-- ni el teléfono: lo que no está en el catálogo no se puede pedir, porque la
+-- pantalla ofrece lo que hay allí y el servidor rechaza lo que no esté.
+--
+-- Es la primera vez que un atributo del catálogo no es una columna. Sigue
+-- valiendo la regla que sostiene ese catálogo —no se puede firmar lo que el
+-- padrón no sabe—; lo que se añade es que el padrón puede saberlo **derivado**:
+-- la columna está, y lo que entra en la credencial es la respuesta, no el dato.
+--
+-- ── Por qué `date` y no `timestamptz` ─────────────────────────────────────
+--
+-- Igual que `customer_since`, y por lo mismo: nacer es un día, no un instante,
+-- y guardar hora obligaría a decidir en qué huso — que es justo la decisión que
+-- convierte al nacido el día 1 en nacido el 31 al formatear. Se lee con
+-- `to_char(...,'YYYY-MM-DD')`, como su hermana, para que el driver no la pase
+-- por un `Date` de JavaScript en la zona del servidor.
+--
+-- ── Lo que esta migración NO hace ─────────────────────────────────────────
+--
+-- No toca ni una fila y no lleva `check` de rango. La columna nace `null`, y
+-- una ficha sin fecha simplemente no lleva los tres atributos de edad:
+-- `resolveCredentialType` descarta lo que la ficha no rellena, así que ninguna
+-- credencial ya emitida cambia y ninguna pantalla enseña una casilla que este
+-- cliente no puede satisfacer.
+--
+-- El rango —que sea una fecha pasada y no la de dentro de diez años— se
+-- comprueba en `validateCustomerInput`, que es donde ya se comprueban el punto
+-- de suministro y la fecha de alta. Un `check` con `current_date` dentro no es
+-- inmutable: pasa el día y una fila que era válida deja de poder restaurarse
+-- desde un volcado.
+--
+-- Sembrar es otra cosa y va por `npm run db:seed`, fuera de las migraciones y a
+-- propósito: una fecha de nacimiento inventada en un fichero versionado es un
+-- dato personal de mentira que se despliega solo.
+
+alter table customer
+  add column if not exists birth_date date;

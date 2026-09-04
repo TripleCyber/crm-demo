@@ -33,10 +33,11 @@
  * queda para forzarlo a mano, que es lo que hace falta para probar el padrón de
  * la otra contra una base desechable.
  *
- * Es idempotente (`on conflict do nothing`), así que ejecutarlo dos veces no
- * duplica nada.
+ * Es idempotente, así que ejecutarlo dos veces no duplica nada — y desde que hay
+ * fecha de nacimiento hace una cosa más, que está argumentada en el `insert` de
+ * abajo: **rellena los huecos de las fichas que ya estaban, sin pisar nada.**
  *
- * ⚠ **El orden de cada fila es el del `insert` de abajo, y son nueve columnas.**
+ * ⚠ **El orden de cada fila es el del `insert` de abajo, y son diez columnas.**
  * La referencia del sector ocupa DOS huecos —los cuatro de la cuenta y el punto
  * de suministro— y cada padrón rellena el suyo y deja el otro a `null`.
  */
@@ -87,6 +88,25 @@ if (connectionString === undefined || connectionString.trim() === '') {
  * cuenta», que es justo el cruce de sectores que esto tiene que demostrar que no
  * pasa.
  *
+ * ## Las fechas de nacimiento están repartidas A PROPÓSITO
+ *
+ * La fecha de nacimiento sí la llevan los dos padrones —no es de un sector, la
+ * tiene todo el mundo—, y las edades no son aleatorias: son los casos que hay
+ * que poder enseñar en una demostración sin dar de alta a nadie.
+ *
+ *   · Un menor, con su cuenta infantil → `age_over_18: false`. Es el caso que
+ *     demuestra que un «no» se firma igual que un «sí»: sin él, todo el mundo
+ *     contesta que sí y no se ve la diferencia entre «no lo es» y «no consta».
+ *   · Alguien entre 18 y 21 → el sí y el no en la misma credencial, que es lo
+ *     que hace evidente por qué son dos claims y no uno de «edad».
+ *   · Dos por encima de 65, uno de ellos recién cumplidos.
+ *   · Un 29 de febrero, que es la fecha con la que se equivoca cualquier cálculo
+ *     de edad hecho con prisa.
+ *
+ * En la comercializadora no hay menores, y tampoco es casualidad: un contrato de
+ * suministro lo firma un adulto. El banco sí los tiene, porque las cuentas
+ * infantiles existen.
+ *
  * ⚠ Ni una de estas personas existe. Los identificadores llevan el prefijo de su
  *   empresa para que se vea de un vistazo de cuál es cada fila.
  *
@@ -108,19 +128,25 @@ const ROSTERS = {
    * donde alguien esperaba encontrar la suya.
    */
   BANCODEMO: [
-    ['BD-99120447', 'James', 'Whitfield Moore', 'james@example.com', '+34600000001', '4471', null, '2024-03-12'],
-    ['BD-99120448', 'Anna', 'Reed Vance', 'anna@example.com', '+34600000002', '8820', null, '2021-11-02'],
-    ['BD-99120449', 'Lewis', 'Sandford Hale', null, null, '1043', null, '2019-06-30'],
-    ['BD-99120460', 'Charlotte', 'Whitfield Barnes', 'charlotte.wb@example.com', '+34600000003', '2214', null, '2016-02-08'],
-    ['BD-99120461', 'Michael', 'Fielding Lowe', 'm.fielding@example.com', '+34600000004', '9375', null, '2020-09-21'],
-    ['BD-99120462', 'Rosie', 'Naylor Stone', 'rosie.naylor@example.com', null, '5108', null, '2023-07-04'],
-    ['BD-99120463', 'Nathan', 'Bramley Cane', null, '+34600000006', '6642', null, '2014-11-17'],
-    ['BD-99120464', 'Martha', 'Iverson Ray', 'martha.iverson@example.com', '+34600000007', '3390', null, '2022-01-25'],
-    ['BD-99120465', 'Samuel', 'Orton Payne', 'samuel.orton@example.com', '+34600000008', '7756', null, '2018-04-30'],
-    ['BD-99120466', 'Nora', 'Cabot Gill', 'nora.cabot@example.com', '+34600000009', '1287', null, '2025-05-13'],
-    ['BD-99120467', 'Alvin', 'Sandford Harper', null, null, '4903', null, '2017-10-02'],
-    ['BD-99120468', 'Pippa', 'Donnelly Vale', 'pippa.dv@example.com', '+34600000011', '8034', null, '2013-06-19'],
-    ['BD-99120469', 'Thomas', 'Escott Reed', 'thomas.escott@example.com', '+34600000012', '6521', null, '2024-12-01'],
+    ['BD-99120447', 'James', 'Whitfield Moore', 'james@example.com', '+34600000001', '4471', null, '2024-03-12', '1987-04-23'],
+    ['BD-99120448', 'Anna', 'Reed Vance', 'anna@example.com', '+34600000002', '8820', null, '2021-11-02', '1993-09-15'],
+    // Por encima de 65: la exención de comisiones y los productos de jubilación
+    // se contestan con un sí, sin que diga cuántos años tiene.
+    ['BD-99120449', 'Lewis', 'Sandford Hale', null, null, '1043', null, '2019-06-30', '1956-01-08'],
+    // Menor de edad, con la cuenta infantil que le abrieron a los cinco años.
+    ['BD-99120460', 'Charlotte', 'Whitfield Barnes', 'charlotte.wb@example.com', '+34600000003', '2214', null, '2016-02-08', '2011-03-19'],
+    // Entre 18 y 21: mayor de edad y no llega al segundo umbral.
+    ['BD-99120461', 'Michael', 'Fielding Lowe', 'm.fielding@example.com', '+34600000004', '9375', null, '2020-09-21', '2006-11-12'],
+    // Nacida un 29 de febrero. Ver `hasCompletedYears` en `lib/customers.ts`.
+    ['BD-99120462', 'Rosie', 'Naylor Stone', 'rosie.naylor@example.com', null, '5108', null, '2023-07-04', '2004-02-29'],
+    ['BD-99120463', 'Nathan', 'Bramley Cane', null, '+34600000006', '6642', null, '2014-11-17', '1978-07-19'],
+    ['BD-99120464', 'Martha', 'Iverson Ray', 'martha.iverson@example.com', '+34600000007', '3390', null, '2022-01-25', '1949-12-03'],
+    ['BD-99120465', 'Samuel', 'Orton Payne', 'samuel.orton@example.com', '+34600000008', '7756', null, '2018-04-30', '1990-06-06'],
+    ['BD-99120466', 'Nora', 'Cabot Gill', 'nora.cabot@example.com', '+34600000009', '1287', null, '2025-05-13', '1999-10-27'],
+    // Los 65 recién cumplidos, para que se vea que el umbral se cruza solo.
+    ['BD-99120467', 'Alvin', 'Sandford Harper', null, null, '4903', null, '2017-10-02', '1961-03-14'],
+    ['BD-99120468', 'Pippa', 'Donnelly Vale', 'pippa.dv@example.com', '+34600000011', '8034', null, '2013-06-19', '1983-08-01'],
+    ['BD-99120469', 'Thomas', 'Escott Reed', 'thomas.escott@example.com', '+34600000012', '6521', null, '2024-12-01', '2007-09-10'],
   ],
 
   /**
@@ -143,16 +169,17 @@ const ROSTERS = {
    * que sirve una referencia.
    */
   LARKFIELDENERGY: [
-    ['LE-70450012', 'Eleanor', 'Ashcombe Hart', 'eleanor.ashcombe@example.com', '+442079460201', null, 'SP-16000412201', '2017-05-09'],
-    ['LE-70450024', 'Duncan', 'Thurlow Beck', 'duncan.thurlow@example.com', '+442079460244', null, 'SP-16000412244', '2011-09-23'],
-    ['LE-70450036', 'Priya', 'Loxley Barrow', 'priya.loxley@example.com', null, null, 'SP-16000412318', '2022-03-17'],
-    ['LE-70450048', 'Cormac', 'Ashcombe Ridley', null, '+442079460402', null, 'SP-16000412402', '2008-12-01'],
-    ['LE-70450051', 'Bridget', 'Nyholm Carrow', 'bridget.nyholm@example.com', '+442079460475', null, 'SP-16000412475', '2020-07-28'],
-    ['LE-70450063', 'Idris', 'Thurlow Vance', 'idris.thurlow@example.com', '+442079460539', null, 'SP-16000412539', '2015-11-04'],
-    ['LE-70450075', 'Maeve', 'Corrigan Pike', null, null, null, 'SP-16000412604', '2006-02-20'],
-    ['LE-70450087', 'Silas', 'Bramber Wren', 'silas.bramber@example.com', '+442079460677', null, 'SP-16000412677', '2024-04-12'],
-    ['LE-70450099', 'Tamsin', 'Okonkwo Lane', 'tamsin.okonkwo@example.com', '+442079460742', null, 'SP-16000412742', '2019-08-06'],
-    ['LE-70450106', 'Gareth', 'Melrose Fenn', 'gareth.melrose@example.com', null, null, 'SP-16000412815', '2013-01-30'],
+    ['LE-70450012', 'Eleanor', 'Ashcombe Hart', 'eleanor.ashcombe@example.com', '+442079460201', null, 'SP-16000412201', '2017-05-09', '1980-02-17'],
+    ['LE-70450024', 'Duncan', 'Thurlow Beck', 'duncan.thurlow@example.com', '+442079460244', null, 'SP-16000412244', '2011-09-23', '1953-06-11'],
+    ['LE-70450036', 'Priya', 'Loxley Barrow', 'priya.loxley@example.com', null, null, 'SP-16000412318', '2022-03-17', '1991-12-05'],
+    ['LE-70450048', 'Cormac', 'Ashcombe Ridley', null, '+442079460402', null, 'SP-16000412402', '2008-12-01', '1968-08-29'],
+    ['LE-70450051', 'Bridget', 'Nyholm Carrow', 'bridget.nyholm@example.com', '+442079460475', null, 'SP-16000412475', '2020-07-28', '1986-04-02'],
+    ['LE-70450063', 'Idris', 'Thurlow Vance', 'idris.thurlow@example.com', '+442079460539', null, 'SP-16000412539', '2015-11-04', '1977-10-16'],
+    ['LE-70450075', 'Maeve', 'Corrigan Pike', null, null, null, 'SP-16000412604', '2006-02-20', '1949-05-24'],
+    // El más joven que puede firmar un suministro, y por poco: entre 18 y 21.
+    ['LE-70450087', 'Silas', 'Bramber Wren', 'silas.bramber@example.com', '+442079460677', null, 'SP-16000412677', '2024-04-12', '2006-06-30'],
+    ['LE-70450099', 'Tamsin', 'Okonkwo Lane', 'tamsin.okonkwo@example.com', '+442079460742', null, 'SP-16000412742', '2019-08-06', '1994-03-08'],
+    ['LE-70450106', 'Gareth', 'Melrose Fenn', 'gareth.melrose@example.com', null, null, 'SP-16000412815', '2013-01-30', '1972-11-19'],
   ],
 };
 
@@ -239,12 +266,27 @@ if (rows === undefined) {
 
 try {
   for (const row of rows) {
+    // ── El `do update` sólo rellena huecos, y por eso no rompe la idempotencia ──
+    //
+    // Era `do nothing`, y con eso las fichas ya sembradas se habrían quedado sin
+    // fecha de nacimiento para siempre: la columna llegó después que ellas
+    // (`db/012_…`), así que quien tuviera el padrón puesto no vería ni una sola
+    // casilla de edad sin borrar la tabla.
+    //
+    // El `where` es lo que hace que esto siga siendo seguro de ejecutar dos
+    // veces: sólo escribe donde no hay nada. Una fecha corregida a mano en la
+    // consola no se pisa, y no se toca ninguna otra columna — un `do update`
+    // entero devolvería a su valor sembrado el nombre o el correo que alguien
+    // hubiera cambiado, que es exactamente el susto que un guion de siembra no
+    // puede dar.
     await client.query(
       `insert into customer
          (org_id, external_id, given_name, family_name, email, phone, account_last4,
-          supply_point_number, customer_since)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       on conflict (org_id, external_id) do nothing`,
+          supply_point_number, customer_since, birth_date)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       on conflict (org_id, external_id) do update
+          set birth_date = excluded.birth_date
+        where customer.birth_date is null`,
       [orgId, ...row],
     );
   }

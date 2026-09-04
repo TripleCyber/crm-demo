@@ -379,8 +379,25 @@ El día que la exponga, lo único que cambia es de dónde lee
 
 Lo único que sigue siendo código de este banco es el **catálogo de atributos**
 (`CUSTOMER_ATTRIBUTES`, en `src/lib/customers.ts`), y tiene que serlo: un
-atributo sólo se puede poner en una credencial si hay una columna del padrón de
-donde sacarlo. Declarar un atributo en un `.env` no crea la columna — y cuando `policy_number` hizo falta de verdad (2026-08-30) salió en `db/005_sector_reference.sql`, no en una variable.
+atributo sólo se puede poner en una credencial si el padrón sabe contestarlo.
+Declarar un atributo en un `.env` no crea la columna — y cuando `policy_number` hizo falta de verdad (2026-08-30) salió en `db/005_sector_reference.sql`, no en una variable.
+
+**Saberlo no es siempre tenerlo en una columna.** Desde `db/012_birth_date.sql`
+hay atributos **derivados**: `age_over_18`, `age_over_21`, `age_over_65` y
+`customer_over_5_years` no son columnas, son la respuesta a una pregunta cerrada
+sobre una fecha que **no sale de la ficha**. La fecha de nacimiento se guarda y
+no está en el catálogo, así que no hay pantalla que la ofrezca ni ruta que la
+acepte: lo que viaja dentro de la credencial es `age_over_18: true`, un booleano
+de verdad y no la cadena `"false"`, que casi todo el mundo leería como un sí. Es
+el argumento entero de una credencial frente a un carné, que enseña la fecha, la
+dirección y el número de documento aunque sólo preguntaran una cosa.
+
+> No sustituye a la **puerta de edad** de la fase 6 (`/api/age/check`), que
+> pregunta a la cartera y sigue estando. Ésos los emite el banco dentro de la
+> credencial de cliente, así que se marcan como cualquier otro atributo en la
+> misma pantalla de comprobación. Una ficha sin fecha de nacimiento no los lleva
+> y no los ofrece, exactamente igual que una sin cuenta no ofrece
+> `account_last4`.
 
 **Comprobado el 2026-08-29** declarando `CRM_TYPE_CLIENTE_CLAIMS=given_name
 family_name account_last4` y `CRM_TYPE_CLIENTE_DEFAULT_CLAIMS=account_last4`:

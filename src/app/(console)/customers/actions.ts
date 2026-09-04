@@ -47,6 +47,7 @@ export async function createCustomerAction(
     accountLast4: read('accountLast4'),
     supplyPointNumber: read('supplyPointNumber'),
     customerSince: read('customerSince'),
+    birthDate: read('birthDate'),
   });
 
   if (issues.length > 0) {

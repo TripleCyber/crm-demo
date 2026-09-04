@@ -58,6 +58,8 @@ export const es: PartialMessages = {
     noEmail: 'sin correo',
     never: 'nunca',
     unknownFailure: 'fallo desconocido',
+    yes: 'Sí',
+    no: 'No',
   },
 
   attributes: {
@@ -68,6 +70,13 @@ export const es: PartialMessages = {
     supplyPointNumber: 'Punto de suministro',
     supplyPointNumberShort: 'Suministro',
     customerSince: 'Cliente desde',
+    // Se rotulan como la pregunta que contestan y no como el dato del que
+    // salen: «Mayor de 18» es lo que el titular ve que comparte. «Edad» sería
+    // otra cosa, y además una que esta credencial no lleva.
+    ageOver18: 'Mayor de 18',
+    ageOver21: 'Mayor de 21',
+    ageOver65: 'Mayor de 65',
+    customerOver5Years: 'Cliente desde hace más de 5 años',
   },
 
   credentialTypes: {
@@ -161,6 +170,9 @@ export const es: PartialMessages = {
     accountLast4: 'Últimos cuatro de la cuenta',
     customerSince: 'Cliente desde',
     supplyPointNumber: 'Punto de suministro',
+    birthDate: 'Fecha de nacimiento',
+    birthDateHint:
+      'No sale de esta ficha. La credencial lleva sólo las respuestas —mayor de 18, de 21, de 65—, nunca la fecha.',
     externalIdExample: 'AC-40218804',
     givenNameExample: 'Juan',
     familyNameExample: 'Pérez Molina',
@@ -176,6 +188,8 @@ export const es: PartialMessages = {
     errorAccountLast4: 'son exactamente cuatro dígitos',
     errorReferenceCharset: 'sólo letras, dígitos y . / _ : - (hasta 64 caracteres)',
     errorCustomerSince: 'la fecha va en formato AAAA-MM-DD',
+    errorBirthDate: 'la fecha va en formato AAAA-MM-DD',
+    errorBirthDateFuture: 'una fecha de nacimiento no puede estar en el futuro',
     duplicate: 'ya hay un cliente con el identificador {externalId}',
   },
 

@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { IssueCredentialForm } from '@/components/IssueCredentialForm';
 import { getTranslator } from '@/i18n/server';
 import { loadCustomerContext } from '@/lib/customer-context';
-import { findCustomerAttribute, referenceOf } from '@/lib/customers';
+import { displayAttribute, findCustomerAttribute, referenceOf } from '@/lib/customers';
 
 /**
  * **C0 · emitir credencial.** Su propia pantalla, y no un bloque de la ficha.
@@ -56,15 +56,25 @@ export default async function IssueCredentialPage({
 
   // El cruce de las tres fuentes: el padrón dice qué tipos hay, la
   // configuración qué lleva cada uno, y la ficha con qué se rellenan.
+  //
+  // El valor baja **ya escrito para pantalla** (`displayAttribute`) y no crudo.
+  // Antes daba igual porque todos los atributos eran texto; desde que los hay
+  // derivados, el crudo de `age_over_18` es un `true` — y la vista previa de lo
+  // que se va a firmar es el peor sitio para que el agente tenga que traducir de
+  // cabeza. Lo que se firma sigue siendo el `true`, y lo compone el servidor al
+  // emitir (`buildCredentialClaims`); esto es sólo lo que se lee.
   const types = credentialTypes.map((option) => ({
     type: option.type,
     label: option.label,
     maxValidityDays: option.maxValidityDays,
-    claims: option.claims.map((claim) => ({
-      name: claim.name,
-      label: claim.label,
-      value: findCustomerAttribute(claim.name)?.read(customer) ?? null,
-    })),
+    claims: option.claims.map((claim) => {
+      const attribute = findCustomerAttribute(claim.name);
+      return {
+        name: claim.name,
+        label: claim.label,
+        value: attribute === undefined ? null : displayAttribute(t, attribute, customer),
+      };
+    }),
   }));
 
   return (

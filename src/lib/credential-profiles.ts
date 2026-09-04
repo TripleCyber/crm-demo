@@ -36,7 +36,7 @@ import { CUSTOMER_ATTRIBUTES, type Customer } from './customers';
  * ## Cómo se declara un tipo
  *
  *     CRM_TYPE_CLIENTE_LABEL=Cliente del banco
- *     CRM_TYPE_CLIENTE_CLAIMS=given_name family_name account_last4 customer_since
+ *     CRM_TYPE_CLIENTE_CLAIMS=given_name family_name account_last4 customer_since age_over_18
  *     CRM_TYPE_CLIENTE_DEFAULT_CLAIMS=given_name family_name
  *
  * `CLIENTE` es el `type_key` del padrón en mayúsculas, con lo que no sea letra
@@ -126,6 +126,12 @@ function readClaimList(name: string): readonly string[] | undefined {
  *    cliente sin cuenta sería una petición que ninguna cartera puede
  *    satisfacer: ese claim no llegó a entrar en su credencial, porque
  *    `buildCredentialClaims` omite los vacíos.
+ *
+ * ⚠ El tercer filtro descarta lo que la ficha **no sabe**, no lo que contesta
+ * que no. Un `age_over_18` a `false` es un valor como cualquier otro: se ofrece,
+ * se puede pedir y se firma. Lo que desaparece de la pantalla es el atributo de
+ * un cliente sin fecha de nacimiento, que es el caso en el que preguntar no
+ * llevaría a ninguna parte. Ver la nota de `read` en `customers.ts`.
  */
 export function resolveCredentialType(
   t: Translator,
