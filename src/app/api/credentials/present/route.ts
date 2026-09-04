@@ -470,8 +470,13 @@ export async function POST(request: Request): Promise<NextResponse> {
           ],
         });
 
-        expiresAt = asked.expiresAt;
-        counterLink = asked.link;
+        // `requestCeremony` devuelve dos cosas: lo que contestó te-api y **la
+        // petición que salió**, porque el catálogo de verificaciones enseña esa
+        // petición en pantalla y tiene que ser la de verdad y no una
+        // reconstrucción. Aquí no hace falta la segunda, así que se lee `result`
+        // y ya está.
+        expiresAt = asked.result.expiresAt;
+        counterLink = asked.result.link;
       } catch (error) {
         // Igual que en el timbre: la sesión de presentación ya está abierta y
         // **se deja caducar sola**. Sin petición no hay ceremonia, y anotarla

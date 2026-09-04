@@ -281,7 +281,16 @@ a {
   background: rgba(255, 255, 255, 0.12);
   font-size: 12px;
   font-weight: 600;
+  /* El espaciado entre letras deja su hueco **detrás de la última**, así que
+     dos iniciales espaciadas se ven corridas a la izquierda dentro del círculo
+     aunque el `place-items` esté bien puesto. El `text-indent` devuelve ese
+     hueco al otro lado y el bloque queda centrado de verdad.
+
+     Y `line-height: 1` para lo mismo en vertical: la caja de línea por defecto
+     reparte el sobrante arriba y abajo según la fuente, no según el círculo. */
   letter-spacing: 0.02em;
+  text-indent: 0.02em;
+  line-height: 1;
 }
 
 .rail-agent strong {
@@ -2793,4 +2802,452 @@ a.rail-org:hover {
 .ceremony-sent p {
   margin: 0 0 6px;
   font-size: 13.5px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EL COMPOSITOR DE CEREMONIAS
+
+   Todo lo de aquí abajo usa los tokens de arriba y **ni un color escrito a
+   mano**: la marca de una organización repinta `--navy*` en el `<body>`
+   (`lib/brand.ts`), y un `#0a3a63` suelto aquí sería una pantalla que se queda
+   azul cuando la empresa es violeta. Los dos únicos colores literales de esta
+   pantalla son los de la propia marca, y llegan como dato en un `style`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Las cuatro pestañas de la ficha. Más pequeñas que las de industria: son
+   navegación de segundo nivel y no pueden competir con ellas. */
+.ceremony-panes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 18px;
+  padding: 3px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--canvas);
+}
+
+.ceremony-pane {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.ceremony-pane:hover:not([disabled]) {
+  color: var(--navy);
+}
+
+.ceremony-pane.on,
+.ceremony-pane.on:hover:not([disabled]) {
+  background: var(--paper);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+/* La segunda línea de un valor: cuelga de él, sin rótulo y con menos tinta. Es
+   la misma jerarquía que pinta la cartera. */
+.ceremony-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* La frase que se firma, dentro del ensayo de la pantalla del titular: en el
+   teléfono va ahí, y sacarla a una nota al pie sería enseñarla como si fuera un
+   comentario de esta consola. */
+.ceremony-statement {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--navy);
+  border-radius: 6px;
+  background: var(--paper);
+}
+
+.ceremony-statement-head {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+}
+
+.ceremony-statement p {
+  margin: 5px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.ceremony-statement-note,
+.ceremony-hint {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* Lo que el otro lado tiene que enseñar en SU pantalla. Va con el mismo peso
+   que un aviso porque una ceremonia implementada a medias aquí no falla:
+   acierta con la persona equivocada. */
+.ceremony-mustshow {
+  margin: 14px 0 0;
+  padding: 11px 14px;
+  border: 1px solid var(--navy);
+  border-radius: 8px;
+  background: var(--navy-tint);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* ── El editor de campos ───────────────────────────────────────────────── */
+
+.ceremony-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.ceremony-field {
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+/* El filo izquierdo dice el papel de la clave sin gastar una fila: el héroe y
+   las obligatorias con el acento, lo demás apagado. */
+.ceremony-field.role-hero,
+.ceremony-field.role-required {
+  border-left: 3px solid var(--navy);
+}
+
+.ceremony-field.role-optional,
+.ceremony-field.role-generic {
+  border-left: 3px solid var(--rule);
+}
+
+.ceremony-field-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ceremony-field-key {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.ceremony-role {
+  font-size: 10.5px;
+  text-transform: lowercase;
+}
+
+.ceremony-field-drop {
+  margin-left: auto;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-3);
+}
+
+.ceremony-field-drop:hover:not([disabled]) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ceremony-field-line {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ceremony-field-line > span {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.ceremony-field-line input,
+.ceremony-field-line textarea {
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .ceremony-field-line {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+
+.ceremony-field-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.ceremony-field-choices label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.ceremony-add {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+}
+
+.ceremony-add h4 {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.ceremony-add-line {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.ceremony-add-line label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+@media (max-width: 900px) {
+  .ceremony-add-line {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+}
+
+.ceremony-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* El motivo del catálogo, con la palabra cruda de te-api al lado. */
+.ceremony-refused {
+  margin: 16px 0 0;
+  padding: 10px 13px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ── La petición en el cable ───────────────────────────────────────────── */
+
+.ceremony-wire {
+  position: relative;
+  margin-top: 12px;
+}
+
+.ceremony-wire pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--canvas);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.ceremony-wire .copy-value-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* ── La marca, que es de la organización y no de la petición ───────────── */
+
+.ceremony-brand {
+  margin-bottom: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.ceremony-brand > p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.ceremony-brand-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.ceremony-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ceremony-brand-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+
+/* ── Lo que se puede y lo que no ───────────────────────────────────────── */
+
+.ceremony-allows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.ceremony-allows h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+}
+
+.ceremony-allows ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* ── Lo mandado y lo recibido ──────────────────────────────────────────── */
+
+.ceremony-exchange {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.ceremony-half > p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.ceremony-events {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.ceremony-events > li {
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+/* La pareja de verdad: el evento que contesta a ESTA petición. Sólo la mitad de
+   credencial la tiene, porque es la única que lleva `presentationId`. */
+.ceremony-events > li.match {
+  border-color: var(--navy);
+  background: var(--navy-tint);
+}
+
+.ceremony-event-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.ceremony-event-match {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.ceremony-events pre {
+  margin: 8px 0 0;
+  overflow-x: auto;
+  font-size: 11.5px;
+}
+
+/* La segunda línea de un dato dentro de la ficha. `.sub` sólo estaba definida
+   dentro de una tabla, y aquí los mismos datos viven en listas de definición y
+   en avisos: sin esto, «identity» y «esta plantilla admite…» salían pegados en
+   la misma línea. */
+.ceremony-detail .sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.ceremony-detail .mono.sub {
+  font-size: 11.5px;
+}
+
+/* La insignia del papel de una clave. Un `.pill` sin modificador es
+   transparente —los cuatro estados no valen aquí, porque esto no es un
+   estado— así que se le dan sus propios colores: el acento para lo que la
+   plantilla exige, tinta apagada para lo que acompaña. */
+.ceremony-role {
+  background: var(--canvas);
+  color: var(--ink-2);
+}
+
+.ceremony-role.hero,
+.ceremony-role.required {
+  background: var(--navy-tint);
+  color: var(--navy);
+}
+
+/* El desenlace que trae un evento —`verified`, `expired`— tampoco es uno de los
+   cuatro estados de la consola: lo escribe te-api y puede ser cualquiera. */
+.ceremony-event-head .pill:not(.ok):not(.alarm) {
+  background: var(--canvas);
+  color: var(--ink-2);
 }

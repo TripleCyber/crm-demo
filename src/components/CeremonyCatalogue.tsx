@@ -1,27 +1,35 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 
 import { useTranslator } from '@/i18n/client';
-import {
-  casesOfIndustry,
-  CEREMONY_INDUSTRIES,
-  type CeremonyCase,
-} from '@/lib/ceremony-catalogue';
+import { casesOfIndustry, CEREMONY_INDUSTRIES } from '@/lib/ceremony-catalogue';
+import type { CeremonyDraftField } from '@/lib/ceremony-templates';
 
-import type { SendCeremonyResult } from '@/app/(console)/customers/[externalId]/ceremonies/actions';
+import type {
+  CeremonyEventsResult,
+  SendCeremonyResult,
+} from '@/app/(console)/customers/[externalId]/ceremonies/actions';
+
+import { CeremonyComposer, type CeremonyBrand } from './CeremonyComposer';
 
 /**
  * **El catálogo de verificaciones.** Trece industrias, treinta y seis casos.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  ES UN CATÁLOGO, NO UN FORMULARIO — Y SE VE EN QUE NO HAY UN SOLO CAMPO
+ *  ESTE FICHERO ES LA NAVEGACIÓN. LA FICHA ES `CeremonyComposer.tsx`
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Lo que un agente hace aquí es **elegir y mandar**. Los valores los trae el
- * catálogo, así que no hay nada que teclear y no debe haberlo: lo que el titular
- * lee entra en el texto que firma, y una pantalla con casillas editables sería
- * otra cosa —un compositor de peticiones— con otras preguntas que contestar.
+ * Aquí decía que era un catálogo y no un formulario, y que se veía en que no
+ * había un solo campo. **Ahora los hay**, y por eso la ficha se ha ido a su
+ * propio fichero: lo que queda aquí es elegir industria y elegir caso, que son
+ * dos listas y noventa líneas. El compositor —editar, ensayar, ver la petición
+ * exacta, mandarla y ver lo que vuelve— es otro oficio y ocupa otro fichero.
+ *
+ * La separación es la misma que hay entre `VerificationTracker` y
+ * `VerificationStage`: uno decide qué es verdad y el otro cómo se enseña.
+ * Mezclarlos es lo que hace que al retocar la lista se toque sin querer lo que
+ * se manda.
  *
  * ## Se recorre por industria, y por eso no es una lista de 36
  *
@@ -29,29 +37,38 @@ import type { SendCeremonyResult } from '@/app/(console)/customers/[externalId]/
  * industria —dos a cuatro casos cada una—, la columna estrecha enseña esos casos
  * con su título y qué resuelven, y la ancha la ficha del que esté abierto. Nadie
  * tiene delante más de cuatro cosas a la vez.
- *
- * ## Se enseña, tal cual, lo que va a ver el titular
- *
- * La misma disciplina de `TransferLauncher` —«se enseña abajo, tal cual, lo que
- * va a ver el titular»— y por el mismo motivo: el agente tiene que poder decir
- * en voz alta lo que la otra persona está leyendo. Aquí es literal: la ficha
- * pinta **los mismos campos que se mandan**, con su héroe y su peso, y los dos
- * verbos tal y como salen en el teléfono.
- *
- * Lo que la ficha **no** promete es lo que el marco no hace. Varios casos rozan
- * el quórum, el enfriamiento o la proximidad, y el que lo roza lo dice en su
- * propia ficha —no en un pie— porque es ahí donde alguien lo va a leer antes de
- * vendérselo a un cliente.
  */
 export function CeremonyCatalogue({
   externalId,
   organizationName,
+  askerName,
+  verifierUrl,
+  credentialType,
+  brand,
   walletLinked,
   send,
+  readEvents,
 }: {
   externalId: string;
   /** Quien pregunta de verdad. Ver la nota de arriba de la pantalla. */
   organizationName: string;
+  /**
+   * El nombre legal del padrón de te-api, que es el que **entra en la frase que
+   * se firma**. No es el rótulo de la consola: ver la página.
+   */
+  askerName: string;
+  /**
+   * La base de te-api de esta organización — `https://te-api…`.
+   *
+   * **La base y no la URL entera**: el camino lo pone el mismo constructor que
+   * manda la petición, así que la de la pantalla y la del cable no se pueden
+   * separar. Se pinta, no se llama: el token no baja al navegador.
+   */
+  verifierUrl: string;
+  /** El tipo del padrón con el que se pedirá la credencial, si hay alguno. */
+  credentialType: string | undefined;
+  /** La marca de **la organización**, para enseñar de quién es. Ver la ficha. */
+  brand: CeremonyBrand | undefined;
   /**
    * Si el titular tiene cartera vinculada con esta organización.
    *
@@ -61,18 +78,21 @@ export function CeremonyCatalogue({
    */
   walletLinked: boolean | undefined;
   /**
-   * La acción de servidor, inyectada.
+   * Las dos acciones de servidor, inyectadas.
    *
-   * Baja por parámetro para que este componente siga siendo una pantalla y se
-   * pueda leer sin arrastrar detrás la mitad del servidor.
+   * Bajan por parámetro para que estos componentes sigan siendo pantallas y se
+   * puedan leer sin arrastrar detrás la mitad del servidor.
    */
-  send: (externalId: string, caseId: string) => Promise<SendCeremonyResult>;
+  send: (
+    externalId: string,
+    caseId: string,
+    fields?: readonly CeremonyDraftField[],
+  ) => Promise<SendCeremonyResult>;
+  readEvents: (since: string) => Promise<CeremonyEventsResult>;
 }) {
   const t = useTranslator();
   const [industry, setIndustry] = useState(CEREMONY_INDUSTRIES[0]?.id ?? 'doc');
   const [openId, setOpenId] = useState(casesOfIndustry(industry)[0]?.id ?? '');
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<SendCeremonyResult | null>(null);
 
   const cases = casesOfIndustry(industry);
   const open = cases.find((entry) => entry.id === openId) ?? cases[0];
@@ -80,24 +100,6 @@ export function CeremonyCatalogue({
   const pick = (nextIndustry: string) => {
     setIndustry(nextIndustry);
     setOpenId(casesOfIndustry(nextIndustry)[0]?.id ?? '');
-    setResult(null);
-  };
-
-  const show = (caseId: string) => {
-    setOpenId(caseId);
-    setResult(null);
-  };
-
-  const ask = async (caseId: string) => {
-    setBusy(true);
-    setResult(null);
-    try {
-      setResult(await send(externalId, caseId));
-    } catch {
-      setResult({ error: t('errors.generic') });
-    } finally {
-      setBusy(false);
-    }
   };
 
   return (
@@ -134,7 +136,7 @@ export function CeremonyCatalogue({
                 type="button"
                 className={entry.id === open?.id ? 'ceremony-item on' : 'ceremony-item'}
                 aria-current={entry.id === open?.id ? 'true' : undefined}
-                onClick={() => show(entry.id)}
+                onClick={() => setOpenId(entry.id)}
               >
                 <strong>{entry.title}</strong>
                 <span className="ceremony-item-why">{entry.problem}</span>
@@ -145,122 +147,26 @@ export function CeremonyCatalogue({
         </ul>
 
         {open !== undefined && (
-          <CeremonyDetail
+          /*
+            `key` por caso, y es lo que hace que el compositor funcione: cambiar
+            de caso **desmonta** la ficha entera, así que el borrador, el
+            resultado y los eventos de la anterior no sobreviven. Sin esto,
+            abrir un contrato mercantil después de un cambio de SIM heredaría
+            los campos del otro, y lo que se manda sería una mezcla.
+          */
+          <CeremonyComposer
             key={open.id}
             ceremony={open}
-            busy={busy}
-            result={result}
-            onSend={() => void ask(open.id)}
+            externalId={externalId}
+            askerName={askerName}
+            verifierUrl={verifierUrl}
+            credentialType={credentialType}
+            brand={brand}
+            send={send}
+            readEvents={readEvents}
           />
         )}
       </div>
     </>
-  );
-}
-
-/**
- * La ficha de un caso: qué resuelve, qué va a leer el titular, y el botón.
- *
- * El héroe se pinta arriba y en grande, y los demás pares debajo en el orden en
- * que se mandan. No es decoración: es **el mismo escalón** que la cartera pinta,
- * y verlo aquí es lo que permite al agente decir en voz alta lo que la otra
- * persona está mirando.
- */
-function CeremonyDetail({
-  ceremony,
-  busy,
-  result,
-  onSend,
-}: {
-  ceremony: CeremonyCase;
-  busy: boolean;
-  result: SendCeremonyResult | null;
-  onSend: () => void;
-}) {
-  const t = useTranslator();
-  const hero = ceremony.fields.find((field) => field.style === 'hero');
-  const pairs = ceremony.fields.filter((field) => field.style !== 'hero');
-
-  return (
-    <div className="panel ceremony-detail">
-      <h2>
-        {ceremony.title}
-        <span className="panel-mark mono">{ceremony.template}</span>
-      </h2>
-
-      <p className="ceremony-written">
-        {t('ceremonies.writtenFor', { organization: ceremony.writtenFor })} ·{' '}
-        <span className="mono">{ceremony.kind}</span> ·{' '}
-        <span className="mono">{ceremony.signWith}</span>
-      </p>
-
-      <h3 className="ceremony-heading">{t('ceremonies.previewTitle')}</h3>
-
-      <div className="ceremony-screen">
-        {hero === undefined ? (
-          <p className="ceremony-nohero">{t('ceremonies.noHero')}</p>
-        ) : (
-          <div className="ceremony-hero">
-            <span>{hero.label}</span>
-            <strong className={hero.type === 'mono' ? 'mono' : undefined}>{hero.value}</strong>
-          </div>
-        )}
-
-        <dl className="ceremony-pairs">
-          {pairs.map((field) => (
-            <Fragment key={field.key}>
-              <dt className={field.style === 'quiet' ? 'quiet' : undefined}>{field.label}</dt>
-              <dd
-                className={[
-                  field.type === 'mono' ? 'mono' : '',
-                  field.style === 'quiet' ? 'quiet' : '',
-                ]
-                  .filter((entry) => entry !== '')
-                  .join(' ')}
-              >
-                {field.value}
-              </dd>
-            </Fragment>
-          ))}
-        </dl>
-
-        {/*
-          Los dos verbos, y cuál manda. `account.change.v1` es la única en la
-          que negar pesa más que aprobar, y es su razón de ser: es el cambio que
-          abre todas las demás cuentas. Enseñarlo aquí al revés que en las otras
-          es lo que hace que el agente lo cuente bien.
-        */}
-        <div className={ceremony.denyLeads ? 'ceremony-verbs deny-first' : 'ceremony-verbs'}>
-          <span className="ceremony-verb">{ceremony.verb}</span>
-          <span className="ceremony-deny">{ceremony.deny}</span>
-        </div>
-      </div>
-
-      <p className="ceremony-problem">{ceremony.problem}</p>
-
-      {ceremony.flag !== undefined && (
-        <p className="ceremony-flag">
-          <strong>{t('ceremonies.flagTitle')}</strong> {ceremony.flag}
-        </p>
-      )}
-
-      {result?.error !== undefined && <p className="alert">{result.error}</p>}
-
-      {result?.requestId === undefined ? (
-        <button type="button" disabled={busy} onClick={onSend}>
-          {busy ? t('ceremonies.sending') : t('ceremonies.send')}
-        </button>
-      ) : (
-        <div className="ceremony-sent">
-          <p>{t('ceremonies.sent')}</p>
-          <p className="page-facts">
-            <span className="mono">{result.requestId}</span>
-            {result.presentationId !== undefined && (
-              <span className="mono">{result.presentationId}</span>
-            )}
-          </p>
-        </div>
-      )}
-    </div>
   );
 }

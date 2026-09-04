@@ -4,17 +4,32 @@ import type { MessageKey } from '@/i18n/translate';
  * **El catálogo de verificaciones: 36 casos, trece industrias.**
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  ESTO ES CARGA DE DEMOSTRACIÓN, NO UN FORMULARIO
+ *  ESTO ES LA CARGA POR DEFECTO. YA NO ES LA ÚNICA QUE SE PUEDE MANDAR
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Sale del artifact «Ceremony Catalogue», que es la especificación: cada caso
  * trae su plantilla, su héroe, sus pares y el verbo de su botón, y **los valores
- * de ejemplo son los buenos**. Se mandan tal cual.
+ * de ejemplo siguen siendo los buenos**. Un caso abierto y mandado sin tocar
+ * nada manda exactamente esto, byte por byte, como el primer día.
  *
- * Por eso aquí no hay editor de campos y no debe haberlo: lo que el titular lee
- * entra en el texto que firma, y un catálogo con casillas editables sería otra
- * cosa —un compositor de peticiones— con otras preguntas de seguridad. Si algún
- * día hay que escribir estos valores, es otra tarea.
+ * Aquí decía que no había editor de campos y que no debía haberlo, y que si
+ * algún día había que escribir estos valores sería otra tarea. **Esa tarea se
+ * hizo**: `components/CeremonyCase.tsx` es el compositor, y estos valores son su
+ * punto de partida. Lo que aquel párrafo protegía —«lo que el titular lee entra
+ * en el texto que firma»— no se ha soltado, se ha puesto donde tenía que estar:
+ *
+ *  · lo que se escribe se comprueba **contra el catálogo de plantillas** antes de
+ *    salir (`lib/ceremony-templates.ts`), con los mismos motivos que contestaría
+ *    te-api;
+ *  · lo que el navegador puede cambiar son **los campos y nada más**: ni la
+ *    plantilla, ni el `kind`, ni con qué se firma, ni a quién se le pregunta —eso
+ *    lo pone la acción de servidor desde este catálogo (`ceremonies/actions.ts`);
+ *  · y la frase que se firma **no la escribe nadie de este lado**: la pone el
+ *    catálogo de te-api, versionada, y esta consola sólo la ensaya.
+ *
+ * La regla que queda, para quien añada un caso: los valores de ejemplo son lo
+ * que se ve en una demostración sin tocar nada, así que se escriben para leerse
+ * en voz alta.
  *
  * ## Quién pregunta sigue siendo esta organización
  *
@@ -93,6 +108,17 @@ export interface CeremonyField {
   readonly key: string;
   readonly label: string;
   readonly value: string;
+  /**
+   * **La segunda línea del valor.** Sin rótulo y bajo la clave de su propio
+   * campo, así que se firma con él: es parte del mismo dato, no un campo más.
+   *
+   * Ninguno de los 36 casos la trae hoy —el artifact la escribe sobre el héroe
+   * en dieciocho de ellos y aquí todavía no se ha bajado caso a caso—, y se
+   * declara porque el compositor la ofrece: te-api la acepta **sólo sobre una
+   * clave obligatoria** de la plantilla (`sub_not_allowed` si no), que es donde
+   * la cartera saca una clave del bloque de pares para darle su propio escalón.
+   */
+  readonly sub?: string;
   readonly type: CeremonyFieldType;
   readonly style: CeremonyFieldStyle;
 }

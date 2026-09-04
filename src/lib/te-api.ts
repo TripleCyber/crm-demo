@@ -2,7 +2,14 @@ import 'server-only';
 
 import type { MessageKey, Translator } from '@/i18n/translate';
 
+import { b2bHeaders } from './b2b-http';
 import { getB2bToken, invalidateB2bToken } from './b2b-token';
+import {
+  buildCeremonyHttpRequest,
+  CEREMONY_REQUEST_PATH,
+  type CeremonyHttpRequest,
+  type CeremonyRequestInput,
+} from './ceremony-request';
 import { logConsoleFailure } from './console-failures';
 import type { PublicJwk } from './did-document';
 import type { OrganizationConfig } from './organization';
@@ -711,50 +718,73 @@ export async function requestAgeCheck(
  * `requestPresentation` y pasar aquí su `requestUri`, que es exactamente lo que
  * hace `requestAgeCheck`.
  */
-export interface CeremonyRequestInput {
-  readonly subjectReference: string;
-  readonly kind: 'authenticate' | 'verify' | 'authorize' | 'present';
-  readonly signWith: 'identity' | 'credential';
-  /** Obligatorio con `signWith: 'credential'`, y prohibido con `identity`. */
-  readonly credentialType?: string;
-  /** El nombre con el que la plantilla viaja: `doc.sign.v1`. */
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL CUERPO YA NO SE COMPONE AQUÍ, Y ESO ES LA MITAD DE LA TAREA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Lo componía esta función, con un literal escrito debajo. Ahora lo compone
+ * `lib/ceremony-request.ts`, y esta función se limita a mandarlo — porque el
+ * compositor del catálogo **enseña ese mismo cuerpo en pantalla**, y dos sitios
+ * que lo escriban se separan sin que nada falle: una pantalla que documenta no
+ * revienta cuando se queda vieja, se sigue pintando con la forma del mes pasado.
+ *
+ * Con una fuente única, lo que se pinta es literalmente el objeto que entra en
+ * `fetch`. El porqué largo está allí; aquí queda la consecuencia: **si alguien
+ * vuelve a escribir el cuerpo en esta función, la pantalla empieza a mentir.**
+ */
+export type { CeremonyRequestInput };
+
+/** Lo que contesta `POST /v1/requests`, entero. */
+export interface CeremonyRequestResult extends TransferApprovalResult {
+  /**
+   * Siempre `pending`, y te-api lo manda igualmente: convierte en algo que la
+   * integración puede afirmar un hecho que si no sólo estaría en la cabeza de
+   * quien leyó el código —una fila recién creada no está firmada—.
+   */
+  readonly status: string;
   readonly template: string;
-  /** La sesión del verificador, cuando la ceremonia tiene una. */
-  readonly requestUri?: string;
-  readonly fields: readonly {
-    readonly key: string;
-    readonly label: string;
-    readonly value: string;
-    readonly type: 'text' | 'mono' | 'numeric';
-    readonly style: 'hero' | 'normal' | 'quiet';
-  }[];
+  /**
+   * **La revisión que puso el catálogo de te-api**, no la que creía tener esta
+   * consola.
+   *
+   * Es lo que hace seguro tener una copia del catálogo en
+   * `lib/ceremony-templates.ts`: la copia puede envejecer, pero no en silencio,
+   * porque este número vuelve con cada petición y la pantalla lo enseña al lado
+   * del suyo.
+   */
+  readonly templateVersion: number;
+}
+
+/** Lo que se mandó y lo que contestaron, juntos. Ver `sent`. */
+export interface CeremonyRequestExchange {
+  readonly result: CeremonyRequestResult;
+  /**
+   * **La petición HTTP que acaba de salir**, con el portador tapado.
+   *
+   * Se devuelve en vez de recomponerse en la pantalla porque es la única forma
+   * de que el bloque de «lo que se mandó» no sea una reconstrucción: es el mismo
+   * objeto que se serializó, con el `requestUri` de verdad ya dentro cuando la
+   * ceremonia firma con credencial.
+   */
+  readonly sent: CeremonyHttpRequest;
 }
 
 export async function requestCeremony(
   organization: OrganizationConfig,
   input: CeremonyRequestInput,
-): Promise<TransferApprovalResult> {
-  return callB2b<TransferApprovalResult>(organization, organization.verifierUrl, '/v1/requests', {
-    method: 'POST',
-    body: {
-      subjectReference: input.subjectReference,
-      kind: input.kind,
-      signWith: input.signWith,
-      // Se omiten en vez de mandarse a `null`: te-api rechaza `credentialType`
-      // junto a `signWith: 'identity'` por su propio `superRefine`, y un `null`
-      // explícito no pasa su `z.string()`.
-      ...(input.credentialType === undefined ? {} : { credentialType: input.credentialType }),
-      ...(input.requestUri === undefined ? {} : { requestUri: input.requestUri }),
-      template: input.template,
-      fields: input.fields.map((field) => ({
-        key: field.key,
-        label: field.label,
-        value: field.value,
-        type: field.type,
-        style: field.style,
-      })),
-    },
-  });
+): Promise<CeremonyRequestExchange> {
+  const sent = buildCeremonyHttpRequest(organization.verifierUrl, input);
+
+  const result = await callB2b<CeremonyRequestResult>(
+    organization,
+    organization.verifierUrl,
+    CEREMONY_REQUEST_PATH,
+    // El **mismo objeto** que lleva `sent`. No una copia: la misma referencia.
+    { method: 'POST', body: sent.body },
+  );
+
+  return { result, sent };
 }
 
 /**
@@ -1032,10 +1062,10 @@ async function callB2b<T>(
     const token = await getB2bToken(organization);
     const response = await fetch(`${baseUrl}${path}`, {
       method: init.method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      },
+      // Las cabeceras salen de `lib/b2b-http.ts` y no de un literal aquí, porque
+      // el compositor del catálogo **las pinta**: escribirlas dos veces sería
+      // dejar que la pantalla enseñe las de ayer el día que se añada una.
+      headers: b2bHeaders(token, init.body !== undefined),
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       cache: 'no-store',
     });

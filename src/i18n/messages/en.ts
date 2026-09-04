@@ -445,6 +445,139 @@ export const en = {
     send: 'Send this request',
     sending: 'Sending…',
     sent: 'Sent. They answer on their phone, not here — tell them to open the app.',
+
+    /* ── El compositor: editar, ensayar, ver la petición y mandarla ────── */
+
+    panesLabel: 'What you are looking at',
+    panePreview: 'Preview',
+    paneFields: 'Customise',
+    paneWire: 'Request',
+    paneContract: 'Contract',
+
+    /**
+     * La frase que se firma.
+     *
+     * Se rotula «the sentence they sign» y no «statement»: es lo único de esa
+     * pantalla que no escribe quien pregunta, y quien vende esto tiene que poder
+     * decirlo con esas palabras.
+     */
+    statementTitle: 'The sentence they sign',
+    statementNote:
+      'The sentence is the template’s, not this console’s: te-api composes it from the values below and keeps the revision it used, so a receipt from last year is redrawn with last year’s wording. What a partner supplies are the values.',
+    askerMustShowTitle: 'Your own screen must show:',
+
+    fieldsTitle: 'The values that travel',
+    fieldsNote:
+      'These are the catalogue’s, and they are good ones — send the case untouched and this is exactly what goes. Edit them and everything else follows: the preview, the sentence and the request block are all built from what is here.',
+    fieldLabel: 'Label',
+    fieldValue: 'Value',
+    fieldSub: 'Second line',
+    fieldSubNote:
+      'A line under the value, with no label of its own. It is signed with the value, and te-api allows it only on the keys the template requires.',
+    fieldSubHint: 'Version 4 · 18 pages',
+    fieldReading: 'Reading',
+    fieldWeight: 'Weight',
+    readingText: 'Text',
+    readingMono: 'Character by character',
+    readingNumeric: 'Figures',
+    weightHero: 'Hero',
+    weightNormal: 'Normal',
+    weightQuiet: 'Quiet',
+    roleHero: 'hero',
+    roleRequired: 'required',
+    roleOptional: 'known',
+    roleGeneric: 'generic pair',
+    remove: 'Remove',
+    reset: 'Back to the catalogue values',
+
+    addPair: 'Add a pair',
+    addKey: 'Key',
+    add: 'Add',
+    addFull: 'Twelve fields is the ceiling, and te-api enforces it: nobody gets to send a hundred and hide the one that matters.',
+    addKeyBad: 'A key is lowercase letters, digits and underscores. It is the name the signed answer uses to say what was signed.',
+    addKeyTaken: 'That key is already in this request.',
+
+    draftRefused: 'te-api would refuse this request:',
+
+    wireWillSend: 'What will be sent',
+    wireWasSent: 'What was sent',
+    wireCredentialNote:
+      'This case signs with a credential, so one call goes first: POST /v1/b2b/presentations opens the verifier session at TripleEnable and returns the requestUri below. The credential type is this organisation’s, taken from its roster — not the case’s.',
+    wirePlaceholders:
+      'The two values in angle brackets do not exist yet: they are filled in a moment before the call. Send it and this block is replaced by the body that actually went.',
+
+    /**
+     * La línea de la marca. Es una decisión ya tomada y se enseña como tal.
+     *
+     * te-api congela `asker_logo_url`, `asker_color` y `asker_dark_color` desde
+     * su padrón al crear la fila, así que la marca no puede viajar en el cuerpo
+     * — que es lo que impide que quien pregunta salga en el teléfono de otra
+     * persona con un logotipo que no es suyo.
+     */
+    brandNote:
+      'Colour and logo belong to the organisation, never to the request: te-api freezes them from its registry when it creates the row, so an asker cannot appear on someone’s phone with a logo it does not own. Nothing in the body below carries them.',
+    brandNone: 'This installation declares no brand colours, so the console keeps its default ones.',
+    brandChange: 'Change them in Settings',
+
+    contractTitle: 'What this case uses, and what it allows',
+    contractUnknown:
+      'This console’s copy of the template catalogue does not know that template. te-api decides: send it and read what it answers.',
+    contractInternal:
+      'te-api lets only its own seam create this template — a sign-in request opens a session, which is an act of the identity issuer and not of a partner. POST /v1/requests answers invalid_request. The case is here because the shape is worth showing; sending it will fail, and that failure is the truth.',
+    contractTemplate: 'Template',
+    contractVersion: 'Revision',
+    contractKind: 'Kind',
+    contractSignWith: 'Signs with',
+    contractSignWithNote: 'This template accepts: {allowed}',
+    contractCredential: 'Credential type',
+    contractClaims: 'Attributes asked of it: {claims}',
+    contractHero: 'Hero key',
+    contractNoHero: 'none — the decision is a pair, not a value',
+    contractRequired: 'Required keys',
+    contractOptional: 'Known keys',
+    contractGeneric: 'Generic pairs in this draft',
+    versionAgrees: 'te-api confirmed revision {version}.',
+    versionDiffers:
+      'te-api used revision {actual}; this console had {expected}. Its copy of the catalogue is stale — the code in te-api is the one that counts.',
+
+    mayTitle: 'A partner decides',
+    may1: 'Every label and value — they are the payload, and they are read on the holder’s phone in the holder’s language, not in the console’s.',
+    may2: 'The second line of a required key, which is signed with the value above it.',
+    may3: 'How each value reads — plain, character by character, or figures. Presentation is the asker’s call.',
+    may4: 'Which pairs to add. The vocabulary is open: a key the template does not declare travels as a generic pair, up to twelve fields.',
+    mayNotTitle: 'te-api decides',
+    mayNot1: 'The sentence that gets signed, and its revision. It comes from the template catalogue, never from the caller.',
+    mayNot2: 'Which key is the hero — and a key the template does not declare can never be one.',
+    mayNot3: 'The name of whoever is asking: it is copied from the token that made the call.',
+    mayNot4: 'The logo and the two colours, frozen from the registry. See the note above the request.',
+    mayNot5: 'How long the window stays open. A caller who chose that would be choosing how much of a hurry the person deciding is in.',
+
+    sentTitle: 'Sent',
+    sentRequestId: 'Request',
+    sentStatus: 'Status',
+    sentTemplate: 'Template',
+    sentExpires: 'Expires',
+    sentPresentation: 'Verifier session',
+    sentLink: 'Counter link',
+
+    sendAgain: 'Compose another',
+    receivedTitle: 'Received',
+    /**
+     * El hueco, dicho con todas las letras.
+     *
+     * te-api manda hoy dos tipos de evento y ninguno habla de peticiones del
+     * marco. Una ceremonia que firma con la identidad de la cartera se cierra
+     * sin webhook, y disimularlo con un «esperando» sería exactamente la clase
+     * de honestidad inventada que esta casa no admite.
+     */
+    receivedNoEvent:
+      'This case signs with the wallet’s identity, and te-api sends no webhook when a framework request is answered: the two event types it sends today are presentation.settled and webhook.test. The outcome of this one lives in te-api. A case that signs with a credential does come back here, keyed by its verifier session.',
+    receivedEmpty: 'Nothing has come back since this was sent.',
+    receivedMatch: 'This is the answer to the request above — same verifier session.',
+    checkEvents: 'Check what has come back',
+    checking: 'Checking…',
+    eventsLink: 'Every event this organisation has received',
+
     industryDoc: 'Documents',
     industryPro: 'Professional',
     industryHealth: 'Health',
@@ -1067,6 +1200,11 @@ export const en = {
       'This case is signed with a credential and this organisation declares no credential type, so there is nothing to ask for.',
     ceremonyNoClaims:
       'This case is signed with a credential but names no attribute to present. It cannot be asked as it stands.',
+    ceremonyBadDraft: 'Those fields could not be read, so nothing was sent.',
+    /**
+     * El motivo crudo va al lado, en monoespaciada. Ver `SendCeremonyResult.reason`.
+     */
+    ceremonyDraftRefused: 'te-api would refuse this request, so it was not sent:',
     ceremonyUpstream: 'The request could not be sent. Check Diagnostics.',
   },
 };

@@ -198,6 +198,52 @@ export async function listWebhookEvents(
   return rows.map(toRecord);
 }
 
+/**
+ * **Lo que ha entrado desde un instante concreto.** La otra mitad del catálogo
+ * de verificaciones: qué contestó te-api a la petición que se acaba de mandar.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  SE FILTRA POR HORA Y NO POR `request_id`, Y NO PORQUE SEA MÁS CÓMODO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Porque **no hay `request_id` en ningún evento**. te-api manda hoy dos tipos y
+ * ninguno habla de peticiones del marco: `presentation.settled`, que se
+ * identifica por `presentationId`, y `webhook.test`. Una petición que firma con
+ * la identidad de la cartera —la mayoría del catálogo— se aprueba, se rechaza o
+ * caduca **sin que salga ningún webhook**, y eso es un hueco del contrato de
+ * te-api, no de esta consulta.
+ *
+ * Así que lo que esta función puede contestar con verdad es «qué ha llegado
+ * desde que pulsaste», y la pantalla dice exactamente eso. Lo que sí se puede
+ * emparejar de verdad es la mitad de credencial: allí hay `presentationId`, es
+ * el mismo que devolvió `POST /v1/b2b/presentations` y el que esta consola anotó
+ * en `verification` — y quien empareja es la pantalla, comparando esa columna.
+ *
+ * El día que te-api mande un evento de petición, esta función no cambia: la
+ * pantalla deja de tener que disculparse.
+ *
+ * `since` va como texto ISO y lo convierte Postgres, igual que `occurred_at` en
+ * el `insert`. El tope está para que una pestaña abierta desde ayer no se traiga
+ * el diario entero.
+ */
+export async function listWebhookEventsSince(
+  orgId: string,
+  since: string,
+  limit = 25,
+): Promise<WebhookEventRecord[]> {
+  const rows = await query<WebhookEventRow>(
+    `select event_id, org_id, type, api_version, occurred_at, received_at,
+            presentation_id, external_id, status, signature_ok, signature_error,
+            delivery_id, payload
+       from webhook_event
+      where org_id = $1 and received_at >= $2::timestamptz
+      order by received_at desc
+      limit $3`,
+    [orgId, since, limit],
+  );
+  return rows.map(toRecord);
+}
+
 /** Cuántos han llegado y cuántos venían mal firmados. Para Diagnóstico. */
 export interface WebhookEventTally {
   readonly total: number;

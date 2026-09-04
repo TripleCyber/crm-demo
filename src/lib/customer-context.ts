@@ -47,6 +47,20 @@ export interface CustomerContext {
   readonly credentialTypes: readonly CredentialTypeView[];
   /** El DID de la organización, tal y como lo devuelve el padrón. */
   readonly issuerDid: string | undefined;
+  /**
+   * **El nombre legal según el padrón de te-api**, que es el que va a leer el
+   * titular.
+   *
+   * No es el mismo dato que `session.organization.displayName`: aquél es el
+   * rótulo de esta consola y lo escribe quien la configura; éste lo copia te-api
+   * del token al crear cada petición (`asker_name`) y es el que entra en la
+   * frase que se firma. El catálogo de verificaciones lo necesita para ensayar
+   * esa frase sin inventarse el nombre.
+   *
+   * `undefined` = no se pudo preguntar, y entonces la pantalla ya lo está
+   * avisando por su cuenta (`teApiWarning`).
+   */
+  readonly legalName: string | undefined;
   /** Qué falló al preguntarle a te-api, si falló. */
   readonly teApiWarning: string | undefined;
   /**
@@ -76,6 +90,7 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
       customer: null,
       credentialTypes: [],
       issuerDid: undefined,
+      legalName: undefined,
       teApiWarning: undefined,
       walletLinked: undefined,
     };
@@ -97,6 +112,7 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
       customer,
       credentialTypes: resolveCredentialTypes(t, organization.credentialTypes, customer),
       issuerDid: organization.did,
+      legalName: organization.legalName,
       teApiWarning: undefined,
       walletLinked,
     };
@@ -106,6 +122,7 @@ export async function loadCustomerContext(externalId: string): Promise<CustomerC
       customer,
       credentialTypes: [],
       issuerDid: undefined,
+      legalName: undefined,
       walletLinked: undefined,
       // `describeTeApiError` sí traduce lo suyo a algo que un agente entiende.
       // Lo que caía en la otra rama era el mensaje crudo de `B2bTokenError` o

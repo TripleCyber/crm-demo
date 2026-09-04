@@ -386,6 +386,116 @@ export const es: PartialMessages = {
     send: 'Mandar esta petición',
     sending: 'Mandando…',
     sent: 'Mandado. Contesta en su teléfono, no aquí — dile que abra la app.',
+
+    /* ── El compositor: editar, ensayar, ver la petición y mandarla ────── */
+
+    panesLabel: 'Qué estás mirando',
+    panePreview: 'Vista previa',
+    paneFields: 'Personalizar',
+    paneWire: 'Petición',
+    paneContract: 'Contrato',
+
+    statementTitle: 'La frase que firma',
+    statementNote:
+      'La frase es de la plantilla y no de esta consola: la compone te-api con los valores de abajo y guarda la revisión que usó, así que un recibo del año pasado se vuelve a pintar con el texto de aquel día. Lo que pone quien pregunta son los valores.',
+    askerMustShowTitle: 'Tu propia pantalla tiene que enseñar:',
+
+    fieldsTitle: 'Los valores que viajan',
+    fieldsNote:
+      'Son los del catálogo, y son buenos: manda el caso sin tocar nada y sale exactamente esto. Cámbialos y lo demás va detrás — la vista previa, la frase y el bloque de la petición se componen con lo que haya aquí.',
+    fieldLabel: 'Rótulo',
+    fieldValue: 'Valor',
+    fieldSub: 'Segunda línea',
+    fieldSubNote:
+      'Una línea debajo del valor, sin rótulo propio. Se firma con el valor, y te-api sólo la admite en las claves que la plantilla exige.',
+    fieldSubHint: 'Version 4 · 18 pages',
+    fieldReading: 'Lectura',
+    fieldWeight: 'Peso',
+    readingText: 'Texto',
+    readingMono: 'Carácter a carácter',
+    readingNumeric: 'Cifras',
+    weightHero: 'Héroe',
+    weightNormal: 'Normal',
+    weightQuiet: 'Apagado',
+    roleHero: 'héroe',
+    roleRequired: 'obligatoria',
+    roleOptional: 'conocida',
+    roleGeneric: 'par genérico',
+    remove: 'Quitar',
+    reset: 'Volver a los valores del catálogo',
+
+    addPair: 'Añadir un par',
+    addKey: 'Clave',
+    add: 'Añadir',
+    addFull: 'Doce campos es el techo, y lo impone te-api: nadie manda cien para esconder el que importa.',
+    addKeyBad: 'Una clave son minúsculas, dígitos y guiones bajos. Es el nombre con el que la respuesta firmada dice sobre qué se firmó.',
+    addKeyTaken: 'Esa clave ya está en esta petición.',
+
+    draftRefused: 'te-api rechazaría esta petición:',
+
+    wireWillSend: 'Lo que se va a mandar',
+    wireWasSent: 'Lo que se mandó',
+    wireCredentialNote:
+      'Este caso firma con credencial, así que antes va una llamada: POST /v1/b2b/presentations abre la sesión del verificador en TripleEnable y devuelve el requestUri de abajo. El tipo de credencial es el de esta organización, sacado de su padrón, no el del caso.',
+    wirePlaceholders:
+      'Los dos valores entre ángulos todavía no existen: se rellenan un instante antes de la llamada. Mándala y este bloque lo sustituye el cuerpo que salió de verdad.',
+
+    brandNote:
+      'El color y el logotipo son de la organización, nunca de la petición: te-api los congela desde su padrón al crear la fila, así que quien pregunta no puede aparecer en el teléfono de nadie con un logotipo que no es suyo. Nada del cuerpo de abajo los lleva.',
+    brandNone: 'Esta instalación no declara colores de marca, así que la consola se queda con los suyos.',
+    brandChange: 'Se cambian en Ajustes',
+
+    contractTitle: 'Qué usa este caso y qué permite',
+    contractUnknown:
+      'La copia del catálogo de plantillas de esta consola no conoce esa plantilla. Quien decide es te-api: mándala y lee lo que conteste.',
+    contractInternal:
+      'Esta plantilla sólo la puede crear la costura interna de te-api: una petición de acceso abre una sesión, y eso es un acto del emisor de identidad, no de un socio. POST /v1/requests contesta invalid_request. El caso está aquí porque la forma merece enseñarse; mandarlo va a fallar, y ese fallo es la verdad.',
+    contractTemplate: 'Plantilla',
+    contractVersion: 'Revisión',
+    contractKind: 'Clase',
+    contractSignWith: 'Se firma con',
+    contractSignWithNote: 'Esta plantilla admite: {allowed}',
+    contractCredential: 'Tipo de credencial',
+    contractClaims: 'Atributos que se le piden: {claims}',
+    contractHero: 'Clave del héroe',
+    contractNoHero: 'ninguna — la decisión es un par, no un valor',
+    contractRequired: 'Claves obligatorias',
+    contractOptional: 'Claves conocidas',
+    contractGeneric: 'Pares genéricos de este borrador',
+    versionAgrees: 'te-api ha confirmado la revisión {version}.',
+    versionDiffers:
+      'te-api ha usado la revisión {actual} y esta consola tenía la {expected}. Su copia del catálogo está vieja — la que cuenta es la de te-api.',
+
+    mayTitle: 'Lo decide el socio',
+    may1: 'Todos los rótulos y valores: son la carga, y se leen en el teléfono del titular en su idioma, no en el de la consola.',
+    may2: 'La segunda línea de una clave obligatoria, que se firma junto al valor de encima.',
+    may3: 'Cómo se lee cada valor —texto, carácter a carácter o cifras—. La presentación la elige quien pregunta.',
+    may4: 'Qué pares añade. El vocabulario es abierto: una clave que la plantilla no declara viaja como par genérico, hasta doce campos.',
+    mayNotTitle: 'Lo decide te-api',
+    mayNot1: 'La frase que se firma y su revisión. Salen del catálogo de plantillas, nunca de quien llama.',
+    mayNot2: 'Qué clave es el héroe — y una clave que la plantilla no declara no puede serlo nunca.',
+    mayNot3: 'El nombre de quien pregunta: lo copia del token que hizo la llamada.',
+    mayNot4: 'El logotipo y los dos colores, congelados del padrón. Ver la nota de encima de la petición.',
+    mayNot5: 'Cuánto dura la ventana. Quien la eligiera estaría eligiendo cuánta prisa tiene la persona que decide.',
+
+    sentTitle: 'Mandado',
+    sentRequestId: 'Petición',
+    sentStatus: 'Estado',
+    sentTemplate: 'Plantilla',
+    sentExpires: 'Caduca',
+    sentPresentation: 'Sesión del verificador',
+    sentLink: 'Enlace de mostrador',
+
+    sendAgain: 'Componer otra',
+    receivedTitle: 'Recibido',
+    receivedNoEvent:
+      'Este caso firma con la identidad de la cartera, y te-api no manda ningún webhook cuando se contesta una petición del marco: los dos tipos de evento que manda hoy son presentation.settled y webhook.test. El desenlace de ésta vive en te-api. Un caso que firma con credencial sí vuelve aquí, por su sesión de verificador.',
+    receivedEmpty: 'No ha llegado nada desde que se mandó.',
+    receivedMatch: 'Ésta es la respuesta a la petición de al lado — la misma sesión de verificador.',
+    checkEvents: 'Mirar qué ha vuelto',
+    checking: 'Mirando…',
+    eventsLink: 'Todos los eventos que ha recibido esta organización',
+
     industryDoc: 'Documentos',
     industryPro: 'Profesional',
     industryHealth: 'Salud',
@@ -946,6 +1056,8 @@ export const es: PartialMessages = {
       'Este caso se firma con una credencial y esta organización no declara ninguna, así que no hay nada que pedir.',
     ceremonyNoClaims:
       'Este caso se firma con una credencial pero no nombra ningún atributo que presentar. Así como está no se puede pedir.',
+    ceremonyBadDraft: 'No se han podido leer esos campos, así que no se ha mandado nada.',
+    ceremonyDraftRefused: 'te-api rechazaría esta petición, así que no se ha mandado:',
     ceremonyUpstream: 'No se ha podido mandar la petición. Míralo en Diagnóstico.',
   },
 };
