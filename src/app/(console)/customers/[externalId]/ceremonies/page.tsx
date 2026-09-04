@@ -7,7 +7,11 @@ import { monogramOf } from '@/lib/brand';
 import { CEREMONY_CASES, CEREMONY_INDUSTRIES } from '@/lib/ceremony-catalogue';
 import { loadCustomerContext } from '@/lib/customer-context';
 
-import { readCeremonyEventsAction, sendCeremonyAction } from './actions';
+import {
+  readCeremonyEventsAction,
+  readCeremonyOutcomeAction,
+  sendCeremonyAction,
+} from './actions';
 
 /**
  * **El catálogo de verificaciones**, colgado de la ficha del cliente.
@@ -130,6 +134,14 @@ export default async function CeremoniesPage({
         }
         walletLinked={walletLinked}
         send={sendCeremonyAction}
+        /*
+          Las dos lecturas de la vuelta, y son distintas a propósito:
+          `readOutcome` lee **la fila de esta ceremonia** —la misma que enseña la
+          ficha del cliente— y `readEvents` el sobre firmado que llegó por el
+          cable. La primera contesta «qué dijo el titular», la segunda «qué entró
+          por el webhook». Ver la cabecera de `actions.ts`.
+        */
+        readOutcome={readCeremonyOutcomeAction}
         readEvents={readCeremonyEventsAction}
       />
     </>

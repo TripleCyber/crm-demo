@@ -8,6 +8,7 @@ import type { CeremonyDraftField } from '@/lib/ceremony-templates';
 
 import type {
   CeremonyEventsResult,
+  CeremonyOutcomeResult,
   SendCeremonyResult,
 } from '@/app/(console)/customers/[externalId]/ceremonies/actions';
 
@@ -47,6 +48,7 @@ export function CeremonyCatalogue({
   brand,
   walletLinked,
   send,
+  readOutcome,
   readEvents,
 }: {
   externalId: string;
@@ -78,7 +80,7 @@ export function CeremonyCatalogue({
    */
   walletLinked: boolean | undefined;
   /**
-   * Las dos acciones de servidor, inyectadas.
+   * Las tres acciones de servidor, inyectadas.
    *
    * Bajan por parámetro para que estos componentes sigan siendo pantallas y se
    * puedan leer sin arrastrar detrás la mitad del servidor.
@@ -88,6 +90,11 @@ export function CeremonyCatalogue({
     caseId: string,
     fields?: readonly CeremonyDraftField[],
   ) => Promise<SendCeremonyResult>;
+  /**
+   * El desenlace de **esta** ceremonia, de la fila que el webhook cierra. Es la
+   * misma fuente que enseña la ficha del cliente; ver `ceremonies/actions.ts`.
+   */
+  readOutcome: (presentationId: string) => Promise<CeremonyOutcomeResult>;
   readEvents: (since: string) => Promise<CeremonyEventsResult>;
 }) {
   const t = useTranslator();
@@ -163,6 +170,7 @@ export function CeremonyCatalogue({
             credentialType={credentialType}
             brand={brand}
             send={send}
+            readOutcome={readOutcome}
             readEvents={readEvents}
           />
         )}

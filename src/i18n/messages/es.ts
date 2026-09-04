@@ -489,7 +489,20 @@ export const es: PartialMessages = {
     sendAgain: 'Componer otra',
     receivedTitle: 'Recibido',
     receivedNoEvent:
-      'Este caso firma con la identidad de la cartera, y te-api no manda ningún webhook cuando se contesta una petición del marco: los dos tipos de evento que manda hoy son presentation.settled y webhook.test. El desenlace de ésta vive en te-api. Un caso que firma con credencial sí vuelve aquí, por su sesión de verificador.',
+      'Este caso firma con la identidad de la cartera, y te-api no le publica nada a quien pregunta sobre una petición del marco: los dos únicos eventos que manda son presentation.settled y webhook.test, y tampoco hay ninguna ruta B2B para leer una petición. El desenlace vive en te-api y en el recibo del titular. Un caso que firma con credencial sí vuelve aquí, porque lleva una sesión de verificador.',
+
+    outcomeReading: 'Leyendo el desenlace…',
+    outcomeNotYet: 'Todavía no hay respuesta anotada. Esto se refresca solo mientras dure el plazo.',
+    outcomeSignedAt: 'Firmado por el titular',
+    outcomeSettledAt: 'Sabido aquí',
+    outcomeHolderKey: 'Llave del titular',
+    outcomeClaimsTitle: 'Lo que enseñó el titular',
+    receivedCredentialNote:
+      'Lo que se liquida aquí es la sesión de verificador que llevaba esta petición, que es de lo que avisa te-api. La petición del marco no tiene evento propio.',
+
+    receivedWireTitle: 'Lo que entró por el cable',
+    receivedWireNote:
+      'Los cuerpos firmados que ha recibido esta organización desde que salió la petición, tal y como llegaron. Es el canal en sí: evidencia para quien integra, no un veredicto.',
     receivedEmpty: 'No ha llegado nada desde que se mandó.',
     receivedMatch: 'Ésta es la respuesta a la petición de al lado — la misma sesión de verificador.',
     checkEvents: 'Mirar qué ha vuelto',

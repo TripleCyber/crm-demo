@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { useTranslator } from '@/i18n/client';
 import { formatTimestamp } from '@/lib/format';
 import type { CeremonyCase } from '@/lib/ceremony-catalogue';
+import { describeVerification } from '@/lib/verification-status';
 import {
   buildCeremonyHttpRequest,
   formatCeremonyHttpRequest,
@@ -26,6 +27,7 @@ import {
 
 import type {
   CeremonyEventsResult,
+  CeremonyOutcomeResult,
   SendCeremonyResult,
 } from '@/app/(console)/customers/[externalId]/ceremonies/actions';
 
@@ -57,6 +59,12 @@ import { CopyButton } from './CopyValue';
  * una lista de casos y quien la enseña salta de uno a otro. Lo que no cabe en
  * una pestaña es que se pierda el botón de mandar, así que ése y el resultado
  * viven **fuera** de las pestañas, siempre a la vista.
+ *
+ * Y de ahí una regla que se aprendió enseñándolo: **mandar no cambia de
+ * pestaña**. Como el resultado no vive en ninguna, moverla al pulsar no lleva a
+ * ninguna parte —sólo aparta de la vista lo que se estaba enseñando— y saltar
+ * al bloque de código convierte un «ahora le suena el teléfono» en un muro de
+ * JSON. Ver `ask`.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  *  EL BORRADOR ES ESTADO LOCAL, Y NO SE GUARDA EN NINGÚN SITIO
@@ -113,6 +121,30 @@ interface WebhookEventView {
  */
 const PENDING_CREDENTIAL_TYPE = "<the first type on this organisation's roster at te-api>";
 
+/**
+ * Cada cuánto se vuelve a leer el desenlace mientras la ceremonia siga viva.
+ *
+ * Los mismos tres segundos que `VerificationTracker`, y por la misma razón: la
+ * pregunta **no sale de este servidor**. Lee la fila de `verification` de la
+ * base de esta maqueta, la que el receptor de webhooks cerró; no toca te-api, no
+ * gasta el cubo de tasa de la organización y no cruza ninguna frontera.
+ *
+ * Aquí no había ninguno: el compositor sólo miraba cuando alguien pulsaba. Y en
+ * una demostración eso significa que el titular firma, el evento aterriza, y el
+ * panel sigue en blanco hasta que a alguien se le ocurre pulsar — que es
+ * exactamente lo que el dueño vio y llamó «nunca recibe el evento».
+ */
+const OUTCOME_INTERVAL_MS = 3000;
+
+/**
+ * Cuánto se sigue preguntando pasado el plazo de te-api.
+ *
+ * te-api liquida en cuanto vence la hora y manda el evento, así que un margen
+ * corto basta para recoger lo que el webhook acabe de escribir. Sin tope, una
+ * pestaña olvidada en un puesto seguiría preguntando por algo que ya no cambia.
+ */
+const OUTCOME_GRACE_MS = 20_000;
+
 const PANE_LABEL = {
   preview: 'ceremonies.panePreview',
   fields: 'ceremonies.paneFields',
@@ -131,6 +163,7 @@ export function CeremonyComposer({
   credentialType,
   brand,
   send,
+  readOutcome,
   readEvents,
 }: {
   ceremony: CeremonyCase;
@@ -144,6 +177,7 @@ export function CeremonyComposer({
     caseId: string,
     fields?: readonly CeremonyDraftField[],
   ) => Promise<SendCeremonyResult>;
+  readOutcome: (presentationId: string) => Promise<CeremonyOutcomeResult>;
   readEvents: (since: string) => Promise<CeremonyEventsResult>;
 }) {
   const t = useTranslator();
@@ -157,9 +191,12 @@ export function CeremonyComposer({
   const [pane, setPane] = useState<Pane>('preview');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SendCeremonyResult | null>(null);
-  const [events, setEvents] = useState<readonly WebhookEventView[] | null>(null);
-  const [eventsBusy, setEventsBusy] = useState(false);
-  const [eventsError, setEventsError] = useState<string | undefined>(undefined);
+  // Lo de la vuelta —el desenlace y los eventos— vive dentro de `Received`, que
+  // sólo existe cuando hay una petición mandada. Vivía aquí, y eso obligaba a
+  // acordarse de vaciarlo a mano en cada camino que empezaba otra ceremonia: el
+  // día que se olvidara uno, el panel enseñaría el desenlace de la anterior al
+  // lado de la petición nueva. Ahora se desmonta con la petición y no hay nada
+  // que acordarse de borrar.
 
   const check = checkCeremonyDraft({
     template: ceremony.template,
@@ -229,35 +266,32 @@ export function CeremonyComposer({
   const ask = async () => {
     setBusy(true);
     setResult(null);
-    setEvents(null);
     try {
       const sent = await send(externalId, ceremony.id, fields);
       setResult(sent);
-      // La petición ya está hecha: lo que se enseña ahora es lo que salió, así
-      // que la pestaña útil es ésa y no la de editar.
-      if (sent.requestId !== undefined) setPane('wire');
+      // **La pestaña no se toca al mandar, y ésa es la corrección.**
+      //
+      // Aquí se saltaba a `wire` con el argumento de que «lo que se enseña ahora
+      // es lo que salió». El argumento era falso por dos motivos, y los dos se
+      // vieron en cuanto alguien enseñó esto en directo:
+      //
+      //  1. **El resultado no está en ninguna pestaña.** El intercambio —lo
+      //     mandado y lo recibido— vive FUERA de ellas, debajo, y aparece solo en
+      //     cuanto hay `requestId`. Saltar a `wire` no llevaba al resultado:
+      //     llevaba a otro sitio y encima empujaba el resultado más abajo.
+      //  2. **El JSON es una ayuda para quien integra, no el desenlace.** Quien
+      //     está enseñando la ceremonia estaba mirando la vista previa —lo que va
+      //     a leer el titular— y decía «ahora le suena el teléfono»; el clic le
+      //     contestaba con un muro de cabeceras y llaves. La pantalla que hay que
+      //     mirar después de mandar es la misma que antes, con el intercambio
+      //     debajo.
+      //
+      // Quien quiera el cuerpo que de verdad salió sigue teniéndolo a un clic, y
+      // sigue siendo el del servidor: `wire` usa `result.sent` en cuanto existe.
     } catch {
       setResult({ error: t('errors.generic') });
     } finally {
       setBusy(false);
-    }
-  };
-
-  const look = async (since: string) => {
-    setEventsBusy(true);
-    setEventsError(undefined);
-    try {
-      const answer = await readEvents(since);
-      setEventsError(answer.error);
-      setEvents(answer.events ?? []);
-    } catch {
-      // Que la consulta falle no es «no ha llegado nada»: son dos cosas
-      // distintas y decir la primera por la segunda es mentir en la mitad de la
-      // pantalla que tiene que demostrar que el viaje se cierra.
-      setEventsError(t('errors.generic'));
-      setEvents([]);
-    } finally {
-      setEventsBusy(false);
     }
   };
 
@@ -473,16 +507,15 @@ export function CeremonyComposer({
             // otro y volver, que en una demostración es perder el hilo: lo que
             // se enseña aquí es justamente que los mismos valores se pueden
             // cambiar y mandar otra vez.
+            //
+            // Aquí se vaciaban además los eventos y su aviso; ya no hace falta,
+            // porque quitar el resultado desmonta la mitad de la vuelta entera.
             setResult(null);
-            setEvents(null);
-            setEventsError(undefined);
             setPane('fields');
           }}
-          events={events}
-          eventsError={eventsError}
-          busy={eventsBusy}
           signsWithCredential={ceremony.signWith === 'credential'}
-          onLook={() => void look(result.sentAt ?? new Date().toISOString())}
+          readOutcome={readOutcome}
+          readEvents={readEvents}
         />
       )}
     </div>
@@ -916,36 +949,23 @@ function Contract({
  * plazo, la revisión que clavó y el enlace del mostrador si el despliegue tiene
  * canal QR.
  *
- * Lo recibido es lo que ha entrado por el webhook **desde que se pulsó**, y ahí
- * hay que ser exacto, porque es lo que un cliente va a preguntar:
- *
- *  · una ceremonia que firma con **credencial** cierra el viaje de verdad — el
- *    evento `presentation.settled` llega con el `presentationId` que esta consola
- *    anotó, y la pareja se ve;
- *  · una que firma con la **identidad de la cartera** se aprueba, se rechaza o
- *    caduca **sin que salga ningún evento**, porque te-api no manda hoy ninguno
- *    sobre peticiones del marco. No se disimula con un «esperando»: se dice, se
- *    nombra el hueco y se apunta a dónde se arregla.
- *
- * Y no hay temporizador. El botón pregunta al servidor de esta organización, que
- * contesta de su propia base: los eventos llegan solos y quedan archivados con
- * la pestaña cerrada. Ver `readCeremonyEventsAction`.
+ * Lo recibido lo pinta `Received`, que es donde está escrito el porqué de cada
+ * una de sus dos lecturas. Aquí sólo se decide qué se le pasa, y la pieza que lo
+ * decide todo es `result.presentationId`: existe cuando la ceremonia firmó con
+ * credencial —hay sesión de verificador, hay fila y hay desenlace que leer— y no
+ * existe cuando firmó con la identidad de la cartera.
  */
 function Exchange({
   result,
-  events,
-  eventsError,
-  busy,
   signsWithCredential,
-  onLook,
+  readOutcome,
+  readEvents,
   onAgain,
 }: {
   result: SendCeremonyResult;
-  events: readonly WebhookEventView[] | null;
-  eventsError: string | undefined;
-  busy: boolean;
   signsWithCredential: boolean;
-  onLook: () => void;
+  readOutcome: (presentationId: string) => Promise<CeremonyOutcomeResult>;
+  readEvents: (since: string) => Promise<CeremonyEventsResult>;
   onAgain: () => void;
 }) {
   const t = useTranslator();
@@ -1003,65 +1023,355 @@ function Exchange({
         </div>
       </div>
 
-      <div className="ceremony-half">
-        <h3 className="ceremony-heading">{t('ceremonies.receivedTitle')}</h3>
-
-        {!signsWithCredential && <p className="ceremony-hint">{t('ceremonies.receivedNoEvent')}</p>}
-
-        <button type="button" className="secondary" disabled={busy} onClick={onLook}>
-          {busy ? t('ceremonies.checking') : t('ceremonies.checkEvents')}
-        </button>
-
-        {eventsError !== undefined && <p className="alert">{eventsError}</p>}
-
-        {eventsError === undefined && events !== null && events.length === 0 && (
-          <p className="ceremony-hint">{t('ceremonies.receivedEmpty')}</p>
-        )}
-
-        {events !== null && events.length > 0 && (
-          <ul className="ceremony-events">
-            {events.map((event) => {
-              // La pareja de verdad: el evento que habla de **esta** sesión de
-              // verificador. Lo demás que haya entrado desde el corte se enseña
-              // igual —es lo que llegó— pero sin decir que es la respuesta.
-              const mine =
-                result.presentationId !== undefined
-                  && event.presentationId === result.presentationId;
-              return (
-                <li key={event.eventId} className={mine ? 'match' : undefined}>
-                  <div className="ceremony-event-head">
-                    <span className="mono">{event.type}</span>
-                    {/*
-                      Cuándo llegó **aquí**. Es la mitad del dato en esta
-                      pantalla: lo que se está demostrando es que la respuesta
-                      del titular vuelve sola, y sin la hora eso es una fila más.
-                    */}
-                    <span className="sub">{formatTimestamp(event.receivedAt, t.locale)}</span>
-                    {event.status !== null && <span className="pill">{event.status}</span>}
-                    {event.signatureOk ? (
-                      <span className="pill ok">{t('events.signatureOk')}</span>
-                    ) : (
-                      <span className="pill alarm">
-                        {t('events.signatureBad')}
-                        {event.signatureError !== null && ` · ${event.signatureError}`}
-                      </span>
-                    )}
-                  </div>
-                  {mine && <p className="ceremony-event-match">{t('ceremonies.receivedMatch')}</p>}
-                  <details className="tech">
-                    <summary>{t('common.technicalDetail')}</summary>
-                    <pre>{JSON.stringify(event.payload, null, 2)}</pre>
-                  </details>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        <p className="ceremony-hint">
-          <Link href="/events">{t('ceremonies.eventsLink')}</Link>
-        </p>
-      </div>
+      {/*
+        `key` por petición: mandar otra desmonta la vuelta entera —el desenlace
+        que se estaba leyendo, los eventos y el temporizador— en vez de dejar
+        colgado el de la anterior debajo de la nueva.
+      */}
+      <Received
+        key={result.requestId}
+        presentationId={result.presentationId}
+        expiresAt={result.expiresAt}
+        sentAt={result.sentAt}
+        signsWithCredential={signsWithCredential}
+        readOutcome={readOutcome}
+        readEvents={readEvents}
+      />
     </div>
+  );
+}
+
+/**
+ * **La vuelta.** Qué contestó el titular, y qué entró por el cable.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  SON DOS LECTURAS Y CONTESTAN DOS PREGUNTAS DISTINTAS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Aquí sólo había una —«enséñame los eventos que han entrado desde que pulsé»— y
+ * era la equivocada para la pregunta que hace quien está enseñando esto. El
+ * dueño lo dijo con estas palabras: *nunca recibe el evento cuando la cartera
+ * firma, o por lo menos no lo muestra como pasa en la ficha del usuario*. Y la
+ * ficha lo enseñaba porque lee **la fila de esa ceremonia**, no un barrido del
+ * diario por hora.
+ *
+ *  1. **El desenlace** (`readOutcome`) — la fila de `verification`, la misma que
+ *     cierra el receptor de webhooks y la misma que sondea `/verifications/<id>`.
+ *     Es lo que contesta «¿dijo que sí?», y se relee sola mientras la ceremonia
+ *     siga viva: el titular firma con el agente al teléfono, y nadie va a estar
+ *     pulsando un botón para enterarse.
+ *  2. **Los eventos** (`readEvents`) — el sobre firmado tal y como llegó, para
+ *     quien está integrando y quiere ver el `presentation.settled` entero con su
+ *     firma comprobada. Sigue detrás del botón: es evidencia, no veredicto.
+ *
+ * Ninguna de las dos llama a te-api. Las dos preguntan al servidor de esta
+ * organización, que contesta de su propia base — la misma propiedad que un
+ * empleado puede comprobar abriendo la pestaña de red y que ya defendía
+ * `VerificationTracker`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  Y LA MITAD QUE NO SE PUEDE CONTESTAR SE DICE, NO SE DISIMULA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Una ceremonia que firma con la identidad de la cartera **no tiene fila que
+ * leer**: no abre sesión de verificador, así que no hay `presentationId`. Y
+ * te-api no publica hoy nada sobre el desenlace de una petición del marco — ni
+ * evento (`presentation.settled` y `webhook.test` son los dos que existen) ni
+ * ruta B2B (no hay `GET /v1/requests/:id`). Comprobado en su código, no supuesto.
+ *
+ * Así que en ese caso no se pinta un «esperando» que no espera a nada: se dice
+ * qué falta y dónde se arregla, y el botón de los eventos se queda —enseña lo
+ * que haya entrado por el canal, que sigue siendo información— rotulado como lo
+ * que es.
+ */
+function Received({
+  presentationId,
+  expiresAt,
+  sentAt,
+  signsWithCredential,
+  readOutcome,
+  readEvents,
+}: {
+  /** La sesión del verificador. `undefined` = ceremonia de identidad. */
+  presentationId: string | undefined;
+  /** El plazo de te-api: separa «esperando» de «sin respuesta». */
+  expiresAt: string | undefined;
+  /** El corte de los eventos, sellado por el servidor al mandar. */
+  sentAt: string | undefined;
+  signsWithCredential: boolean;
+  readOutcome: (presentationId: string) => Promise<CeremonyOutcomeResult>;
+  readEvents: (since: string) => Promise<CeremonyEventsResult>;
+}) {
+  const t = useTranslator();
+
+  const [outcome, setOutcome] = useState<CeremonyOutcomeResult | null>(null);
+  const [events, setEvents] = useState<readonly WebhookEventView[] | null>(null);
+  const [eventsBusy, setEventsBusy] = useState(false);
+  const [eventsError, setEventsError] = useState<string | undefined>(undefined);
+
+  const deadline = expiresAt === undefined ? Number.NaN : new Date(expiresAt).getTime();
+
+  /*
+   * **Ya hay desenlace**, o sea que no hay nada más que preguntar.
+   *
+   * Es un booleano y no el objeto entero a propósito: es lo que entra en las
+   * dependencias del efecto de abajo, y con el objeto cada respuesta volvería a
+   * montar el ciclo, cancelaría el temporizador y preguntaría de inmediato. Eso
+   * no es una consulta cada tres segundos: es un bucle tan rápido como conteste
+   * la base. Ya pasó una vez en `VerificationTracker` y allí está contado.
+   */
+  const settled = outcome?.status !== undefined && outcome.status !== 'pending';
+
+  useEffect(() => {
+    // Una ceremonia de identidad no tiene fila. No hay ciclo que montar, y
+    // montarlo para recibir `found: false` cada tres segundos sería preguntar
+    // por algo que no puede llegar a existir.
+    if (presentationId === undefined) return;
+    if (settled) return;
+
+    let stopped = false;
+    // Declarado antes que `read` porque `read` lo apaga: sin esto, pasado el
+    // tope de cortesía el intervalo seguiría disparando cada tres segundos sólo
+    // para salir por la primera línea.
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    const stop = () => {
+      stopped = true;
+      if (timer !== undefined) clearInterval(timer);
+    };
+
+    const read = async () => {
+      // Vencido el plazo y con su margen, el evento ya no va a llegar.
+      if (!Number.isNaN(deadline) && Date.now() > deadline + OUTCOME_GRACE_MS) {
+        stop();
+        return;
+      }
+      try {
+        const answer = await readOutcome(presentationId);
+        if (stopped) return;
+        setOutcome(answer);
+      } catch {
+        // Un corte suelto no para el ciclo —el titular puede estar contestando
+        // ahora mismo— pero **se dice**: una espera muda es peor que un aviso,
+        // porque parece que funciona.
+        if (stopped) return;
+        setOutcome({ error: t('errors.generic') });
+      }
+    };
+
+    void read();
+    // `read` corre síncrono hasta el primer `await`, y el tope está antes de él:
+    // si ya se pasó, `stopped` es `true` aquí y no hay que montar nada.
+    if (!stopped) timer = setInterval(() => void read(), OUTCOME_INTERVAL_MS);
+    return stop;
+    // `readOutcome` es la referencia de una acción de servidor: baja del árbol
+    // de servidor y no cambia entre repintados, así que no remonta el ciclo.
+    // `t` tampoco: `useTranslator` lo memoriza por idioma.
+  }, [presentationId, settled, deadline, readOutcome, t]);
+
+  const look = async () => {
+    setEventsBusy(true);
+    setEventsError(undefined);
+    try {
+      const answer = await readEvents(sentAt ?? new Date().toISOString());
+      setEventsError(answer.error);
+      setEvents(answer.events ?? []);
+    } catch {
+      // Que la consulta falle no es «no ha llegado nada»: son dos cosas
+      // distintas y decir la primera por la segunda es mentir en la mitad de la
+      // pantalla que tiene que demostrar que el viaje se cierra.
+      setEventsError(t('errors.generic'));
+      setEvents([]);
+    } finally {
+      setEventsBusy(false);
+    }
+  };
+
+  return (
+    <div className="ceremony-half">
+      <h3 className="ceremony-heading">{t('ceremonies.receivedTitle')}</h3>
+
+      {presentationId === undefined ? (
+        <p className="ceremony-hint">{t('ceremonies.receivedNoEvent')}</p>
+      ) : (
+        <Outcome outcome={outcome} expiresAt={expiresAt} />
+      )}
+
+      {/*
+        El canal, plegado debajo del desenlace y rotulado como lo que es. Antes
+        era lo único que había aquí, y por eso parecía la respuesta.
+      */}
+      <h4 className="ceremony-wire-head">{t('ceremonies.receivedWireTitle')}</h4>
+      <p className="ceremony-hint">{t('ceremonies.receivedWireNote')}</p>
+
+      <button type="button" className="secondary" disabled={eventsBusy} onClick={() => void look()}>
+        {eventsBusy ? t('ceremonies.checking') : t('ceremonies.checkEvents')}
+      </button>
+
+      {eventsError !== undefined && <p className="alert">{eventsError}</p>}
+
+      {eventsError === undefined && events !== null && events.length === 0 && (
+        <p className="ceremony-hint">{t('ceremonies.receivedEmpty')}</p>
+      )}
+
+      {events !== null && events.length > 0 && (
+        <ul className="ceremony-events">
+          {events.map((event) => {
+            // La pareja de verdad: el evento que habla de **esta** sesión de
+            // verificador. Lo demás que haya entrado desde el corte se enseña
+            // igual —es lo que llegó— pero sin decir que es la respuesta.
+            const mine =
+              presentationId !== undefined && event.presentationId === presentationId;
+            return (
+              <li key={event.eventId} className={mine ? 'match' : undefined}>
+                <div className="ceremony-event-head">
+                  <span className="mono">{event.type}</span>
+                  {/*
+                    Cuándo llegó **aquí**. Es la mitad del dato en esta
+                    pantalla: lo que se está demostrando es que la respuesta
+                    del titular vuelve sola, y sin la hora eso es una fila más.
+                  */}
+                  <span className="sub">{formatTimestamp(event.receivedAt, t.locale)}</span>
+                  {event.status !== null && <span className="pill">{event.status}</span>}
+                  {event.signatureOk ? (
+                    <span className="pill ok">{t('events.signatureOk')}</span>
+                  ) : (
+                    <span className="pill alarm">
+                      {t('events.signatureBad')}
+                      {event.signatureError !== null && ` · ${event.signatureError}`}
+                    </span>
+                  )}
+                </div>
+                {mine && <p className="ceremony-event-match">{t('ceremonies.receivedMatch')}</p>}
+                <details className="tech">
+                  <summary>{t('common.technicalDetail')}</summary>
+                  <pre>{JSON.stringify(event.payload, null, 2)}</pre>
+                </details>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/*
+        La nota de la credencial va al final y no arriba: quien firma con una
+        está mirando el desenlace, y lo que aquí se cuenta —que lo que se liquida
+        es la SESIÓN DEL VERIFICADOR y no la petición del marco— es la letra
+        pequeña que hace que el rótulo no mienta.
+      */}
+      {signsWithCredential && <p className="ceremony-hint">{t('ceremonies.receivedCredentialNote')}</p>}
+
+      <p className="ceremony-hint">
+        <Link href="/events">{t('ceremonies.eventsLink')}</Link>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * **El desenlace, con las palabras y el color de las otras cuatro pantallas.**
+ *
+ * `describeVerification` es el mismo vocabulario que usan el listado, la ficha y
+ * el seguimiento, y usarlo aquí no es ahorrar líneas: es lo que garantiza que
+ * **el rojo siga siendo sólo del fraude** también en esta pantalla. Un `rejected`
+ * pintado aquí del color de un `expired` haría que quien enseña la ceremonia
+ * contara un «no ha contestado» donde el titular dijo *no he sido yo*.
+ *
+ * Los cuatro estados de la lectura se distinguen y ninguno se confunde con otro:
+ *
+ *  · **`null`** — todavía no se ha contestado la primera consulta. Se dice que se
+ *    está mirando, que es lo que está pasando.
+ *  · **`error`** — la consulta falló. **No** es «no ha llegado nada»: eso dejaría
+ *    la pantalla afirmando algo del titular a partir de un fallo nuestro.
+ *  · **`found: false`** — la fila no está todavía. Es normal durante un instante
+ *    y se lee como «todavía no», no como un fallo.
+ *  · **con `status`** — el veredicto, con su hora y lo que el titular enseñó.
+ */
+function Outcome({
+  outcome,
+  expiresAt,
+}: {
+  outcome: CeremonyOutcomeResult | null;
+  expiresAt: string | undefined;
+}) {
+  const t = useTranslator();
+
+  if (outcome === null) return <p className="ceremony-hint">{t('ceremonies.outcomeReading')}</p>;
+  if (outcome.error !== undefined) return <p className="alert">{outcome.error}</p>;
+  if (outcome.status === undefined) {
+    return <p className="ceremony-hint">{t('ceremonies.outcomeNotYet')}</p>;
+  }
+
+  // El plazo sale de la fila cuando la hay, y de la respuesta del envío si no.
+  // Hace falta porque una fila que sigue `pending` con la hora vencida **no
+  // está en curso**: es una que nadie miró cuando caducó, y el vocabulario ya
+  // sabe decir esa diferencia.
+  const deadline = outcome.expiresAt ?? expiresAt ?? new Date().toISOString();
+  const verdict = describeVerification(t, outcome.status, deadline);
+  const claims = Object.entries(outcome.disclosedClaims ?? {});
+
+  return (
+    <>
+      <p className="ceremony-outcome">
+        <span className={`pill ${verdict.tone}`}>
+          <span className="pill-mark" aria-hidden="true" />
+          {verdict.label}
+        </span>
+        <span className="ceremony-outcome-detail">{verdict.detail}</span>
+      </p>
+
+      <dl className="facts">
+        {/*
+          Las dos horas, con rótulos distintos y a propósito: `signedAt` es el
+          reloj del teléfono del titular cuando firmó, y `settledAt` cuándo se
+          enteró esta consola. Entre las dos está lo que tardó el evento, que es
+          justo el dato que hay que poder enseñar cuando alguien pregunta si esto
+          llega solo.
+        */}
+        {outcome.signedAt !== undefined && outcome.signedAt !== null && (
+          <>
+            <dt>{t('ceremonies.outcomeSignedAt')}</dt>
+            <dd>
+              {formatTimestamp(outcome.signedAt, t.locale)}
+              <span className="mono sub">{outcome.signedAt}</span>
+            </dd>
+          </>
+        )}
+        {outcome.settledAt !== undefined && outcome.settledAt !== null && (
+          <>
+            <dt>{t('ceremonies.outcomeSettledAt')}</dt>
+            <dd>
+              {formatTimestamp(outcome.settledAt, t.locale)}
+              <span className="mono sub">{outcome.settledAt}</span>
+            </dd>
+          </>
+        )}
+        {outcome.holderKey !== undefined && outcome.holderKey !== null && (
+          <>
+            <dt>{t('ceremonies.outcomeHolderKey')}</dt>
+            <dd className="mono">{outcome.holderKey}</dd>
+          </>
+        )}
+      </dl>
+
+      {/*
+        Lo que el titular decidió enseñar. Sólo cuando hay algo: una lista vacía
+        con su rótulo diría que enseñó cero atributos, y lo que pasa cuando la
+        comprobación no es `verified` es que no hay nada que enseñar.
+      */}
+      {claims.length > 0 && (
+        <>
+          <h4 className="ceremony-wire-head">{t('ceremonies.outcomeClaimsTitle')}</h4>
+          <dl className="facts">
+            {claims.map(([name, value]) => (
+              <Fragment key={name}>
+                <dt className="mono">{name}</dt>
+                <dd className="mono">{String(value)}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </>
+      )}
+    </>
   );
 }

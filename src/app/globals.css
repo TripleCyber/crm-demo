@@ -3173,6 +3173,35 @@ a.rail-org:hover {
   color: var(--ink-2);
 }
 
+/* El veredicto, lo primero de la mitad de la vuelta: la insignia con su color
+   y, al lado, la frase que dice qué significa. Se parte en dos líneas en cuanto
+   no caben, que es lo normal en la columna estrecha de esta rejilla. */
+.ceremony-outcome {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ceremony-outcome-detail {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* El rótulo de un bloque DENTRO de una mitad —«lo que entró por el cable», «lo
+   que enseñó el titular»—. Un escalón por debajo de `.ceremony-heading`: separa
+   sin competir con el título de la mitad, que es lo que hace que el desenlace
+   siga siendo lo primero que se lee. */
+.ceremony-wire-head {
+  margin: 18px 0 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
 .ceremony-events {
   list-style: none;
   margin: 12px 0 0;

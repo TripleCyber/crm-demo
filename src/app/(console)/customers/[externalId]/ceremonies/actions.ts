@@ -14,7 +14,8 @@ import {
   requestPresentation,
   TeApiError,
 } from '@/lib/te-api';
-import { recordVerification } from '@/lib/verifications';
+import type { VerificationStatus } from '@/lib/verification-status';
+import { findVerification, recordVerification } from '@/lib/verifications';
 import { listWebhookEventsSince, type WebhookEventRecord } from '@/lib/webhook-events';
 
 /**
@@ -322,18 +323,34 @@ function readDraft(value: unknown): readonly CeremonyDraftField[] | null {
 }
 
 /**
- * **Lo que ha llegado desde que se mandó la petición.** La otra mitad del viaje.
+ * **Lo que ha llegado por el cable desde que se mandó la petición.** La prueba
+ * en bruto, para quien está integrando.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  NO HAY TEMPORIZADOR, Y NO ES UN OLVIDO
+ *  ESTO YA NO ES CÓMO SE ENTERA LA PANTALLA DEL DESENLACE
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Esto lo llama la pantalla **una vez al mandar y una vez por cada pulsación del
- * botón de comprobar**. No se sondea: los eventos llegan solos por el webhook,
- * se archivan lleguen o no con alguien mirando, y la pantalla de `/events` los
- * enseña todos. Un temporizador aquí no adelantaría nada que no adelante el
- * botón, y añadiría una consulta por segundo a la base por cada pestaña abierta
- * en una demostración.
+ * Aquí decía que ésta era «la otra mitad del viaje», y ése era el fallo que el
+ * dueño encontró enseñando el compositor: el desenlace de una ceremonia **no se
+ * lee de un barrido del diario de webhooks por hora**. Se lee de la fila de esa
+ * ceremonia, que es lo que hace la ficha del cliente y por eso la ficha sí
+ * enseñaba lo que había pasado mientras el compositor se quedaba en blanco. Eso
+ * lo contesta ahora `readCeremonyOutcomeAction`, aquí abajo.
+ *
+ * Lo que queda aquí no se ha quitado —sigue siendo una capacidad y sigue siendo
+ * la única que enseña el **sobre entero, firmado, tal y como llegó**— pero es lo
+ * que es: la evidencia del canal, no el veredicto. Quien mira esta pantalla para
+ * integrar quiere ver el JSON del `presentation.settled` con su firma
+ * comprobada; quien la mira para enseñar la ceremonia quiere saber si el titular
+ * dijo que sí.
+ *
+ * ## No hay temporizador **en ésta**, y no es un olvido
+ *
+ * La llama el botón de comprobar y nada más. Los eventos llegan solos por el
+ * webhook y se archivan lleguen o no con alguien mirando; la pantalla de
+ * `/events` los enseña todos. Un temporizador aquí traería el diario entero de
+ * la organización cada tres segundos para responder a una pregunta que ya
+ * contesta la consulta de al lado, que sí lee una sola fila.
  *
  * ## Y por qué el corte es una hora y no un identificador
  *
@@ -369,6 +386,96 @@ export async function readCeremonyEventsAction(since: string): Promise<CeremonyE
     return { events: await listWebhookEventsSince(session.organization.orgId, from) };
   } catch (error) {
     logConsoleFailure(error, 'no se pudieron leer los eventos de una ceremonia');
+    return { error: t('errors.generic') };
+  }
+}
+
+/**
+ * **El desenlace de la ceremonia, leído de la fila de esa ceremonia.**
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA MISMA FUENTE QUE LA FICHA DEL CLIENTE, QUE ES LA QUE SÍ FUNCIONABA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * El compositor se enteraba —o no— barriendo el diario de webhooks por hora:
+ * «enséñame lo que ha entrado desde que pulsé». Eso contesta *qué llegó por el
+ * cable*, que es otra pregunta, y contestaba en blanco casi siempre. Mientras
+ * tanto la ficha del cliente **sí** enseñaba el desenlace, porque lee la fila de
+ * `verification` — la misma que cierra el receptor de webhooks al aterrizar
+ * `presentation.settled`, y la misma que sondea `/verifications/<id>`.
+ *
+ * Esta función es esa lectura, sin ruta nueva y sin una segunda fuente:
+ * `findVerification` es la que ya usa `GET /api/credentials/present`, con el
+ * `orgId` de la sesión dentro y no como parámetro — pedir la comprobación de
+ * otra organización se comporta igual que pedir una inventada.
+ *
+ * ## Y sigue sin haber una llamada a te-api aquí
+ *
+ * Ni una. Lo que se lee es el diario de este banco, que es donde el webhook dejó
+ * el veredicto. La regla escrita en el receptor —«el sitio donde se arregla un
+ * campo que falta es el evento, en te-api, nunca una llamada de vuelta desde
+ * aquí»— vale igual para esta pantalla.
+ *
+ * ## Lo que esto NO puede contestar, y por qué no se disimula
+ *
+ * Una ceremonia que firma con **la identidad de la cartera** no tiene fila que
+ * leer: no abre sesión de verificador, así que no hay `presentationId`, y te-api
+ * no publica hoy **ni evento ni ruta B2B** con el desenlace de una petición del
+ * marco —lo comprobado en su código: los dos únicos eventos son
+ * `presentation.settled` y `webhook.test`, y no existe ningún `GET
+ * /v1/requests/:id` ni `/v1/b2b/requests`—. La pantalla dice eso con todas las
+ * letras en vez de dejar un hueco girando.
+ *
+ * `null` en `found` es el tercer caso y hay que separarlo del error: la fila
+ * puede tardar en existir si el navegador pregunta antes de que la escritura
+ * termine. Se lee como «todavía no», no como «ha fallado algo».
+ */
+export interface CeremonyOutcomeResult {
+  /** `false` = esta organización no tiene fila con ese identificador. */
+  readonly found?: boolean;
+  readonly status?: VerificationStatus;
+  /** El plazo de te-api. Es lo que distingue «esperando» de «sin respuesta». */
+  readonly expiresAt?: string;
+  /** Cuándo lo supo **este servidor**, no cuándo firmó el titular. */
+  readonly settledAt?: string | null;
+  /** Cuándo firmó el teléfono del titular, del recibo. Ver `PresentationProof`. */
+  readonly signedAt?: string | null;
+  readonly disclosedClaims?: Record<string, unknown> | null;
+  readonly holderKey?: string | null;
+  readonly holderLinkId?: string | null;
+  readonly error?: string;
+}
+
+export async function readCeremonyOutcomeAction(
+  presentationId: string,
+): Promise<CeremonyOutcomeResult> {
+  const t = await getTranslator();
+
+  // Lo manda el navegador, así que se lee con la misma desconfianza que el
+  // borrador: una cadena vacía no es una consulta, es un `where` sin filtro.
+  const id = typeof presentationId === 'string' ? presentationId.trim() : '';
+  if (id === '') return { error: t('errors.generic') };
+
+  try {
+    const session = await getEmployeeSession();
+    const verification = await findVerification(session.organization.orgId, id);
+    if (verification === null) return { found: false };
+
+    return {
+      found: true,
+      status: verification.status,
+      expiresAt: verification.expiresAt,
+      settledAt: verification.settledAt,
+      signedAt: verification.proof?.signedAt ?? null,
+      // Lo que el titular decidió enseñar, tal cual lo dejó el evento. No se
+      // recorta aquí: quien filtra por lo que se pidió es te-api, y una segunda
+      // criba en esta consola enseñaría menos de lo que el titular enseñó.
+      disclosedClaims: verification.disclosedClaims,
+      holderKey: verification.holderKey,
+      holderLinkId: verification.holderLinkId,
+    };
+  } catch (error) {
+    logConsoleFailure(error, 'no se pudo leer el desenlace de una ceremonia');
     return { error: t('errors.generic') };
   }
 }

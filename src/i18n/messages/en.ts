@@ -565,13 +565,45 @@ export const en = {
     /**
      * El hueco, dicho con todas las letras.
      *
-     * te-api manda hoy dos tipos de evento y ninguno habla de peticiones del
-     * marco. Una ceremonia que firma con la identidad de la cartera se cierra
-     * sin webhook, y disimularlo con un «esperando» sería exactamente la clase
-     * de honestidad inventada que esta casa no admite.
+     * Comprobado en el código de te-api y no supuesto: los dos únicos eventos
+     * son `presentation.settled` y `webhook.test`, y tampoco hay ninguna ruta
+     * B2B que lea una petición del marco —ni `GET /v1/requests/:id` ni
+     * `/v1/b2b/requests`—. Disimularlo con un «esperando» sería exactamente la
+     * clase de honestidad inventada que esta casa no admite.
      */
     receivedNoEvent:
-      'This case signs with the wallet’s identity, and te-api sends no webhook when a framework request is answered: the two event types it sends today are presentation.settled and webhook.test. The outcome of this one lives in te-api. A case that signs with a credential does come back here, keyed by its verifier session.',
+      'This case signs with the wallet’s identity, and te-api publishes nothing back to the asker about a framework request: the only two events it sends are presentation.settled and webhook.test, and there is no B2B route to read a request either. The outcome lives in te-api and in the holder’s own receipt. A case that signs with a credential does come back here, because it carries a verifier session.',
+
+    /* ── El desenlace, leído de la fila de esta ceremonia ─────────────────── */
+
+    outcomeReading: 'Reading the outcome…',
+    /**
+     * La fila todavía no está. Es un instante normal y no un fallo, así que ni
+     * se pinta en rojo ni se dice que no ha llegado nada.
+     */
+    outcomeNotYet: 'No answer recorded yet. This refreshes on its own while the window is open.',
+    outcomeSignedAt: 'Signed by the holder',
+    outcomeSettledAt: 'Known here',
+    outcomeHolderKey: 'Holder key',
+    outcomeClaimsTitle: 'What the holder disclosed',
+    /**
+     * La letra pequeña que impide que el rótulo mienta: lo que se liquida es la
+     * sesión del verificador, no la petición del marco. Son dos cosas, y te-api
+     * sólo avisa de la primera.
+     */
+    receivedCredentialNote:
+      'What settles here is the verifier session this request carried — that is the part te-api reports. The framework request itself has no event of its own.',
+
+    /* ── El canal: evidencia, no veredicto ────────────────────────────────── */
+
+    receivedWireTitle: 'What came in over the wire',
+    /**
+     * No dice «lo de arriba es lo que significan»: en un caso de identidad
+     * arriba no hay desenlace, y una frase que se refiere a algo que a veces no
+     * está es la clase de rótulo que envejece mintiendo.
+     */
+    receivedWireNote:
+      'The signed webhook bodies this organisation received since the request went out, exactly as they arrived. This is the channel itself — evidence for whoever is integrating, not a verdict.',
     receivedEmpty: 'Nothing has come back since this was sent.',
     receivedMatch: 'This is the answer to the request above — same verifier session.',
     checkEvents: 'Check what has come back',
