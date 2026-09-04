@@ -43,10 +43,43 @@ import type { MessageKey } from '@/i18n/translate';
  * caso en vez de deducirse.
  */
 
-/** Cómo se lee un valor. Formato, nunca significado. El mismo de te-api. */
+/**
+ * **Cómo se lee un valor.** Formato, nunca significado. El mismo de te-api.
+ *
+ * La cartera sólo elige tipografía con esto, así que la regla es la de la
+ * lectura y no la del tipo de dato:
+ *
+ * - `mono` — **sólo lo que se coteja carácter a carácter contra algo que está
+ *   fuera del teléfono**: un IBAN, la huella de un contrato, una referencia de
+ *   expediente que se dicta por teléfono, la palabra que sale en las dos
+ *   pantallas. Ahí la monoespaciada gana lo único que importa, que no es la
+ *   anchura sino la forma: el cero partido y la ele con cola.
+ * - `text` — todo lo que se **lee**: nombres de personas y de empresas,
+ *   direcciones, motivos, cualquier frase. «Vellum Energy» en monoespaciada no
+ *   se compara mejor; sólo se lee peor y parece un código.
+ * - `numeric` — importes, fechas, horas, plazos y recuentos. Da cifras
+ *   tabulares, que es lo que evita que una hora o un importe baile de ancho al
+ *   cambiar.
+ */
 export type CeremonyFieldType = 'text' | 'mono' | 'numeric';
 
-/** Cuánto pesa en la decisión. Lo decide la plantilla, no quien pregunta. */
+/**
+ * **Cuánto pesa en la decisión.** Lo decide la plantilla, no quien pregunta.
+ *
+ * - `hero` — **como mucho uno por caso**, y no siempre: `account.change.v1` y
+ *   `custody.handover.v1` no llevan ninguno a propósito, porque su decisión no
+ *   cabe en un campo sino en el salto entre dos.
+ * - `normal` — lo que hay que leer para decidir.
+ * - `quiet` — lo que acompaña y se ojea: una comisión, quién lo tramitó, el
+ *   motivo administrativo, una hora estimada. La cartera lo baja de peso y de
+ *   tinta, y **ésa es la jerarquía**: sin `quiet`, seis datos pesan lo mismo y
+ *   el que decide no se distingue del que rellena. Un caso con cinco o seis
+ *   campos suele tener uno o dos.
+ *
+ * Y al revés: **una huella o un identificador que hay que comparar nunca es
+ * `quiet`**. En tinta apagada se ojea, que es justo lo contrario de lo que se
+ * le pide a quien lo lee.
+ */
 export type CeremonyFieldStyle = 'hero' | 'normal' | 'quiet';
 
 /** Qué ejecuta te-api. Eje aparte de `signWith`. */
@@ -156,7 +189,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'version', label: 'Version', value: 'Version 4 · 18 pages', type: 'text', style: 'normal' },
       { key: 'parties', label: 'Parties', value: 'Northwind Ltd · Cassia Foods', type: 'text', style: 'normal' },
       { key: 'signing_as', label: 'Signing as', value: 'Director, Cassia Foods', type: 'text', style: 'normal' },
-      { key: 'term', label: 'Term', value: '24 months from 1 Nov 2026', type: 'text', style: 'quiet' },
+      { key: 'term', label: 'Term', value: '24 months from 1 Nov 2026', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Sign — Master Services Agreement',
     deny: 'Refuse',
@@ -179,7 +212,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'protocol', label: 'Protocol', value: 'Protocol 2026/1184 · 6 pages', type: 'text', style: 'normal' },
       { key: 'granted_to', label: 'Granted to', value: 'Alia Restrepo', type: 'text', style: 'normal' },
       { key: 'powers', label: 'Powers', value: 'Sale of one property only', type: 'text', style: 'normal' },
-      { key: 'expires', label: 'Expires', value: '31 Dec 2026', type: 'text', style: 'quiet' },
+      { key: 'expires', label: 'Expires', value: '31 Dec 2026', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Sign — Special power of attorney',
     deny: 'Refuse',
@@ -233,7 +266,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'file', label: 'File', value: 'File PL-2026-8841', type: 'mono', style: 'normal' },
       { key: 'site', label: 'Site', value: '12 Marlow Wharf', type: 'text', style: 'normal' },
       { key: 'scope', label: 'Scope', value: 'Load-bearing alterations', type: 'text', style: 'normal' },
-      { key: 'fingerprint', label: 'Fingerprint', value: 'A0D7·6C13·9F44', type: 'mono', style: 'quiet' },
+      { key: 'fingerprint', label: 'Fingerprint', value: 'A0D7·6C13·9F44', type: 'mono', style: 'normal' },
     ],
     verb: 'Seal as Architect',
     deny: 'Refuse',
@@ -261,7 +294,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'quantity', label: 'Quantity', value: '21 capsules', type: 'text', style: 'normal' },
       { key: 'patient', label: 'Patient', value: 'Ref. P-88213', type: 'mono', style: 'normal' },
       { key: 'dosage', label: 'Dosage', value: '1 every 8 h, 7 days', type: 'text', style: 'normal' },
-      { key: 'valid_until', label: 'Valid until', value: '12 Oct 2026', type: 'text', style: 'quiet' },
+      { key: 'valid_until', label: 'Valid until', value: '12 Oct 2026', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Seal as Physician',
     deny: 'Cancel',
@@ -288,7 +321,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       },
       { key: 'client', label: 'Client', value: 'Cassia Foods · FY2026', type: 'text', style: 'normal' },
       { key: 'report_fingerprint', label: 'Report fingerprint', value: '5E88·C201·77BD', type: 'mono', style: 'normal' },
-      { key: 'period', label: 'Period', value: '1 Jan – 31 Dec 2026', type: 'text', style: 'normal' },
+      { key: 'period', label: 'Period', value: '1 Jan – 31 Dec 2026', type: 'numeric', style: 'normal' },
       { key: 'engagement', label: 'Engagement', value: 'ENG-2026-0413', type: 'mono', style: 'quiet' },
     ],
     verb: 'Seal as Registered auditor',
@@ -309,9 +342,9 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     fields: [
       { key: 'document', label: 'Consent for', value: 'Arthroscopy, right knee', type: 'text', style: 'hero' },
       { key: 'fingerprint', label: 'Fingerprint', value: 'D318·9A47·02EC', type: 'mono', style: 'normal' },
-      { key: 'form', label: 'Form', value: 'Consent form v3 · 4 pages', type: 'text', style: 'normal' },
+      { key: 'form', label: 'Form', value: 'Consent form v3 · 4 pages', type: 'text', style: 'quiet' },
       { key: 'clinician', label: 'Clinician', value: 'Dr. R. Okonkwo', type: 'text', style: 'normal' },
-      { key: 'scheduled', label: 'Scheduled', value: '14 Oct 2026, 08:30', type: 'text', style: 'normal' },
+      { key: 'scheduled', label: 'Scheduled', value: '14 Oct 2026, 08:30', type: 'numeric', style: 'normal' },
       { key: 'anaesthesia', label: 'Anaesthesia', value: 'Regional', type: 'text', style: 'quiet' },
     ],
     verb: 'Sign — Consent for arthroscopy',
@@ -333,7 +366,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'scope', label: 'Sharing', value: 'Cardiology records, 2024–2026', type: 'text', style: 'hero' },
       { key: 'recipient', label: 'With', value: 'Dr. L. Vasquez, Ardent Clinic', type: 'text', style: 'normal' },
       { key: 'until', label: 'For', value: '30 days', type: 'numeric', style: 'normal' },
-      { key: 'purpose', label: 'Purpose', value: 'Second opinion', type: 'text', style: 'normal' },
+      { key: 'purpose', label: 'Purpose', value: 'Second opinion', type: 'text', style: 'quiet' },
       {
         key: 'withdrawable',
         label: 'Can be withdrawn',
@@ -407,10 +440,20 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     kind: 'authenticate',
     signWith: 'identity',
     fields: [
+      // OAuth obliga a registrar una aplicacion: `app` es su nombre, y la
+      // cartera lo pone encima del dominio. El nombre se reconoce; el dominio
+      // se coteja.
+      { key: 'app', label: 'Application', value: 'Northgate Exams', type: 'text', style: 'normal' },
       { key: 'destination', label: 'Signing in to', value: 'exams.demo-te.com', type: 'mono', style: 'hero' },
+      // `account` es una clave que `auth.signin.v1` lee por su nombre: es la
+      // identidad con la que se entra, y la cartera la pinta arriba. La
+      // matricula no es eso —es un dato del centro— y por eso va en su propia
+      // clave, como par.
+      { key: 'account', label: 'Account', value: 'a.restrepo@demo-te.com', type: 'mono', style: 'normal' },
       { key: 'paper', label: 'Paper', value: 'CS-4412 Distributed Systems', type: 'text', style: 'normal' },
-      { key: 'account', label: 'Enrolment', value: 'NG-2024-11907', type: 'mono', style: 'normal' },
-      { key: 'session', label: 'Session', value: 'Starts 09:00, 3 hours', type: 'text', style: 'quiet' },
+      { key: 'enrolment', label: 'Enrolment', value: 'NG-2024-11907', type: 'mono', style: 'quiet' },
+      { key: 'session', label: 'Session', value: 'Starts 09:00, 3 hours', type: 'numeric', style: 'quiet' },
+      { key: 'started', label: 'Started', value: '08:52 · 3 minutes ago', type: 'numeric', style: 'normal' },
     ],
     verb: 'Sign in',
     deny: 'Cancel',
@@ -430,7 +473,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'fingerprint', label: 'Fingerprint', value: '2C90·B47F·1188', type: 'mono', style: 'normal' },
       { key: 'version', label: 'Version', value: 'Version 2 · 9 pages', type: 'text', style: 'normal' },
       { key: 'programme', label: 'Programme', value: 'MSc Data Engineering', type: 'text', style: 'normal' },
-      { key: 'entry_on', label: 'Entry on', value: 'BSc Computer Science', type: 'text', style: 'normal' },
+      { key: 'entry_on', label: 'Entry on', value: 'BSc Computer Science', type: 'text', style: 'quiet' },
       { key: 'tuition', label: 'Tuition', value: '€8,400 per year', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Sign — Enrolment agreement 2026/27',
@@ -455,7 +498,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'fingerprint', label: 'Fingerprint', value: '8B12·F5A0·34D9', type: 'mono', style: 'normal' },
       { key: 'version', label: 'Version', value: 'Version 1 · 11 pages', type: 'text', style: 'normal' },
       { key: 'role', label: 'Role', value: 'Operations analyst', type: 'text', style: 'normal' },
-      { key: 'starts', label: 'Starts', value: '2 Nov 2026', type: 'text', style: 'normal' },
+      { key: 'starts', label: 'Starts', value: '2 Nov 2026', type: 'numeric', style: 'normal' },
       { key: 'salary', label: 'Salary', value: '€46,000 per year', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Sign — Employment contract',
@@ -475,7 +518,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'place', label: 'Opening', value: 'Bay 4 — cold store', type: 'text', style: 'hero' },
       { key: 'valid_until', label: 'Valid until', value: 'Today, 18:40', type: 'numeric', style: 'normal' },
       { key: 'site', label: 'Site', value: 'Riverside distribution centre', type: 'text', style: 'normal' },
-      { key: 'reason', label: 'Reason', value: 'Contracted maintenance', type: 'text', style: 'normal' },
+      { key: 'reason', label: 'Reason', value: 'Contracted maintenance', type: 'text', style: 'quiet' },
       { key: 'escort', label: 'Escort', value: 'Not required', type: 'text', style: 'quiet' },
     ],
     verb: 'Open until 18:40',
@@ -518,7 +561,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'scope', label: 'Sharing', value: 'Employment history, last 5 years', type: 'text', style: 'hero' },
       { key: 'recipient', label: 'With', value: 'Vantage Screening, ref SC-9930', type: 'text', style: 'normal' },
       { key: 'until', label: 'For', value: '21 days', type: 'numeric', style: 'normal' },
-      { key: 'purpose', label: 'Purpose', value: 'Pre-employment check', type: 'text', style: 'normal' },
+      { key: 'purpose', label: 'Purpose', value: 'Pre-employment check', type: 'text', style: 'quiet' },
       {
         key: 'withdrawable',
         label: 'Can be withdrawn',
@@ -656,7 +699,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
         type: 'text',
         style: 'normal',
       },
-      { key: 'requested_by', label: 'Requested by', value: 'Phone agent, 14:02', type: 'text', style: 'normal' },
+      { key: 'requested_by', label: 'Requested by', value: 'Phone agent, 14:02', type: 'text', style: 'quiet' },
       { key: 'policy', label: 'Policy', value: 'AR-77-410288', type: 'mono', style: 'quiet' },
     ],
     verb: 'Slide to approve the change',
@@ -675,8 +718,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     signWith: 'identity',
     fields: [
       { key: 'about', label: 'Calling about', value: 'Claim CL-2026-31904', type: 'text', style: 'normal' },
-      { key: 'agent', label: 'Agent', value: 'M. Ferreira · ID 4471', type: 'mono', style: 'normal' },
-      { key: 'started', label: 'Started', value: '14:02, 3 minutes ago', type: 'text', style: 'quiet' },
+      { key: 'agent', label: 'Agent', value: 'M. Ferreira · ID 4471', type: 'text', style: 'normal' },
+      { key: 'started', label: 'Started', value: '14:02, 3 minutes ago', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Slide to confirm the call',
     deny: 'End the call',
@@ -721,8 +764,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'place', label: 'Opening', value: 'Flat 3, 12 Marlow Wharf', type: 'text', style: 'hero' },
       { key: 'valid_until', label: 'Valid until', value: 'Today, 17:45', type: 'numeric', style: 'normal' },
       { key: 'opens', label: 'Opens', value: 'Front door and key safe', type: 'text', style: 'normal' },
-      { key: 'window', label: 'Window', value: '45 minutes', type: 'text', style: 'normal' },
-      { key: 'booked', label: 'Booked', value: '17:00, today', type: 'text', style: 'normal' },
+      { key: 'window', label: 'Window', value: '45 minutes', type: 'numeric', style: 'normal' },
+      { key: 'booked', label: 'Booked', value: '17:00, today', type: 'numeric', style: 'quiet' },
       { key: 'accompanied', label: 'Accompanied', value: 'No', type: 'text', style: 'quiet' },
     ],
     verb: 'Open until 17:45',
@@ -751,7 +794,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
         style: 'normal',
       },
       { key: 'held_by', label: 'Held by', value: 'Brookline Escrow, regulated', type: 'text', style: 'normal' },
-      { key: 'refundable_until', label: 'Refundable until', value: '30 Nov 2026', type: 'text', style: 'quiet' },
+      { key: 'refundable_until', label: 'Refundable until', value: '30 Nov 2026', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Release €18,000.00',
     deny: 'Hold',
@@ -832,7 +875,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
         style: 'normal',
       },
       { key: 'until', label: 'For', value: '14 days', type: 'numeric', style: 'normal' },
-      { key: 'purpose', label: 'Purpose', value: 'Mortgage assessment', type: 'text', style: 'normal' },
+      { key: 'purpose', label: 'Purpose', value: 'Mortgage assessment', type: 'text', style: 'quiet' },
       {
         key: 'withdrawable',
         label: 'Can be withdrawn',
@@ -858,8 +901,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     signWith: 'identity',
     fields: [
       { key: 'about', label: 'Calling about', value: 'Return 2025, review', type: 'text', style: 'normal' },
-      { key: 'officer', label: 'Officer', value: 'D. Aliyev · ID 2288', type: 'mono', style: 'normal' },
-      { key: 'started', label: 'Started', value: '11:14, 2 minutes ago', type: 'text', style: 'quiet' },
+      { key: 'officer', label: 'Officer', value: 'D. Aliyev · ID 2288', type: 'text', style: 'normal' },
+      { key: 'started', label: 'Started', value: '11:14, 2 minutes ago', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Slide to confirm the call',
     deny: 'End the call',
@@ -880,7 +923,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'item', label: 'Vehicle', value: 'Plate 4471-KDR', type: 'mono', style: 'normal' },
       { key: 'from_party', label: 'From', value: 'Vantage Mobility · Riverside desk', type: 'text', style: 'normal' },
       { key: 'to_party', label: 'To', value: 'You — booking VM-88413', type: 'text', style: 'normal' },
-      { key: 'fuel', label: 'Fuel / charge', value: '92%', type: 'numeric', style: 'normal' },
+      { key: 'fuel', label: 'Fuel / charge', value: '92%', type: 'numeric', style: 'quiet' },
       { key: 'existing_damage', label: 'Existing damage', value: '2 items, photographed', type: 'text', style: 'quiet' },
     ],
     verb: 'Confirm handover',
@@ -921,7 +964,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     claims: ['age_over_18'],
     fields: [
       { key: 'age_over_18', label: 'Over 18', value: 'Yes', type: 'text', style: 'hero' },
-      { key: 'reason', label: 'Why', value: 'Age-restricted delivery', type: 'text', style: 'normal' },
+      { key: 'reason', label: 'Why', value: 'Age-restricted delivery', type: 'text', style: 'quiet' },
     ],
     verb: 'Share this only',
     deny: 'Refuse',
@@ -963,8 +1006,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     signWith: 'identity',
     fields: [
       { key: 'about', label: 'Here for', value: 'Annual meter inspection', type: 'text', style: 'normal' },
-      { key: 'technician', label: 'Technician', value: 'S. Nowak · ID 7712', type: 'mono', style: 'normal' },
-      { key: 'booked', label: 'Booked', value: 'Today, 10:00–12:00', type: 'text', style: 'quiet' },
+      { key: 'technician', label: 'Technician', value: 'S. Nowak · ID 7712', type: 'text', style: 'normal' },
+      { key: 'booked', label: 'Booked', value: 'Today, 10:00–12:00', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Slide to confirm the visit',
     deny: 'Send them away',
@@ -983,7 +1026,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
       { key: 'place', label: 'Opening', value: 'Marlow substation, gate 2', type: 'text', style: 'hero' },
       { key: 'valid_until', label: 'Valid until', value: 'Today, 16:00', type: 'numeric', style: 'normal' },
       { key: 'area', label: 'Area', value: 'High-voltage restricted area', type: 'text', style: 'normal' },
-      { key: 'window', label: 'Window', value: '4 hours', type: 'text', style: 'normal' },
+      { key: 'window', label: 'Window', value: '4 hours', type: 'numeric', style: 'normal' },
       { key: 'work_order', label: 'Work order', value: 'WO-2026-3318', type: 'mono', style: 'normal' },
       { key: 'escort', label: 'Escort', value: 'Required', type: 'text', style: 'quiet' },
     ],
@@ -1003,8 +1046,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     signWith: 'identity',
     fields: [
       { key: 'what', label: 'What changes', value: 'Electricity supplier', type: 'text', style: 'normal' },
-      { key: 'change_from', label: 'From', value: 'Vellum Energy', type: 'mono', style: 'normal' },
-      { key: 'change_to', label: 'To', value: 'Northwind Power', type: 'mono', style: 'normal' },
+      { key: 'change_from', label: 'From', value: 'Vellum Energy', type: 'text', style: 'normal' },
+      { key: 'change_to', label: 'To', value: 'Northwind Power', type: 'text', style: 'normal' },
       {
         key: 'consequence',
         label: 'What this means',
@@ -1013,7 +1056,7 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
         type: 'text',
         style: 'normal',
       },
-      { key: 'requested_by', label: 'Requested by', value: 'Doorstep agent, 18:40', type: 'text', style: 'normal' },
+      { key: 'requested_by', label: 'Requested by', value: 'Doorstep agent, 18:40', type: 'text', style: 'quiet' },
       { key: 'meter_point', label: 'Meter point', value: 'MP-4471-0928', type: 'mono', style: 'quiet' },
     ],
     verb: 'Slide to approve the change',
@@ -1050,8 +1093,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
         type: 'text',
         style: 'normal',
       },
-      { key: 'requested_at', label: 'Requested at', value: 'Orbit store, Riverside', type: 'text', style: 'normal' },
-      { key: 'requested_by', label: 'By', value: 'Counter agent 3319', type: 'mono', style: 'quiet' },
+      { key: 'requested_at', label: 'Requested at', value: 'Orbit store, Riverside', type: 'text', style: 'quiet' },
+      { key: 'requested_by', label: 'By', value: 'Counter agent 3319', type: 'text', style: 'quiet' },
     ],
     verb: 'Slide to approve the change',
     deny: 'Not me — stop this',
@@ -1071,8 +1114,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
     signWith: 'identity',
     fields: [
       { key: 'what', label: 'What changes', value: 'Number +34 ··· ··· 412', type: 'text', style: 'normal' },
-      { key: 'change_from', label: 'From', value: 'Orbit Telecom', type: 'mono', style: 'normal' },
-      { key: 'change_to', label: 'To', value: 'Vantage Mobile', type: 'mono', style: 'normal' },
+      { key: 'change_from', label: 'From', value: 'Orbit Telecom', type: 'text', style: 'normal' },
+      { key: 'change_to', label: 'To', value: 'Vantage Mobile', type: 'text', style: 'normal' },
       {
         key: 'consequence',
         label: 'What this means',
@@ -1081,8 +1124,8 @@ export const CEREMONY_CASES: readonly CeremonyCase[] = [
         type: 'text',
         style: 'normal',
       },
-      { key: 'requested_by', label: 'Requested by', value: 'Vantage Mobile, online', type: 'text', style: 'normal' },
-      { key: 'scheduled', label: 'Scheduled', value: '12 Oct 2026, 02:00', type: 'text', style: 'quiet' },
+      { key: 'requested_by', label: 'Requested by', value: 'Vantage Mobile, online', type: 'text', style: 'quiet' },
+      { key: 'scheduled', label: 'Scheduled', value: '12 Oct 2026, 02:00', type: 'numeric', style: 'quiet' },
     ],
     verb: 'Slide to approve the change',
     deny: 'Not me — stop this',
