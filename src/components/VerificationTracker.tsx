@@ -8,7 +8,6 @@ import type { MessageKey, Translator } from '@/i18n/translate';
 import { formatClock, formatCountdown, formatDateTime } from '@/lib/format';
 import { verificationTone, type VerificationStatus } from '@/lib/verification-status';
 import { VerificationStage } from './VerificationStage';
-import { WalletLink } from './WalletLink';
 
 /**
  * El seguimiento de una comprobación — **C2** (en curso) y **C3** (recibo) del
@@ -344,14 +343,18 @@ const OUTCOME_MILESTONE: Record<Exclude<VerificationStatus, 'pending'>, MessageK
 
 export function VerificationTracker({
   verification,
-  qrSvg,
   labelFor,
   organizationName,
   holderName,
+  counterQrSvg = null,
 }: {
   verification: TrackedVerification;
-  /** El QR, ya dibujado en el servidor. Sólo en el canal que lo usa. */
-  qrSvg: string | undefined;
+  /**
+   * **El código del mostrador**, ya dibujado en este servidor a partir del
+   * enlace que devolvió te-api. Nulo cuando no hay ninguno que pintar: en la
+   * rama del teléfono, o con el canal QR apagado en aquel despliegue.
+   */
+  counterQrSvg?: string | null;
   /** De nombre de atributo a rótulo. Se resuelve en el servidor. */
   labelFor: Record<string, string>;
   /** El nombre de la organización, para el recibo. No está escrito en el código. */
@@ -652,39 +655,40 @@ export function VerificationTracker({
       {error !== undefined && <p className="alert">{error}</p>}
 
       {/*
-        EL ENLACE SE OFRECE EN LOS DOS CANALES, Y ANTES SÓLO EN UNO.
+        EL QR ES DEL MOSTRADOR, Y AHORA APUNTA A LA PETICIÓN DEL MARCO.
 
-        El QR es del canal `qr` y ahí se queda: es para el cliente que está
-        delante del mostrador. El ENLACE es otra cosa —abre la cartera del
-        aparato que lo toca— y sirve igual en los dos casos:
+        Aquí había un QR y un enlace compuestos del `openid4vp://` de la sesión
+        del verificador. Ésos se fueron con el camino crudo: llevaban a la
+        pantalla genérica de presentación de la cartera, que no dice de qué va la
+        llamada ni quién pregunta.
 
-        - en `qr`, para quien tiene la consola abierta en su propio móvil y no
-          puede fotografiar su propia pantalla;
-        - en `phone`, para comprobar que el enlace funciona SIN depender de que
-          llegue el aviso push, que es una pieza aparte que puede fallar sola.
-          Antes, si el aviso no llegaba, no había ninguna otra forma de entrar
-          en la ceremonia desde esta pantalla.
+        El que hay ahora **lo construye te-api** y viaja en la respuesta de
+        `POST /v1/requests` (`link`). Abre la ceremonia del marco, o sea la
+        plantilla `bank.call.v2` — la misma que ve quien recibe el aviso en el
+        teléfono. Aquí no se fabrica ningún enlace: el selector del emisor es
+        configuración de aquel despliegue.
 
-        Sólo mientras la petición está viva: pasado el plazo el enlace lleva a
-        una sesión que el verificador ya no reconoce, y la cartera enseñaría un
-        error en vez de una ceremonia.
+        **Sólo en el mostrador.** En la rama del teléfono el cliente no está
+        delante de esta pantalla y un código aquí no sirve de nada; ahí lo que
+        hace falta es saber dónde tiene que mirar.
+
+        Y sólo mientras la petición está viva: pasado el plazo el código lleva a
+        algo que ya no se puede contestar.
       */}
       {status === 'pending' && !overdue && (
         <div className="card">
-          <h2>{t(verification.channel === 'qr' ? 'tracker.codeTitle' : 'tracker.walletTitle')}</h2>
-          {verification.channel === 'qr' && (
-            <>
-              {/*
-                El SVG lo genera `qrcode` en NUESTRO servidor a partir del
-                enlace que devolvió te-api; no es HTML de terceros.
-              */}
-              <div className="qr" dangerouslySetInnerHTML={{ __html: qrSvg ?? '' }} />
-            </>
+          <h2>{t(verification.channel === 'qr' ? 'tracker.codeTitle' : 'tracker.inboxTitle')}</h2>
+          {verification.channel === 'qr' && counterQrSvg !== null ? (
+            /*
+              El SVG lo dibuja `qrcode` en NUESTRO servidor a partir del enlace
+              que devolvió te-api; no es HTML de terceros.
+            */
+            <div className="qr" dangerouslySetInnerHTML={{ __html: counterQrSvg }} />
+          ) : (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              {t('tracker.inboxBody')}
+            </p>
           )}
-          <WalletLink
-            uri={verification.authorizationRequestUrl}
-            label={t('tracker.walletLinkLabel')}
-          />
         </div>
       )}
 
@@ -694,29 +698,41 @@ export function VerificationTracker({
         carencia nuestra —eso se arregla—; esto es un hecho del mundo, y
         callarlo haría que el agente diera por avisado a quien no lo está.
 
-        Lo que baja al detalle es el POR QUÉ del diseño y el identificador del
-        aviso: es lo que hace falta para cruzarlo con un registro, no para
-        atender la llamada.
+        **Ahora sale en los dos canales, y antes sólo en el del teléfono.** No es
+        una ampliación de celo: desde que el mostrador entrega la petición del
+        marco, entrega por push igual que el teléfono, así que la misma duda le
+        aplica igual. Dejarla en una sola rama habría hecho que el canal más
+        nuevo fuera el que menos cuenta.
+
+        El detalle técnico sí sigue siendo del timbre, porque es lo único que
+        tiene identificador que cruzar con un registro: `POST /v1/requests` no
+        devuelve ninguno equivalente.
       */}
-      {status === 'pending' && verification.channel === 'phone' && (
+      {status === 'pending' && (
         <div className="muted">
           <p style={{ margin: 0 }}>{t.rich('tracker.wakeupUnconfirmed')}</p>
-          <details className="tech">
-            <summary>{t('common.technicalDetail')}</summary>
-            <p>{t.rich('tracker.wakeupTechnical', { id: verification.wakeupId ?? '—' })}</p>
-          </details>
+          {verification.wakeupId !== null && (
+            <details className="tech">
+              <summary>{t('common.technicalDetail')}</summary>
+              <p>{t.rich('tracker.wakeupTechnical', { id: verification.wakeupId })}</p>
+            </details>
+          )}
         </div>
       )}
 
       {/*
-        LA LÍNEA DE TIEMPO VA DEBAJO DEL CÓDIGO, Y ANTES IBA ENCIMA.
+        LA LÍNEA DE TIEMPO VA LA ÚLTIMA, Y ANTES IBA ENCIMA.
 
         Es el registro, no la acción. Mientras se espera, lo que el agente
-        necesita a mano es el código o el enlace —lo que hay que enseñarle o
-        mandarle al titular—; la sucesión de hitos con sus horas se consulta
-        después, o mañana, cuando alguien reconstruye la llamada. Con el
-        registro en medio, lo que había que tocar quedaba por debajo del pliegue
-        en un portátil de sucursal.
+        necesita a mano es el estado y dónde está la solicitud —qué decirle al
+        titular—; la sucesión de hitos con sus horas se consulta después, o
+        mañana, cuando alguien reconstruye la llamada. Con el registro en medio,
+        lo que había que leer quedaba por debajo del pliegue en un portátil de
+        sucursal.
+
+        Lo que iba aquí arriba era el código QR y el enlace. Se fueron con el
+        camino crudo de OID4VP; el orden se queda, porque la razón no era el QR
+        sino que la acción va antes que el archivo.
       */}
       <PresentationTimeline
         t={t}

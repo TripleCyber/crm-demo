@@ -249,7 +249,7 @@ export const en = {
     ceremonies: 'Verification catalogue',
     ceremoniesHint: '36 ready-made requests across 13 industries.',
     channelPhone: 'Alert to their phone',
-    channelQr: 'QR at the counter',
+    channelQr: 'At the counter',
     onBehalfOf: 'on behalf of {agent}',
   },
 
@@ -466,8 +466,8 @@ export const en = {
      * DE QUÉ VA LA LLAMADA — el héroe de la pantalla del titular.
      *
      * Los rótulos viven en la tarjeta del aviso y no en la de arriba porque el
-     * asunto es una propiedad de **cómo se avisa**, no de qué se pide: sólo
-     * viaja en el timbre, y el QR no lo lleva.
+     * asunto no es un atributo de la credencial: es lo que la persona lee para
+     * decidir si aprueba. Viaja en la petición del marco por los dos canales.
      *
      * El marcador de posición es un ASUNTO, no una instrucción, y eso no es
      * decoración. El texto lo escribe un agente y lo lee alguien a quien acaban
@@ -487,7 +487,7 @@ export const en = {
     callCaseHint: 'Optional. Only if they can check it against something you already sent them.',
     alertPhone: 'They are on the phone · alert their mobile',
     alertPhoneBusy: 'Alerting…',
-    alertQr: 'They are in front of you · show QR',
+    alertQr: 'They are in front of you · send to their phone',
     alertQrBusy: 'Requesting…',
     /**
      * El hecho, no el síntoma. Antes esta pantalla decía «We have alerted their
@@ -497,7 +497,7 @@ export const en = {
      * al canal que sí funciona.
      */
     alertNoWallet:
-      '<b>{name} has no wallet linked to this entity</b>, so alerting their mobile would ring nowhere. Use the QR if they are in front of you, or issue them a credential: they are linked once they accept it in their wallet.',
+      '<b>{name} has no wallet linked to this entity</b>, so there is nobody to send the request to — neither on the phone nor at the counter, because both go to the wallet. Issue them a credential: they are linked once they accept it in their wallet.',
     alertPhoneNoWallet: 'No wallet to alert',
     requestFailed: 'the request failed ({status})',
     noServer: 'the server could not be reached',
@@ -757,7 +757,7 @@ export const en = {
     channelPhone: 'On the phone',
     channelPhoneHint: 'alert to mobile',
     channelQr: 'At the counter',
-    channelQrHint: 'QR on screen',
+    channelQrHint: 'request to their wallet',
   },
 
   /** La pantalla de una comprobación. */
@@ -774,7 +774,7 @@ export const en = {
     requestedClaims: 'Attributes requested',
     howAlerted: 'How they were alerted',
     alertedPhone: 'Alert to their mobile · they were on the phone',
-    alertedQr: 'QR on screen · they were in front of us',
+    alertedQr: 'Request to their wallet · they were in front of us',
     requiredIssuer: 'Issuer required',
     panelNote:
       'The check is done by TripleEnable. This organisation does not have to run or hold any verifier: it asks the question and reads the answer.',
@@ -818,8 +818,9 @@ export const en = {
   /** La línea de tiempo y el recibo. */
   tracker: {
     codeTitle: 'Their code',
-    walletTitle: 'Open in the wallet',
-    walletLinkLabel: 'the request',
+    inboxTitle: 'Where the request is',
+    inboxBody:
+      'On their phone, in the TripleEnable app: it opens from the notification, and it keeps waiting inside the app if they dismissed it. There is no code to scan — the request travels to the wallet, not through this screen.',
     wakeupUnconfirmed:
       'That their mobile rang <b>is confirmed by nobody</b>. If they do not answer, ask them whether they have the app installed instead of assuming it.',
     wakeupTechnical:
@@ -991,8 +992,6 @@ export const en = {
     callSubjectTooLong:
       'the call subject is one line on a phone screen: {max} characters at most',
     callCaseTooLong: 'the case reference cannot be longer than {max} characters',
-    callNotOnQr:
-      'the call subject only travels when their mobile is alerted; the QR does not carry it',
     claimsNotCarried:
       'this customer’s “{label}” credential does not carry {claims}, so it cannot be requested',
     missingPresentationId: 'presentationId is missing',
@@ -1025,7 +1024,7 @@ export const en = {
      * que lo pinta.
      */
     noWalletLink:
-      'No alert was sent: this customer has no wallet linked to your organisation, so there was nobody to ring. Show them the QR if they are in front of you, or issue them a credential: they are linked once they accept it in their wallet.',
+      'No request was sent: this customer has no wallet linked to your organisation, so there was nobody to send it to. Issue them a credential: they are linked once they accept it in their wallet.',
     teApiNoVct:
       'That credential type can be issued but not asked for back: the platform does not build a presentation request for its format yet. To verify this customer, use a credential type issued as SD-JWT or as a W3C JWT credential{reference}.',
     teApiCannotComplete:

@@ -505,6 +505,18 @@ export interface TransferApprovalInput {
 export interface TransferApprovalResult {
   readonly requestId: string;
   readonly expiresAt: string;
+  /**
+   * **El enlace para el mostrador**, cuando el titular está delante.
+   *
+   * Lo construye te-api y no este CRM, y la diferencia importa: el selector del
+   * emisor es configuración de aquel despliegue —`te-prod` es el único que la
+   * cartera acepta— y un enlace fabricado aquí apuntaría a un servidor que
+   * nadie eligió.
+   *
+   * Nulo cuando el despliegue no tiene canal QR: entonces no hay código que
+   * pintar y se dice, en vez de enseñar uno que no abre nada.
+   */
+  readonly link: string | null;
 }
 
 export async function requestTransferApproval(

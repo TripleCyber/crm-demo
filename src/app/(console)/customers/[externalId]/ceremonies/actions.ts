@@ -130,6 +130,8 @@ export async function sendCeremonyAction(
       channel: 'phone',
       issuerDid: organization.did,
       authorizationRequestUrl: presentation.authorizationRequestUrl,
+      // Rama del teléfono: no hay mostrador y por tanto no hay código.
+      counterLink: null,
       requestUri: presentation.requestUri,
       expiresAt: asked.expiresAt,
       agentId: session.agent.id,

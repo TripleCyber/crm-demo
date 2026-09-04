@@ -217,7 +217,7 @@ export const es: PartialMessages = {
     ceremonies: 'Catálogo de verificaciones',
     ceremoniesHint: '36 peticiones ya escritas, de trece industrias.',
     channelPhone: 'Aviso a su móvil',
-    channelQr: 'QR en el mostrador',
+    channelQr: 'En el mostrador',
     onBehalfOf: 'a nombre de {agent}',
   },
 
@@ -422,10 +422,10 @@ export const es: PartialMessages = {
     callCaseHint: 'Opcional. Sólo si puede cotejarla con algo que ya le hayáis mandado.',
     alertPhone: 'Está al teléfono · avisar a su móvil',
     alertPhoneBusy: 'Avisando…',
-    alertQr: 'Está delante · enseñar QR',
+    alertQr: 'Está delante · enviar a su móvil',
     alertQrBusy: 'Pidiendo…',
     alertNoWallet:
-      '<b>{name} no tiene cartera vinculada con esta entidad</b>, así que avisar a su móvil no haría sonar nada. Usa el QR si está delante, o emítele una credencial: queda vinculado cuando la acepta en su cartera.',
+      '<b>{name} no tiene cartera vinculada con esta entidad</b>, así que no hay a quién mandarle la solicitud — ni al teléfono ni en el mostrador, porque las dos van a la cartera. Emítele una credencial: queda vinculado cuando la acepta en su cartera.',
     alertPhoneNoWallet: 'No hay cartera a la que avisar',
     requestFailed: 'la petición ha fallado ({status})',
     noServer: 'no se ha podido contactar con el servidor',
@@ -675,7 +675,7 @@ export const es: PartialMessages = {
     channelPhone: 'Al teléfono',
     channelPhoneHint: 'aviso al móvil',
     channelQr: 'En el mostrador',
-    channelQrHint: 'QR en pantalla',
+    channelQrHint: 'solicitud a su cartera',
   },
 
   verification: {
@@ -691,7 +691,7 @@ export const es: PartialMessages = {
     requestedClaims: 'Atributos pedidos',
     howAlerted: 'Cómo se avisó',
     alertedPhone: 'Aviso a su móvil · estaba al teléfono',
-    alertedQr: 'QR en pantalla · estaba delante',
+    alertedQr: 'Solicitud a su cartera · estaba delante',
     requiredIssuer: 'Emisor exigido',
     panelNote:
       'La comprobación la hace TripleEnable. Esta organización no tiene que montar ni custodiar ningún verificador: pone la pregunta y lee la respuesta.',
@@ -733,8 +733,9 @@ export const es: PartialMessages = {
 
   tracker: {
     codeTitle: 'Su código',
-    walletTitle: 'Abrir en la cartera',
-    walletLinkLabel: 'la solicitud',
+    inboxTitle: 'Dónde está la solicitud',
+    inboxBody:
+      'En su móvil, en la app de TripleEnable: se abre desde el aviso, y si lo ha descartado sigue esperándole dentro de la app. No hay ningún código que escanear — la solicitud viaja a la cartera, no por esta pantalla.',
     wakeupUnconfirmed:
       'Que le haya sonado el móvil <b>no lo confirma nadie</b>. Si no contesta, pregúntele si tiene la app instalada en vez de darlo por hecho.',
     wakeupTechnical:
@@ -903,8 +904,6 @@ export const es: PartialMessages = {
     callSubjectTooLong:
       'el asunto de la llamada es una línea en la pantalla de un móvil: {max} caracteres como mucho',
     callCaseTooLong: 'la referencia del expediente no puede pasar de {max} caracteres',
-    callNotOnQr:
-      'el asunto de la llamada sólo viaja cuando se avisa a su móvil; el QR no lo lleva',
     claimsNotCarried:
       'la credencial «{label}» de este cliente no lleva {claims}, así que no se puede pedir',
     missingPresentationId: 'falta presentationId',
@@ -918,7 +917,7 @@ export const es: PartialMessages = {
     // motivo tampoco era el que parecía: cada formato se pide por una clave
     // distinta y la plataforma todavía no construye la de los `mso_mdoc`.
     noWalletLink:
-      'No se ha enviado ningún aviso: este cliente no tiene una cartera vinculada con vuestra organización, así que no había a quién llamar. Enséñale el QR si está delante, o emítele una credencial: queda vinculado cuando la acepta en su cartera.',
+      'No se ha enviado ninguna solicitud: este cliente no tiene una cartera vinculada con vuestra organización, así que no había a quién mandársela. Emítele una credencial: queda vinculado cuando la acepta en su cartera.',
     teApiNoVct:
       'Ese tipo de credencial se puede emitir, pero no pedir de vuelta: la plataforma todavía no construye una petición de presentación para su formato. Para verificar a este cliente, usa un tipo emitido como SD-JWT o como credencial JWT del modelo W3C{reference}.',
     teApiCannotComplete:

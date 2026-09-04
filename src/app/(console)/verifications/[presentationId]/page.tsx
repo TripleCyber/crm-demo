@@ -26,9 +26,19 @@ import { findVerification } from '@/lib/verifications';
  *  · se vuelve a abrir mañana y sigue estando el recibo, que es lo que un banco
  *    adjunta a un expediente.
  *
- * El QR se dibuja **aquí, en el servidor**, y no se guarda: se compone del
- * enlace de autorización que se anotó al abrir la sesión. Por eso recargar la
- * pantalla vuelve a enseñar el mismo código y no uno nuevo — es el mismo dato.
+ * ## Aquí ya no se dibuja ningún QR
+ *
+ * Se dibujaba uno para el canal del mostrador, compuesto del `openid4vp://` que
+ * devolvió la sesión del verificador. Se ha ido con el camino que lo usaba: esa
+ * verificación se entrega ahora como **petición del marco** —`bank.call.v2`, la
+ * misma que compone el timbre— y el marco no tiene QR. `POST /v1/requests`
+ * contesta identificador y caducidad, sin enlace, y el único constructor de
+ * enlace profundo de te-api sirve al canal de inicio de sesión de Logto.
+ *
+ * Pintarlo igual habría sido peor que no pintarlo: ese código llevaba a la
+ * pantalla genérica de presentación de la cartera —la que atiende a las
+ * credenciales de terceros—, que no dice de qué va la llamada ni quién
+ * pregunta. Un QR que lleva al sitio equivocado no es una capacidad.
  *
  * ## La fila ya no la reconcilia esta pantalla
  *
@@ -67,14 +77,16 @@ export default async function VerificationPage({
   // esta dirección serviría para averiguar qué bancos usan el producto.
   if (verification === null) notFound();
 
+  // **El código del mostrador se redibuja en cada pintado.** Lo que se guardó
+  // es el enlace que devolvió te-api, no la imagen: el SVG es una
+  // representación de ese dato y guardarlo sería guardar dos veces lo mismo,
+  // con el riesgo de que se separen. Nulo en la rama del teléfono.
+  const counterQrSvg =
+    verification.counterLink === null ? null : await renderQrSvg(verification.counterLink);
+
   const customer = await findCustomer(session.organization.orgId, verification.externalId);
   const holderName =
     customer === null ? null : `${customer.givenName} ${customer.familyName}`;
-
-  const qrSvg =
-    verification.channel === 'qr' && verification.status === 'pending'
-      ? await renderQrSvg(verification.authorizationRequestUrl)
-      : undefined;
 
   // Los rótulos salen del catálogo del padrón, que es de donde salieron al
   // pedirlos. Un atributo que ya no esté en el catálogo se enseña por su nombre
@@ -140,10 +152,10 @@ export default async function VerificationPage({
           */}
           <VerificationTracker
             verification={verification}
-            qrSvg={qrSvg}
             labelFor={labelFor}
             organizationName={session.organization.displayName}
             holderName={holderName}
+            counterQrSvg={counterQrSvg}
           />
         </div>
 

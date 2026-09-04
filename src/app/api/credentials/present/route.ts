@@ -4,11 +4,11 @@ import { getTranslator } from '@/i18n/server';
 import type { Translator } from '@/i18n/translate';
 import { findDeclaredType, resolveCredentialType } from '@/lib/credential-profiles';
 import { findCustomer } from '@/lib/customers';
-import { renderQrSvg } from '@/lib/qr';
 import { getEmployeeSession } from '@/lib/session';
 import {
   describeTeApiError,
   fetchB2bOrganizationCached,
+  requestCeremony,
   requestPresentation,
   sendWakeup,
   TeApiError,
@@ -31,18 +31,46 @@ import { findVerification, recordVerification } from '@/lib/verifications';
  * nunca de vuelta. Esto es la vuelta. El agente pulsa «pedir credencial» y la
  * cartera del titular **presenta** lo que se le pide.
  *
- * ## Dos canales, porque son dos situaciones distintas
+ * ## Las dos ramas van por el MARCO DE PETICIONES, y ésa es la corrección
  *
- * - **`qr`** — el cliente está delante, en la sucursal, y mira la pantalla del
- *   agente. Es lo único que había hasta ahora.
- * - **`phone`** — el cliente está **al teléfono** y no ve ninguna pantalla. El
- *   QR ahí no sirve de nada: hay que hacer sonar su móvil. Se abre la misma
- *   sesión de presentación y con su `requestUri` se llama a
- *   `POST /v1/b2b/wakeups`, que es el timbre.
+ * Lo que el titular recibe es **una petición del marco con su plantilla**
+ * (`bank.call.v2`), no un `openid4vp://` suelto. La diferencia se ve en su
+ * móvil: por el marco lee de qué va la llamada, quién pregunta y qué firma; por
+ * el enlace crudo le salía la pantalla genérica de presentación, que no dice
+ * ninguna de esas tres cosas y que es el camino de las credenciales de terceros
+ * (Entra ID), no el nuestro.
  *
- * El canal cambia **cómo se avisa**, no qué se pide ni qué se comprueba: las dos
- * ramas abren la misma sesión con los mismos atributos y se consultan con la
- * misma ruta.
+ * - **`phone`** — el cliente está al teléfono. `POST /v1/b2b/wakeups`, que **ya
+ *   compone la petición del marco por dentro** (`bank.call.v2`, `kind: verify`,
+ *   `signWith: identity`, con el `requestUri` dentro) y además es la única
+ *   llamada que dice si el aviso llegó a salir. Por eso se queda: cambiarla por
+ *   la ruta genérica sólo perdería ese dato.
+ * - **`qr`** — el cliente está en el mostrador. Es la rama que estaba rota:
+ *   pintaba el `openid4vp://` de la sesión y no creaba ninguna petición. Ahora
+ *   compone la misma petición del marco por `POST /v1/requests`.
+ *
+ * Las dos acaban en **la misma pantalla de la cartera**, con los mismos campos
+ * y el mismo texto firmado. El canal ya no elige protocolo: dice dónde está el
+ * cliente, que es lo único que un CRM sabe de verdad.
+ *
+ * ## Y el mostrador sigue pintando QR, pero del marco
+ *
+ * `POST /v1/requests` devuelve `link` desde que se abrió el canal reclamable
+ * para las peticiones: un `tripleenable://requests/<id>`, el mismo esquema que
+ * el QR de inicio de sesión, que la cartera reclama contra la bandeja. Es lo
+ * que se dibuja, y **no se fabrica aquí**: lo compone te-api con su propio
+ * `codeLink`, y una copia de ese formato en el CRM se quedaría vieja en
+ * silencio el día que cambie.
+ *
+ * Lo que se retiró es el QR **anterior**, que pintaba el `openid4vp://` crudo
+ * de la sesión de presentación y abría la pantalla genérica. Ése sí era una
+ * trampa: llevaba al sitio equivocado. El de ahora abre la misma plantilla que
+ * el push, con los mismos campos y el mismo texto firmado.
+ *
+ * `link` puede venir **nulo** —te-api con el canal QR apagado—, y entonces esta
+ * rama no pinta código y el cliente recibe la petición en el móvil que lleva
+ * encima, igual que el que está al teléfono. Nulo se enseña como ausencia, no
+ * como error: la ceremonia está abierta y es reclamable por la bandeja.
  *
  * ## El verificador es de TripleEnable, no nuestro
  *
@@ -64,9 +92,10 @@ import { findVerification, recordVerification } from '@/lib/verifications';
  * - `type` se resuelve **contra el padrón de te-api** (`GET /v1/b2b/organization`).
  * - `claims` se comprueban **contra los que ese tipo lleva en esta ficha**.
  * - `channel` se compara contra una lista cerrada.
- * - `call` se recorta, se mide contra el límite de te-api y **se exige sólo en
- *   el canal que lo pinta** — el del teléfono. Por QR se rechaza en vez de
- *   descartarse, porque ahí no habría pantalla donde enseñarlo.
+ * - `call` se recorta, se mide contra el límite de te-api y **se exige en los
+ *   dos canales**: es el héroe obligatorio de `bank.call.v2`, y las dos ramas
+ *   componen esa plantilla. Antes se rechazaba por QR, cuando ese canal no
+ *   pintaba ninguna pantalla del marco donde pudiera enseñarse.
  *
  * Y hay tres cosas que el navegador **no manda y no puede mandar**, porque las
  * sabe el servidor: el `subjectReference` (sale de la ficha del padrón, no del
@@ -159,39 +188,35 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: t('errors.noClaimsRequested') }, { status: 400 });
   }
 
-  // ── El asunto se exige donde se pinta, y sólo ahí ──────────────────────
+  // ── El asunto se exige EN LOS DOS CANALES, y eso es lo que cambió ──────
   //
-  // El timbre es lo único que lleva la llamada: el canal del QR abre la misma
-  // sesión de presentación y **no llama a `POST /v1/b2b/wakeups`**, así que un
-  // asunto escrito para un QR no lo enseñaría ninguna pantalla. Pedirlo ahí
-  // sería pedir un dato para tirarlo.
+  // Antes se exigía sólo en el teléfono y se **rechazaba** con el QR, porque el
+  // QR no llegaba a pintar ninguna pantalla del marco: era un `openid4vp://`
+  // pelado, y un asunto escrito para él habría sido un dato para tirarlo.
   //
-  // Y por eso mandarlo con el QR **se rechaza en vez de ignorarse**, que es la
-  // misma disciplina que este fichero aplica a los atributos que un tipo no
-  // lleva y que te-api aplica con su objeto `.strict()`: descartarlo en
-  // silencio deja a quien llama convencido de que el titular leyó algo que no
-  // se pintó nunca. El día que el QR pinte la petición del marco, esta rama es
-  // la línea que cambia.
-  if (channel === 'qr') {
-    if (call !== undefined) {
-      return NextResponse.json({ error: t('errors.callNotOnQr') }, { status: 400 });
-    }
-  } else {
-    if (callSubject === '') {
-      return NextResponse.json({ error: t('errors.missingCallSubject') }, { status: 400 });
-    }
-    if (callSubject.length > CALL_TEXT_MAX) {
-      return NextResponse.json(
-        { error: t('errors.callSubjectTooLong', { max: CALL_TEXT_MAX }) },
-        { status: 400 },
-      );
-    }
-    if (callCase.length > CALL_TEXT_MAX) {
-      return NextResponse.json(
-        { error: t('errors.callCaseTooLong', { max: CALL_TEXT_MAX }) },
-        { status: 400 },
-      );
-    }
+  // Ahora las dos ramas componen `bank.call.v2`, y esa plantilla declara
+  // `subject` como su **héroe obligatorio** (`required: ['subject']`,
+  // `hero: 'subject'` en `src/requests/catalog.ts` de te-api). Sin él la
+  // petición no se puede pintar y te-api la rechaza con `missing_required_field`
+  // — así que el que era un campo de un canal es ahora un campo de la ceremonia.
+  //
+  // Se mide aquí y no se deja caer al 400 de te-api por lo de siempre: el agente
+  // está al teléfono, y «te-api ha rechazado los datos» no le dice qué campo
+  // arreglar.
+  if (callSubject === '') {
+    return NextResponse.json({ error: t('errors.missingCallSubject') }, { status: 400 });
+  }
+  if (callSubject.length > CALL_TEXT_MAX) {
+    return NextResponse.json(
+      { error: t('errors.callSubjectTooLong', { max: CALL_TEXT_MAX }) },
+      { status: 400 },
+    );
+  }
+  if (callCase.length > CALL_TEXT_MAX) {
+    return NextResponse.json(
+      { error: t('errors.callCaseTooLong', { max: CALL_TEXT_MAX }) },
+      { status: 400 },
+    );
   }
 
   try {
@@ -287,11 +312,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     const requestedAt = new Date().toISOString();
     let wakeupAt: string | undefined;
 
-    // El QR sólo se dibuja para el canal que lo usa. Pintarlo también en una
-    // llamada de teléfono sería enseñarle al agente algo que el cliente no
-    // puede ver, y el agente acabaría intentando dictarlo.
-    const qrSvg =
-      channel === 'qr' ? await renderQrSvg(presentation.authorizationRequestUrl) : undefined;
+    // ── La ventana que corre es la de la CEREMONIA, no la de la sesión ─────
+    //
+    // Lo que el titular tiene delante es la petición del marco, y es su plazo el
+    // que decide hasta cuándo puede contestar. La sesión del verificador tiene
+    // el suyo y es otro número: enseñar ése sería enseñar una cuenta atrás de
+    // algo que la persona no está mirando.
+    //
+    // La rama del teléfono se queda con el de la sesión, que es lo que siempre
+    // usó: cambiarlo es una decisión aparte y no hace falta para esto.
+    let expiresAt = presentation.expiresAt;
+
+    // **El código del mostrador**, cuando lo hay. Lo construye te-api y viaja
+    // en la respuesta de `POST /v1/requests`: aquí no se fabrica ninguno. Ver
+    // `TransferApprovalResult.link`.
+    let counterLink: string | null = null;
 
     let wakeupId: string | undefined;
     if (channel === 'phone') {
@@ -360,6 +395,96 @@ export async function POST(request: Request): Promise<NextResponse> {
         // no ha salido tiene que parar la ceremonia, no adornarla.
         return errorResponse(t, error, 'tocando el timbre');
       }
+    } else {
+      // ── El mostrador: la petición del marco, por la ruta genérica ────────
+      //
+      // Ésta es la rama que estaba rota. Antes terminaba aquí con la sesión de
+      // presentación abierta y un `openid4vp://` pintado en un QR: el titular
+      // acababa en la pantalla genérica de presentación de la cartera —la misma
+      // que atiende a Entra ID— sin ver de qué iba la llamada, quién preguntaba
+      // ni qué estaba firmando.
+      //
+      // Ahora compone **la misma petición que el timbre compone por dentro**
+      // (`src/routes/b2b.ts`, `POST /v1/b2b/wakeups`): misma plantilla, mismo
+      // `kind`, mismo `signWith` y los mismos rótulos, palabra por palabra. Que
+      // sean idénticas no es estética: es lo que hace que el titular vea la
+      // misma pantalla esté al teléfono o en el mostrador, y que un cambio en
+      // una de las dos se note como una diferencia y no como una variante.
+      try {
+        const asked = await requestCeremony(session.organization, {
+          subjectReference: customer.externalId,
+          // La única que `bank.call.v2` admite. Es una verificación: se pregunta
+          // quién es quien está delante, no se autoriza ninguna operación.
+          kind: 'verify',
+          // **Identidad, y no credencial**, que es lo que hace el timbre para
+          // esta misma plantilla. La credencial se presenta igual —viaja el
+          // `requestUri` y la cartera va al verificador—; lo que `signWith`
+          // decide es qué prueba guarda te-api junto a la firma, y con
+          // `credential` habría que nombrar además el `credentialType` para
+          // acabar con la misma pantalla. Dos peticiones que sólo se distinguen
+          // en eso son dos caminos que se separan a la primera corrección.
+          signWith: 'identity',
+          template: 'bank.call.v2',
+          // **La puerta del verificador**, y es lo que ata las dos mitades: sin
+          // ella la cartera no sabe a dónde ir a presentar, y la petición
+          // quedaría siendo una pregunta sin forma de contestarla.
+          requestUri: presentation.requestUri,
+          // Los mismos tres campos que `buildCallFields` en te-api, con los
+          // mismos rótulos en inglés —los lee el titular— y los mismos estilos.
+          fields: [
+            {
+              key: 'subject',
+              label: 'What the call is about',
+              value: callSubject,
+              // Es una frase, no un identificador: texto y de héroe, que es lo
+              // que la plantilla exige (`hero: 'subject'`).
+              type: 'text',
+              style: 'hero',
+            },
+            {
+              key: 'agent',
+              label: 'Agent on the line',
+              // Atribución, no autenticación: te-api no comprueba nada de esto.
+              // Sirve para que el titular lea con qué nombre le hablan.
+              value: session.agent.displayName,
+              type: 'text',
+              style: 'normal',
+            },
+            // Ausente y no vacío cuando no se escribe: `value` es `.min(1)` en
+            // te-api, así que una cadena vacía es un rechazo.
+            ...(callCase === ''
+              ? []
+              : [
+                  {
+                    // Se coteja carácter a carácter contra una carta o un
+                    // correo, así que monoespaciada —donde el 0 y la O se
+                    // distinguen— y en voz baja: es para comprobar, no para
+                    // decidir.
+                    key: 'case',
+                    label: 'Case reference',
+                    value: callCase,
+                    type: 'mono',
+                    style: 'quiet',
+                  } as const,
+                ]),
+          ],
+        });
+
+        expiresAt = asked.expiresAt;
+        counterLink = asked.link;
+      } catch (error) {
+        // Igual que en el timbre: la sesión de presentación ya está abierta y
+        // **se deja caducar sola**. Sin petición no hay ceremonia, y anotarla
+        // como pendiente pondría en el historial del cliente algo que nadie le
+        // llegó a preguntar.
+        //
+        // El caso que más se va a ver aquí es el `404` de te-api —«sin titular
+        // para lo que se nombró»—, que es lo que contesta cuando esa persona no
+        // tiene cartera vinculada con esta organización. La pantalla ya lo avisa
+        // antes de pulsar, pero el aviso sale del directorio de vínculos y puede
+        // no haber contestado.
+        return errorResponse(t, error, 'creando la petición del marco');
+      }
     }
 
     // ── El diario del banco ────────────────────────────────────────────────
@@ -381,8 +506,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       channel,
       issuerDid: organization.did,
       authorizationRequestUrl: presentation.authorizationRequestUrl,
+      // Sólo lo hay en la rama del mostrador; en la del teléfono es nulo.
+      counterLink,
       requestUri: presentation.requestUri,
-      expiresAt: presentation.expiresAt,
+      expiresAt,
       agentId: session.agent.id,
       agentName: session.agent.displayName,
       actor: session.actor,
@@ -398,10 +525,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       // que la cartera va a buscar, y enseña de un vistazo que apunta a la
       // infraestructura de TripleEnable.
       requestUri: presentation.requestUri,
-      expiresAt: presentation.expiresAt,
+      expiresAt,
       claims,
       channel,
-      qrSvg,
       // El identificador del aviso. **No significa que haya sonado ningún
       // teléfono**: te-api contesta lo mismo tenga cartera o no (ver
       // `sendWakeup`). Se enseña para poder cruzarlo con el diario de te-api.
@@ -418,6 +544,20 @@ export async function POST(request: Request): Promise<NextResponse> {
       // recibo se guarda por su cuenta y no puede depender de que el
       // desplegable siga en la misma posición.
       type: declared.type,
+      // ── El mostrador ──────────────────────────────────────────────────
+      //
+      // El enlace del código, **sólo en la rama del mostrador**: en la del
+      // teléfono el titular no está delante de esta pantalla y un código ahí no
+      // sirve de nada. Lo construye te-api —el selector del emisor es
+      // configuración de aquel despliegue— y aquí ni se fabrica ni se retoca.
+      // Nulo cuando ese despliegue no tiene canal QR.
+      //
+      // Va **el enlace y no el dibujo**: el SVG lo rehace la pantalla de
+      // seguimiento en cada pintado desde la fila guardada, que es lo que hace
+      // que el código siga ahí al recargar. Mandarlo también por aquí sería la
+      // misma imagen por dos caminos, y el de esta respuesta muere en cuanto el
+      // lanzador navega.
+      counterLink,
     });
   } catch (error) {
     return errorResponse(t, error, 'pidiendo la presentación');

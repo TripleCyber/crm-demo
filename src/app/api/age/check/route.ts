@@ -124,6 +124,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       // es contra quién se comprueba, y el recibo lo enseña.
       issuerDid: (await fetchB2bOrganizationCached(session.organization)).did,
       authorizationRequestUrl: checked.session.authorizationRequestUrl,
+      // Rama del teléfono: no hay mostrador y por tanto no hay código.
+      counterLink: null,
       requestUri: checked.session.requestUri,
       expiresAt: checked.expiresAt,
       agentId: session.agent.id,

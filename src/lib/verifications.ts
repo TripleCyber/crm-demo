@@ -69,6 +69,13 @@ export interface VerificationRecord {
   readonly channel: 'qr' | 'phone';
   readonly issuerDid: string;
   readonly authorizationRequestUrl: string;
+  /**
+   * El enlace de mostrador que devolvió te-api al crear la petición
+   * (`tripleenable://requests/…`). Es lo que se dibuja como QR, y se guarda
+   * —en vez de rehacerse— porque lo construye te-api y no nos toca a nosotros
+   * fabricarlo. Nulo en la rama del teléfono y si el canal QR está apagado.
+   */
+  readonly counterLink: string | null;
   readonly requestUri: string;
   readonly expiresAt: string;
   readonly agentId: string;
@@ -119,6 +126,7 @@ interface VerificationRow extends Record<string, unknown> {
   channel: 'qr' | 'phone';
   issuer_did: string;
   authorization_request_url: string;
+  counter_link: string | null;
   request_uri: string;
   expires_at: Date;
   agent_id: string;
@@ -201,6 +209,7 @@ const SELECT_COLUMNS = `
   v.channel,
   v.issuer_did,
   v.authorization_request_url,
+  v.counter_link,
   v.request_uri,
   v.expires_at,
   v.agent_id,
@@ -226,6 +235,7 @@ function toRecord(row: VerificationRow): VerificationRecord {
     channel: row.channel,
     issuerDid: row.issuer_did,
     authorizationRequestUrl: row.authorization_request_url,
+    counterLink: row.counter_link,
     requestUri: row.request_uri,
     expiresAt: row.expires_at.toISOString(),
     agentId: row.agent_id,
@@ -252,6 +262,7 @@ export interface RecordVerificationInput {
   readonly channel: 'qr' | 'phone';
   readonly issuerDid: string;
   readonly authorizationRequestUrl: string;
+  readonly counterLink: string | null;
   readonly requestUri: string;
   readonly expiresAt: string;
   readonly agentId: string;
@@ -275,9 +286,9 @@ export async function recordVerification(input: RecordVerificationInput): Promis
   await query(
     `insert into verification
        (org_id, external_id, presentation_id, type_key, requested_claims, channel,
-        issuer_did, authorization_request_url, request_uri, expires_at,
+        issuer_did, authorization_request_url, counter_link, request_uri, expires_at,
         agent_id, agent_name, actor, requested_at, wakeup_id, wakeup_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      on conflict (org_id, presentation_id) do nothing`,
     [
       input.orgId,
@@ -288,6 +299,7 @@ export async function recordVerification(input: RecordVerificationInput): Promis
       input.channel,
       input.issuerDid,
       input.authorizationRequestUrl,
+      input.counterLink,
       input.requestUri,
       input.expiresAt,
       input.agentId,

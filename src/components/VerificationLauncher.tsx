@@ -50,28 +50,38 @@ import type { Translator } from '@/i18n/translate';
  * ## Dos canales dentro del nivel 1, porque son dos situaciones distintas
  *
  * - **Por teléfono.** El agente tiene al titular al aparato y necesita que le
- *   suene el móvil: el QR ahí no sirve de nada.
+ *   suene el móvil.
  * - **En el mostrador.** El titular está delante y mira esta misma pantalla.
  *
- * El canal cambia **cómo se avisa**, no qué se pide ni qué se comprueba.
+ * El canal cambia **cómo se avisa**, no qué se pide ni qué se comprueba. Desde
+ * que las dos ramas componen la misma petición del marco (`bank.call.v2`), lo
+ * que llega al móvil del titular es **la misma pantalla** en los dos casos: el
+ * canal ya no elige protocolo, sólo dice dónde está el cliente.
  *
- * ## De qué va la llamada: siempre a la vista, pero sólo manda en el teléfono
+ * **El mostrador sigue pintando QR**, y ahora es un QR del marco: lo que
+ * codifica es el `link` que devuelve `POST /v1/requests`
+ * —`tripleenable://requests/…`—, no un `openid4vp://` suelto. El enlace lo
+ * construye te-api y viaja en la respuesta; aquí no se fabrica, que es la única
+ * forma de que no se quede viejo cuando cambie el formato. Si te-api trae el
+ * canal QR apagado contesta `link: null` y esta rama cae al mismo aviso que la
+ * del teléfono. Ver la cabecera de `api/credentials/present`.
  *
- * `POST /v1/b2b/wakeups` **exige** `call.subject` desde la tarea 4.0 del marco
- * de peticiones, y lo pinta de héroe: es lo más grande de la pantalla del
- * titular y la respuesta a la única pregunta que se hace alguien a quien acaban
- * de llamar — «¿esto de qué es?». No es un campo administrativo: es lo que le
- * deja decidir si aprueba.
+ * ## De qué va la llamada: siempre a la vista, y manda en los dos botones
  *
- * El campo se enseña **siempre**, y no sólo al ir a pulsar el botón del
- * teléfono, porque en esta pantalla **el canal no se elige antes: el canal es el
- * botón**. Un campo que apareciera al pulsar obligaría a pulsar, leer, escribir
- * y volver a pulsar con el cliente esperando al aparato. Lo que sí es
- * condicional es a quién gobierna: **deshabilita el botón del teléfono y no toca
- * el del QR**, porque el QR no llama al timbre y por tanto no pinta ningún
- * asunto en ninguna parte. Escribirlo y mandarlo por QR sería escribir un dato
- * para tirarlo, así que ni se manda — y si llegara, la ruta lo rechaza en vez de
- * ignorarlo.
+ * `bank.call.v2` declara `subject` **obligatorio y de héroe**: es lo más grande
+ * de la pantalla del titular y la respuesta a la única pregunta que se hace
+ * alguien a quien acaban de llamar — «¿esto de qué es?». No es un campo
+ * administrativo: es lo que le deja decidir si aprueba.
+ *
+ * El campo se enseña **siempre**, y no sólo al ir a pulsar, porque en esta
+ * pantalla **el canal no se elige antes: el canal es el botón**. Un campo que
+ * apareciera al pulsar obligaría a pulsar, leer, escribir y volver a pulsar con
+ * el cliente esperando al aparato.
+ *
+ * Lo que cambió es a quién gobierna: **deshabilita los dos botones**. Antes sólo
+ * tocaba el del teléfono, porque el QR no llegaba a pintar ninguna pantalla del
+ * marco donde pudiera salir el asunto; ahora las dos ramas lo necesitan para
+ * componer la plantilla.
  *
  * ## `case` sí, `branch` no
  *
@@ -215,20 +225,17 @@ export function VerificationLauncher({
           type,
           claims: selected,
           channel,
-          // Sólo con el canal que lo pinta. Ver la cabecera: por QR no hay
-          // timbre, así que no hay pantalla donde salga el asunto, y la ruta
-          // rechaza el que llegue de más en vez de descartarlo en silencio.
+          // **En los dos canales**, y eso es lo que cambió. El asunto ya no es
+          // una propiedad de cómo se avisa: es el héroe obligatorio de
+          // `bank.call.v2`, la plantilla que ahora componen las dos ramas de la
+          // ruta. Sin él la petición no se puede pintar y te-api la rechaza.
           //
           // `case` se omite si está en blanco, no se manda vacío: te-api lo
           // declara `.min(1)` dentro de un objeto `.strict()`.
-          ...(channel === 'phone'
-            ? {
-                call: {
-                  subject,
-                  ...(reference === '' ? {} : { case: reference }),
-                },
-              }
-            : {}),
+          call: {
+            subject,
+            ...(reference === '' ? {} : { case: reference }),
+          },
         }),
       });
       const payload = (await response.json()) as { presentationId?: string; error?: string };
@@ -366,10 +373,11 @@ export function VerificationLauncher({
               {/*
                 Los dos botones, y en este orden. El de arriba es el de la llamada de
                 teléfono, que es la situación normal de un agente con auriculares
-                puestos; el QR sólo sirve si el cliente está en el mostrador mirando
-                esta misma pantalla. Rotularlos por la SITUACIÓN y no por la tecnología
-                —«está al teléfono» en vez de «push»— es lo que hace que no haya que
-                elegir bien para acertar.
+                puestos; el otro es el del cliente que está en el mostrador.
+                Rotularlos por la SITUACIÓN y no por la tecnología —«está al
+                teléfono» en vez de «push»— es lo que hace que no haya que elegir
+                bien para acertar, y es lo que deja que los dos acaben entregando
+                la misma petición del marco sin que el rótulo mienta.
               */}
               {/*
                 Y si no hay cartera a la que avisar, se dice **antes** de
@@ -387,9 +395,11 @@ export function VerificationLauncher({
                 </p>
               )}
               {/*
-                DE QUÉ VA LA LLAMADA. Va en esta tarjeta y no en la de arriba
-                porque el asunto es una propiedad de CÓMO SE AVISA —sólo viaja
-                en el timbre— y no de qué se pide. Ver la cabecera.
+                DE QUÉ VA LA LLAMADA. Va en esta tarjeta —la del aviso— y no en
+                la de arriba porque lo que se pide arriba son ATRIBUTOS de una
+                credencial, y esto no lo es: es lo que la persona lee para
+                decidir si aprueba. Viaja en la petición del marco por los dos
+                canales, así que gobierna los dos botones. Ver la cabecera.
               */}
               <label className="field">
                 <span>{t('verify.callSubject')}</span>
@@ -425,11 +435,11 @@ export function VerificationLauncher({
                     busy !== undefined ||
                     type === '' ||
                     selected.length === 0 ||
-                    // Sin asunto no se puede tocar el timbre: te-api lo exige y
-                    // contestaría `400`. Se para en el botón y no en la
-                    // respuesta porque el agente está al teléfono, y un error
-                    // que llega después de pulsar es un error que llega tarde.
-                    // El botón del QR no lo mira: ese canal no lleva asunto.
+                    // Sin asunto no se puede componer la petición: es el héroe
+                    // obligatorio de `bank.call.v2` y te-api contestaría `400`.
+                    // Se para en el botón y no en la respuesta porque el agente
+                    // está al teléfono, y un error que llega después de pulsar
+                    // es un error que llega tarde.
                     callSubject.trim() === '' ||
                     // No es un aviso que se pueda ignorar pulsando igual: el
                     // botón no puede cumplir lo que su rótulo promete.
@@ -440,13 +450,35 @@ export function VerificationLauncher({
                     ? t('verify.alertPhoneNoWallet')
                     : t(busy === 'phone' ? 'verify.alertPhoneBusy' : 'verify.alertPhone')}
                 </button>
+                {/*
+                  **Las mismas condiciones que el de al lado, y antes no.** Los
+                  dos botones componen ahora la misma petición del marco, así
+                  que lo que impide a uno cumplir su rótulo impide al otro lo
+                  mismo: sin asunto no hay héroe que pintar, y sin cartera
+                  vinculada te-api contesta `404` —«sin titular para lo que se
+                  nombró»— en vez de entregar nada.
+
+                  Cuando el QR pintaba un `openid4vp://` ninguna de las dos cosas
+                  le hacía falta: el enlace no llevaba asunto y no necesitaba
+                  vínculo porque no se entregaba a nadie, se enseñaba. Ése era
+                  justamente el camino que dejaba al titular en la pantalla
+                  genérica de presentación.
+                */}
                 <button
                   type="button"
                   className="secondary"
                   onClick={() => void startRequest('qr')}
-                  disabled={busy !== undefined || type === '' || selected.length === 0}
+                  disabled={
+                    busy !== undefined ||
+                    type === '' ||
+                    selected.length === 0 ||
+                    callSubject.trim() === '' ||
+                    walletLinked === false
+                  }
                 >
-                  {t(busy === 'qr' ? 'verify.alertQrBusy' : 'verify.alertQr')}
+                  {walletLinked === false
+                    ? t('verify.alertPhoneNoWallet')
+                    : t(busy === 'qr' ? 'verify.alertQrBusy' : 'verify.alertQr')}
                 </button>
               </div>
 
