@@ -77,13 +77,35 @@ import { listWebhookEventsSince, type WebhookEventRecord } from '@/lib/webhook-e
  * La sesión además se anota en el diario del banco: el desenlace vuelve por el
  * webhook `presentation.settled`, que actualiza la fila **por
  * `presentationId`**. Sin fila, el sí o el no del titular no llega nunca a la
- * consola — y es también lo único que permite emparejar el evento recibido con
- * la petición mandada, porque el evento no lleva `requestId`.
+ * consola.
+ *
+ * ## Y ahora la fila también anota la petición
+ *
+ * Aquí decía que el emparejamiento sólo podía ser por `presentationId` «porque
+ * el evento no lleva `requestId`». Ya lo lleva: `request.answered` existe y su
+ * correlación principal es justamente ese identificador. Así que la fila lo
+ * guarda —lo devuelve `POST /v1/requests`, o sea que estaba en la mano y se
+ * tiraba— y el receptor puede cerrarla por cualquiera de los dos.
+ *
+ * Lo que sigue sin cambiar es la mitad de identidad: una ceremonia que firma
+ * con la identidad de la cartera **no abre sesión de verificador**, así que esta
+ * acción no le anota fila ninguna y no hay nada que cerrar. Su respuesta llega
+ * igual y se ve igual —en el diario de webhooks, emparejada por `requestId`—;
+ * lo que no tiene es una fila en el diario de comprobaciones, que es un diario
+ * de presentaciones y no de peticiones.
  */
 
 /** Lo que la pantalla pinta después de pulsar. */
 export interface SendCeremonyResult {
   readonly requestId?: string;
+  /**
+   * **El expediente que acuñó esta consola**, leído de lo que se mandó.
+   *
+   * Va al lado del `requestId` en la pantalla y ése es todo su trabajo: uno lo
+   * emite te-api y nombra la ceremonia, el otro lo emite esta organización y
+   * nombra su caso. Ver `mintAskerReference`.
+   */
+  readonly askerReference?: string;
   readonly expiresAt?: string;
   /** La sesión del verificador, cuando el caso se firma con credencial. */
   readonly presentationId?: string;
@@ -106,9 +128,11 @@ export interface SendCeremonyResult {
   /**
    * Cuándo se mandó, según este servidor.
    *
-   * De aquí sale el corte de «lo recibido»: no hay forma de emparejar un evento
-   * con una petición del marco —te-api no manda `requestId` en ningún evento—
-   * así que lo que se puede afirmar es «esto ha llegado desde que pulsaste».
+   * De aquí sale el corte de «lo recibido»: **qué ha entrado por el canal desde
+   * que pulsaste**. Sigue siendo una hora y no un identificador porque lo que la
+   * pantalla enseña ahí es el tráfico entero, no sólo la respuesta a esto —quien
+   * integra quiere ver lo que llega—. Emparejar sí se puede ya, y lo hace la
+   * pantalla comparando el `requestId` de arriba con el del cuerpo.
    */
   readonly sentAt?: string;
   readonly error?: string;
@@ -206,6 +230,15 @@ export async function sendCeremonyAction(
       orgId: session.organization.orgId,
       externalId: customer.externalId,
       presentationId: presentation.presentationId,
+      // **La petición del marco, anotada.** Sale del mismo intercambio de dos
+      // líneas más arriba, así que no cuesta nada, y es lo que permite que
+      // `request.answered` encuentre esta fila: ese evento no siempre puede
+      // nombrar la presentación. Ver `db/013_request_answered.sql`.
+      requestId: asked.result.requestId,
+      // **El expediente que salió por el cable**, leído de lo que se mandó y no
+      // acuñado otra vez aquí: una segunda tirada daría un número distinto del
+      // que lleva la petición, y entonces el evento no encontraría la fila.
+      askerReference: asked.sent.body.reference,
       typeKey: credentialType,
       requestedClaims: claims,
       // No se pinta QR: se le pregunta al teléfono que ya tiene en el bolsillo.
@@ -251,6 +284,9 @@ function exchangeToResult(
 ): SendCeremonyResult {
   return {
     requestId: exchange.result.requestId,
+    // De `sent` y no de una segunda tirada: es el número que lleva la petición
+    // que acaba de salir, y es el que va a volver en el evento.
+    askerReference: exchange.sent.body.reference,
     expiresAt: exchange.result.expiresAt,
     status: exchange.result.status,
     template: exchange.result.template,
@@ -344,20 +380,26 @@ function readDraft(value: unknown): readonly CeremonyDraftField[] | null {
  * comprobada; quien la mira para enseñar la ceremonia quiere saber si el titular
  * dijo que sí.
  *
- * ## No hay temporizador **en ésta**, y no es un olvido
+ * ## El temporizador que ahora sí tiene, y con qué freno
  *
- * La llama el botón de comprobar y nada más. Los eventos llegan solos por el
- * webhook y se archivan lleguen o no con alguien mirando; la pantalla de
- * `/events` los enseña todos. Un temporizador aquí traería el diario entero de
- * la organización cada tres segundos para responder a una pregunta que ya
- * contesta la consulta de al lado, que sí lee una sola fila.
+ * Aquí decía que no había ninguno y que un barrido cada tres segundos era caro
+ * para una pregunta que ya contestaba la fila de al lado. Eso valía mientras
+ * **ninguna** respuesta se pudiera reconocer en el diario: el ciclo no habría
+ * sabido cuándo parar, y para media ceremonia —la que firma con identidad, que
+ * no tiene fila— tampoco había nada que enseñar.
  *
- * ## Y por qué el corte es una hora y no un identificador
+ * Con `request.answered` las dos cosas cambian: la respuesta a esta petición se
+ * reconoce por su `requestId`, así que el ciclo **se apaga en cuanto llega**, y
+ * para una ceremonia de identidad éste es el único canal que hay. Quien decide
+ * cuándo parar es la pantalla y está escrito allí; esta función sigue siendo una
+ * lectura suelta y sin estado.
  *
- * Porque no hay identificador. Ningún evento de te-api lleva `requestId`: los
- * dos que existen son `presentation.settled` —que se identifica por
- * `presentationId`— y `webhook.test`. Ver `lib/webhook-events.ts`, donde está
- * escrito el hueco entero y qué haría falta para cerrarlo.
+ * ## Y por qué el corte sigue siendo una hora
+ *
+ * Ya no por falta de identificador. Porque lo que esta lectura enseña es **el
+ * canal**: todo lo que ha entrado desde que se pulsó, sea de esta petición o no.
+ * Filtrar por `requestId` aquí escondería el resto del tráfico justo a quien
+ * abre este panel para verlo. Ver `lib/webhook-events.ts`.
  */
 export interface CeremonyEventsResult {
   readonly events?: readonly WebhookEventRecord[];
@@ -416,15 +458,21 @@ export async function readCeremonyEventsAction(since: string): Promise<CeremonyE
  * campo que falta es el evento, en te-api, nunca una llamada de vuelta desde
  * aquí»— vale igual para esta pantalla.
  *
- * ## Lo que esto NO puede contestar, y por qué no se disimula
+ * ## Lo que esto NO puede contestar, y por dónde se contesta ahora
  *
- * Una ceremonia que firma con **la identidad de la cartera** no tiene fila que
- * leer: no abre sesión de verificador, así que no hay `presentationId`, y te-api
- * no publica hoy **ni evento ni ruta B2B** con el desenlace de una petición del
- * marco —lo comprobado en su código: los dos únicos eventos son
- * `presentation.settled` y `webhook.test`, y no existe ningún `GET
- * /v1/requests/:id` ni `/v1/b2b/requests`—. La pantalla dice eso con todas las
- * letras en vez de dejar un hueco girando.
+ * Una ceremonia que firma con **la identidad de la cartera** sigue sin tener
+ * fila que leer: no abre sesión de verificador, así que no hay `presentationId`
+ * y esta lectura no tiene por dónde empezar.
+ *
+ * Lo que ha dejado de ser cierto es la otra mitad de lo que aquí decía —«te-api
+ * no publica nada sobre el desenlace de una petición del marco»—. Publica
+ * `request.answered`, y ahí está la respuesta de esa ceremonia con su
+ * `requestId` dentro. Sigue sin haber ruta B2B que lea una petición, y sigue sin
+ * hacer falta: el evento llega solo y se archiva.
+ *
+ * Así que la pantalla ya no se disculpa: para esas ceremonias enseña la
+ * respuesta que entró por el canal, emparejada por identificador, y dice de
+ * dónde sale. La lectura que falta se nombra; no se rellena con un «esperando».
  *
  * `null` en `found` es el tercer caso y hay que separarlo del error: la fila
  * puede tardar en existir si el navegador pregunta antes de que la escritura

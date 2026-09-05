@@ -6,10 +6,17 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslator } from '@/i18n/client';
 import { formatTimestamp } from '@/lib/format';
 import type { CeremonyCase } from '@/lib/ceremony-catalogue';
+import {
+  describeAnsweredCeremony,
+  describeRequestOutcome,
+  readAnsweredEvent,
+  type AnsweredRequest,
+} from '@/lib/request-answered';
 import { describeVerification } from '@/lib/verification-status';
 import {
   buildCeremonyHttpRequest,
   formatCeremonyHttpRequest,
+  PENDING_ASKER_REFERENCE,
   PENDING_REQUEST_URI,
   type CeremonyHttpRequest,
 } from '@/lib/ceremony-request';
@@ -214,9 +221,16 @@ export function CeremonyComposer({
    * mandarlo. Por eso el bloque de abajo no puede describir una petición que ya
    * no existe — que es el fallo silencioso de toda pantalla que documenta.
    *
-   * Los dos huecos que no se pueden saber antes de mandar van con su marcador:
-   * el `requestUri` sale de la sesión del verificador, que se abre un instante
-   * antes, y por eso sólo aparece en la mitad de credencial.
+   * Los huecos que no se pueden saber antes de mandar van con su marcador: el
+   * `requestUri` sale de la sesión del verificador, que se abre un instante
+   * antes, y por eso sólo aparece en la mitad de credencial; y el `reference` lo
+   * acuña el servidor al mandar —uno por envío, ver `PENDING_ASKER_REFERENCE`—,
+   * así que aparece en las catorce.
+   *
+   * El marcador del expediente además **enseña algo**: la clave está en el
+   * cuerpo, con su nombre, y lo que dice el hueco es que ese número lo pone
+   * quien pregunta. Es la mitad de la lección; la otra es ver, después de
+   * mandar, el expediente propio al lado del `requestId` de te-api.
    */
   const planned = useMemo<CeremonyHttpRequest>(
     () =>
@@ -230,6 +244,7 @@ export function CeremonyComposer({
               requestUri: PENDING_REQUEST_URI,
             }
           : {}),
+        reference: PENDING_ASKER_REFERENCE,
         template: ceremony.template,
         fields,
       }),
@@ -976,8 +991,20 @@ function Exchange({
         <h3 className="ceremony-heading">{t('ceremonies.sentTitle')}</h3>
         <p>{t('ceremonies.sent')}</p>
         <dl className="facts">
+          {/*
+            **Los dos identificadores, uno debajo del otro y rotulados por su
+            dueño.** Es la lección entera de esta pareja: el de arriba lo emite
+            te-api y nombra la ceremonia; el de abajo lo emite esta organización
+            y nombra su caso. Quien integra tiene que salir de esta pantalla
+            sabiendo cuál va a poder buscar en su propio sistema.
+          */}
           <dt>{t('ceremonies.sentRequestId')}</dt>
           <dd className="mono">{result.requestId}</dd>
+          <dt>{t('ceremonies.sentReference')}</dt>
+          <dd className="mono">
+            {result.askerReference ?? t('common.dash')}
+            <span className="sub">{t('ceremonies.sentReferenceNote')}</span>
+          </dd>
           <dt>{t('ceremonies.sentStatus')}</dt>
           <dd className="mono">{result.status ?? t('common.dash')}</dd>
           <dt>{t('ceremonies.sentTemplate')}</dt>
@@ -1030,6 +1057,7 @@ function Exchange({
       */}
       <Received
         key={result.requestId}
+        requestId={result.requestId}
         presentationId={result.presentationId}
         expiresAt={result.expiresAt}
         sentAt={result.sentAt}
@@ -1070,21 +1098,37 @@ function Exchange({
  * `VerificationTracker`.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  Y LA MITAD QUE NO SE PUEDE CONTESTAR SE DICE, NO SE DISIMULA
+ *  LA MITAD QUE NO SE PODÍA CONTESTAR YA SE CONTESTA, Y POR OTRA PUERTA
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Una ceremonia que firma con la identidad de la cartera **no tiene fila que
- * leer**: no abre sesión de verificador, así que no hay `presentationId`. Y
- * te-api no publica hoy nada sobre el desenlace de una petición del marco — ni
- * evento (`presentation.settled` y `webhook.test` son los dos que existen) ni
- * ruta B2B (no hay `GET /v1/requests/:id`). Comprobado en su código, no supuesto.
+ * Aquí decía —y era verdad, y estaba comprobado en su código— que una ceremonia
+ * que firma con la identidad de la cartera no tenía nada que enseñar: no abre
+ * sesión de verificador, así que no hay `presentationId` ni fila que leer, y
+ * te-api no publicaba **nada** sobre el desenlace de una petición del marco.
  *
- * Así que en ese caso no se pinta un «esperando» que no espera a nada: se dice
- * qué falta y dónde se arregla, y el botón de los eventos se queda —enseña lo
- * que haya entrado por el canal, que sigue siendo información— rotulado como lo
- * que es.
+ * Ya publica `request.answered`. Así que la lectura de la fila sigue sin existir
+ * para esas ceremonias —y se sigue diciendo, porque es una fila que no hay— pero
+ * la respuesta sí llega, y llega por el canal de abajo con el `requestId`
+ * dentro. Las consecuencias, que son tres:
+ *
+ *  1. **El canal deja de ser sólo evidencia.** Para una ceremonia de identidad
+ *     es la única respuesta que hay, así que se lee sola y no detrás de un
+ *     botón: dejarla ahí era exactamente lo que el dueño vio —pulsas, no hay
+ *     nada, y parece que no funciona—.
+ *  2. **Y se puede parar.** Antes un temporizador aquí no habría sabido cuándo,
+ *     porque ningún evento nombraba la petición. Ahora la respuesta a ésta se
+ *     reconoce por su identificador y el ciclo se apaga en cuanto entra (o al
+ *     vencer el plazo, con su margen).
+ *  3. **El emparejamiento es de verdad y ya no es sólo por sesión.** Una fila se
+ *     marca como «ésta es la respuesta» si su `requestId` es el de esta petición
+ *     —lo que vale para las catorce plantillas— o si su `presentationId` es el de
+ *     esta sesión, que es lo que ya hacía.
+ *
+ * El botón se queda. No sobra: relee a mano cuando el ciclo ya se ha parado, y
+ * es lo que dice en voz alta que el fallo fue de la consulta y no del titular.
  */
 function Received({
+  requestId,
   presentationId,
   expiresAt,
   sentAt,
@@ -1092,6 +1136,8 @@ function Received({
   readOutcome,
   readEvents,
 }: {
+  /** La petición del marco. Es lo que empareja `request.answered`. */
+  requestId: string | undefined;
   /** La sesión del verificador. `undefined` = ceremonia de identidad. */
   presentationId: string | undefined;
   /** El plazo de te-api: separa «esperando» de «sin respuesta». */
@@ -1110,6 +1156,29 @@ function Received({
   const [eventsError, setEventsError] = useState<string | undefined>(undefined);
 
   const deadline = expiresAt === undefined ? Number.NaN : new Date(expiresAt).getTime();
+
+  /*
+   * **La respuesta a ESTA petición**, si ya ha entrado por el canal.
+   *
+   * Se busca entre lo que haya llegado desde el corte y se compara por
+   * `requestId`, que es lo que el evento trae siempre. Lo demás que haya entrado
+   * se sigue enseñando —es lo que llegó— pero sin decir que es la respuesta.
+   */
+  const answer = useMemo<AnsweredRequest | null>(() => {
+    if (requestId === undefined || events === null) return null;
+    for (const event of events) {
+      const parsed = readAnsweredEvent(event.payload);
+      if (parsed !== null && parsed.requestId === requestId) return parsed;
+    }
+    return null;
+  }, [events, requestId]);
+
+  /*
+   * Booleano y no el objeto, por lo mismo que `settled` de aquí abajo: es lo que
+   * entra en las dependencias del ciclo del canal, y con el objeto cada
+   * respuesta remontaría el temporizador y volvería a preguntar de inmediato.
+   */
+  const arrived = answer !== null;
 
   /*
    * **Ya hay desenlace**, o sea que no hay nada más que preguntar.
@@ -1169,13 +1238,66 @@ function Received({
     // `t` tampoco: `useTranslator` lo memoriza por idioma.
   }, [presentationId, settled, deadline, readOutcome, t]);
 
+  /*
+   * **El canal, releído solo hasta que entre la respuesta de esta petición.**
+   *
+   * Aquí no había ciclo y estaba argumentado: ningún evento nombraba la
+   * petición, así que un temporizador no habría sabido cuándo parar y habría
+   * traído el diario de la organización cada tres segundos para siempre.
+   * `request.answered` quita ese argumento —la respuesta se reconoce— y añade
+   * uno a favor: en una ceremonia de identidad **esto es lo único que hay**, y
+   * detrás de un botón se lee como que no funciona.
+   *
+   * Los mismos tres segundos que el desenlace, y las mismas dos condiciones de
+   * parada: la respuesta a esta petición, o el plazo con su margen. Tampoco toca
+   * te-api: pregunta al servidor de esta organización, que contesta de su base.
+   */
+  useEffect(() => {
+    // Sin petición no hay nada que reconocer, así que tampoco hay ciclo: el
+    // botón sigue estando para mirar el canal a mano.
+    if (requestId === undefined) return;
+    if (arrived) return;
+
+    let stopped = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    const stop = () => {
+      stopped = true;
+      if (timer !== undefined) clearInterval(timer);
+    };
+
+    const read = async () => {
+      if (!Number.isNaN(deadline) && Date.now() > deadline + OUTCOME_GRACE_MS) {
+        stop();
+        return;
+      }
+      try {
+        const reply = await readEvents(sentAt ?? new Date().toISOString());
+        if (stopped) return;
+        setEventsError(reply.error);
+        setEvents(reply.events ?? []);
+      } catch {
+        // Un corte suelto **no se pinta desde el ciclo**, al revés que en el
+        // desenlace. Aquí un aviso que aparece y desaparece cada tres segundos
+        // no informa de nada; quien quiera saber si la consulta falla tiene el
+        // botón, que sí lo dice y para eso se ha quedado.
+      }
+    };
+
+    void read();
+    if (!stopped) timer = setInterval(() => void read(), OUTCOME_INTERVAL_MS);
+    return stop;
+    // `readEvents` es la referencia de una acción de servidor: no cambia entre
+    // repintados. `sentAt` lo selló el servidor al mandar y tampoco.
+  }, [requestId, arrived, deadline, sentAt, readEvents]);
+
   const look = async () => {
     setEventsBusy(true);
     setEventsError(undefined);
     try {
-      const answer = await readEvents(sentAt ?? new Date().toISOString());
-      setEventsError(answer.error);
-      setEvents(answer.events ?? []);
+      const reply = await readEvents(sentAt ?? new Date().toISOString());
+      setEventsError(reply.error);
+      setEvents(reply.events ?? []);
     } catch {
       // Que la consulta falle no es «no ha llegado nada»: son dos cosas
       // distintas y decir la primera por la segunda es mentir en la mitad de la
@@ -1191,11 +1313,29 @@ function Received({
     <div className="ceremony-half">
       <h3 className="ceremony-heading">{t('ceremonies.receivedTitle')}</h3>
 
-      {presentationId === undefined ? (
-        <p className="ceremony-hint">{t('ceremonies.receivedNoEvent')}</p>
-      ) : (
-        <Outcome outcome={outcome} expiresAt={expiresAt} />
-      )}
+      {/*
+        **Primero lo que contestó el titular, venga de donde venga.**
+
+        Y viene de dos sitios que contestan la misma pregunta con distinto
+        alcance, así que hay un orden y no es arbitrario:
+
+         · `answer` es el evento de **esta petición**, y vale para las catorce
+           plantillas: firme con credencial o con la identidad de la cartera. Es
+           lo que faltaba, así que va primero.
+         · `Outcome` es la fila de `verification`, que sólo existe cuando hubo
+           sesión de verificador — y entonces enseña más: los claims que el
+           titular decidió mostrar y las dos horas del recibo. Se queda debajo
+           porque es la mitad detallada, no la que resume.
+
+        Una ceremonia de identidad sin respuesta todavía no pinta ni una cosa ni
+        la otra: dice qué se está esperando y por dónde va a llegar, que es
+        distinto de un hueco girando.
+      */}
+      {answer !== null && <Answer answer={answer} />}
+
+      {presentationId === undefined
+        ? answer === null && <p className="ceremony-hint">{t('ceremonies.receivedNoRow')}</p>
+        : <Outcome outcome={outcome} expiresAt={expiresAt} />}
 
       {/*
         El canal, plegado debajo del desenlace y rotulado como lo que es. Antes
@@ -1217,11 +1357,21 @@ function Received({
       {events !== null && events.length > 0 && (
         <ul className="ceremony-events">
           {events.map((event) => {
-            // La pareja de verdad: el evento que habla de **esta** sesión de
-            // verificador. Lo demás que haya entrado desde el corte se enseña
-            // igual —es lo que llegó— pero sin decir que es la respuesta.
-            const mine =
+            /*
+             * La pareja de verdad, ahora por dos caminos.
+             *
+             * `requestId` es el que vale para las catorce plantillas y el que
+             * cubre la mitad que antes no se podía emparejar; `presentationId`
+             * es el de siempre y sigue siendo el de `presentation.settled`. Lo
+             * demás que haya entrado desde el corte se enseña igual —es lo que
+             * llegó— pero sin decir que es la respuesta.
+             */
+            const parsed = readAnsweredEvent(event.payload);
+            const byRequest =
+              parsed !== null && requestId !== undefined && parsed.requestId === requestId;
+            const bySession =
               presentationId !== undefined && event.presentationId === presentationId;
+            const mine = byRequest || bySession;
             return (
               <li key={event.eventId} className={mine ? 'match' : undefined}>
                 <div className="ceremony-event-head">
@@ -1242,7 +1392,16 @@ function Received({
                     </span>
                   )}
                 </div>
-                {mine && <p className="ceremony-event-match">{t('ceremonies.receivedMatch')}</p>}
+                {/*
+                  Dos frases y no una: «la misma sesión de verificador» era
+                  verdad cuando ése era el único emparejamiento posible, y sería
+                  falsa en una ceremonia de identidad, que no tiene ninguna.
+                */}
+                {mine && (
+                  <p className="ceremony-event-match">
+                    {t(byRequest ? 'ceremonies.receivedMatchRequest' : 'ceremonies.receivedMatch')}
+                  </p>
+                )}
                 <details className="tech">
                   <summary>{t('common.technicalDetail')}</summary>
                   <pre>{JSON.stringify(event.payload, null, 2)}</pre>
@@ -1265,6 +1424,89 @@ function Received({
         <Link href="/events">{t('ceremonies.eventsLink')}</Link>
       </p>
     </div>
+  );
+}
+
+/**
+ * **Lo que contestó el titular a esta petición.** La mitad que faltaba.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ESTO NO ES EL DESENLACE DE UNA PRESENTACIÓN, Y POR ESO ES UN COMPONENTE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `Outcome`, aquí abajo, lee la fila de `verification`: existe cuando la
+ * ceremonia abrió sesión de verificador y enseña lo que trae el recibo. Esto lee
+ * el evento `request.answered`, que habla de **la petición** y llega para las
+ * catorce plantillas del catálogo, con sesión o sin ella.
+ *
+ * Las dos pueden estar a la vez y no se contradicen: una dice que el titular
+ * aprobó la petición, la otra qué enseñó al hacerlo. Colapsarlas en un solo
+ * bloque obligaría a elegir una fuente, y la que sobrevive deja media ceremonia
+ * sin contestar.
+ *
+ * El color sale de `describeRequestOutcome`, que es el mismo reparto que el
+ * resto de la consola: **rojo sólo `not_me`**. Un titular que lee y dice que no
+ * pintado del color de una suplantación haría que el agente cortase la llamada
+ * por una respuesta normal.
+ */
+function Answer({ answer }: { answer: AnsweredRequest }) {
+  const t = useTranslator();
+  const verdict = describeRequestOutcome(t, answer.outcome);
+
+  return (
+    <>
+      <p className="ceremony-outcome">
+        <span className={`pill ${verdict.tone}`}>
+          <span className="pill-mark" aria-hidden="true" />
+          {verdict.label}
+        </span>
+        <span className="ceremony-outcome-detail">{verdict.detail}</span>
+      </p>
+
+      <dl className="facts">
+        <dt>{t('ceremonies.answerCeremony')}</dt>
+        <dd>
+          {describeAnsweredCeremony(t, answer)}
+          <span className="mono sub">
+            {answer.template ?? t('common.dash')}
+            {answer.templateVersion !== null && ` · v${String(answer.templateVersion)}`}
+            {answer.kind !== null && ` · ${answer.kind}`}
+          </span>
+        </dd>
+
+        {/*
+          Cuándo contestó **el titular**, según el reloj de su teléfono. La otra
+          hora —cuándo entró el evento aquí— está en la fila del canal, debajo, y
+          la distancia entre las dos es justo lo que demuestra que esto vuelve
+          solo. Mismo criterio que `outcomeSignedAt` en la mitad de credencial.
+        */}
+        {answer.answeredAt !== null && (
+          <>
+            <dt>{t('ceremonies.answerAnsweredAt')}</dt>
+            <dd>
+              {formatTimestamp(answer.answeredAt, t.locale)}
+              <span className="mono sub">{answer.answeredAt}</span>
+            </dd>
+          </>
+        )}
+
+        {/*
+          **Los dos identificadores otra vez, ahora de vuelta.** Es lo que cierra
+          la demostración: los mismos dos que se enseñaron al mandar, devueltos
+          por te-api dentro de un cuerpo firmado. Quien integra compara la línea
+          de arriba con la de la mitad de al lado y ve que cuadran.
+
+          El expediente puede venir vacío y no se disimula: un socio que no
+          mandara ninguno recibe su evento igual, y entonces lo que ata la
+          respuesta es el identificador de te-api y sólo él.
+        */}
+        <dt>{t('ceremonies.answerRequestId')}</dt>
+        <dd className="mono">{answer.requestId}</dd>
+
+        <dt>{t('ceremonies.answerReference')}</dt>
+        <dd className="mono">{answer.reference ?? t('common.dash')}</dd>
+      </dl>
+    </>
   );
 }
 

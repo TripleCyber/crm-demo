@@ -63,6 +63,30 @@ export interface PresentationProof {
 
 export interface VerificationRecord {
   readonly presentationId: string;
+  /**
+   * **La petición del marco que abrió esta ceremonia**, cuando esta consola la
+   * creó ella misma.
+   *
+   * Es lo que empareja el evento `request.answered`, que en la mayoría del
+   * catálogo no puede nombrar ninguna presentación: una ceremonia que firma con
+   * la identidad de la cartera no abre sesión de verificador. Se anota al crear
+   * la fila, porque `POST /v1/requests` lo devuelve en el mismo intercambio.
+   *
+   * `null` en la rama del timbre —allí la petición la compone te-api por dentro
+   * y su identificador no vuelve— y en las filas anteriores a
+   * `db/013_request_answered.sql`. Ésas se siguen cerrando por `presentationId`.
+   */
+  readonly requestId: string | null;
+  /**
+   * **El expediente que acuñó esta consola** al mandar la petición, y que te-api
+   * devuelve verbatim en `request.answered`.
+   *
+   * Es el emparejamiento preferido del receptor porque es el único que esta
+   * organización controla de punta a punta: existe desde antes de que salga la
+   * llamada, mientras que `requestId` depende de que la respuesta de te-api
+   * llegara. Nulo en lo mismo que aquél. Ver `mintAskerReference`.
+   */
+  readonly askerReference: string | null;
   readonly externalId: string;
   readonly typeKey: string;
   readonly requestedClaims: readonly string[];
@@ -120,6 +144,8 @@ export interface VerificationListEntry extends VerificationRecord {
 
 interface VerificationRow extends Record<string, unknown> {
   presentation_id: string;
+  request_id: string | null;
+  asker_reference: string | null;
   external_id: string;
   type_key: string;
   requested_claims: string[];
@@ -203,6 +229,8 @@ function asString(value: unknown): string | null {
  */
 const SELECT_COLUMNS = `
   v.presentation_id,
+  v.request_id,
+  v.asker_reference,
   v.external_id,
   v.type_key,
   v.requested_claims,
@@ -229,6 +257,8 @@ const SELECT_COLUMNS = `
 function toRecord(row: VerificationRow): VerificationRecord {
   return {
     presentationId: row.presentation_id,
+    requestId: row.request_id,
+    askerReference: row.asker_reference,
     externalId: row.external_id,
     typeKey: row.type_key,
     requestedClaims: row.requested_claims,
@@ -257,6 +287,19 @@ export interface RecordVerificationInput {
   readonly orgId: string;
   readonly externalId: string;
   readonly presentationId: string;
+  /**
+   * El identificador de la petición del marco, si esta consola la creó.
+   *
+   * `undefined` en la rama del timbre, que es la única en la que la petición no
+   * la manda este servidor. Ver `VerificationRecord.requestId`.
+   */
+  readonly requestId?: string;
+  /**
+   * El expediente que esta consola acuñó y mandó dentro de la petición. Lo
+   * devuelve `requestCeremony` en `sent.body.reference`, que es de donde hay que
+   * leerlo: es el que salió por el cable y no una segunda tirada.
+   */
+  readonly askerReference?: string;
   readonly typeKey: string;
   readonly requestedClaims: readonly string[];
   readonly channel: 'qr' | 'phone';
@@ -285,15 +328,21 @@ export interface RecordVerificationInput {
 export async function recordVerification(input: RecordVerificationInput): Promise<void> {
   await query(
     `insert into verification
-       (org_id, external_id, presentation_id, type_key, requested_claims, channel,
-        issuer_did, authorization_request_url, counter_link, request_uri, expires_at,
-        agent_id, agent_name, actor, requested_at, wakeup_id, wakeup_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       (org_id, external_id, presentation_id, request_id, asker_reference, type_key,
+        requested_claims, channel, issuer_did, authorization_request_url, counter_link,
+        request_uri, expires_at, agent_id, agent_name, actor, requested_at, wakeup_id, wakeup_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
      on conflict (org_id, presentation_id) do nothing`,
     [
       input.orgId,
       input.externalId,
       input.presentationId,
+      // La petición del marco. `null` en la rama del timbre y sólo en ella: es
+      // la única en la que la petición no sale de este servidor, así que su
+      // identificador no existe aquí y no hay nada que anotar.
+      input.requestId ?? null,
+      // El expediente. `null` sólo donde no hay petición nuestra que numerar.
+      input.askerReference ?? null,
       input.typeKey,
       [...input.requestedClaims],
       input.channel,
@@ -354,10 +403,33 @@ export interface VerificationSettlement {
  * para que no ocurra — no queda ninguna ruta que escriba aquí desde una acción
  * del navegador.
  *
- * El `where` exige que siga en `pending`: el primer desenlace es el bueno y las
- * reentregas que lleguen después no lo reescriben, así que `settled_at` guarda
- * la hora en la que el banco se enteró **la primera vez**. Es idempotente a
- * propósito — la entrega de te-api es «al menos una vez».
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  «EL PRIMERO GANA» ES AHORA UNA PROPIEDAD DE LA COLUMNA, NO DEL `UPDATE`
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Aquí el `where` exigía `status = 'pending'` y con eso bastaba, porque sólo
+ * había un evento capaz de cerrar una fila. **Ya hay dos**: una ceremonia que
+ * lleva sesión de verificador recibe `presentation.settled` *y*
+ * `request.answered`, y no hay ningún orden garantizado entre ellos.
+ *
+ * Con el `where` de antes, el que llegara segundo no escribía nada — y eso no
+ * era «idempotencia», era una pérdida: si `request.answered` aterrizaba primero,
+ * el `presentation.settled` que traía los claims y el recibo firmado se
+ * encontraba la fila cerrada y **el recibo no se guardaba nunca**. La pantalla
+ * enseñaba un `verified` sin un solo atributo debajo.
+ *
+ * Así que la garantía se muda a donde tenía que estar:
+ *
+ *  · **`status` y `settled_at` sólo los escribe el primero.** Un `case` y un
+ *    `coalesce`, no el `where`. El primer desenlace sigue siendo el bueno y la
+ *    hora sigue siendo la de la primera vez que el banco se enteró.
+ *  · **Las cinco piezas del recibo las puede rellenar cualquiera de los dos**,
+ *    siempre que sigan vacías. El `coalesce` ya impedía que un `null` borrara
+ *    nada; ahora además permite que una entrega completa complete lo que una
+ *    degradada dejó a medias, que es la única forma de que ese hueco se llene.
+ *
+ * Sigue siendo idempotente frente a la reentrega —la de te-api es «al menos una
+ * vez»— porque nada de lo de arriba sobrescribe un valor que ya esté puesto.
  */
 export async function settleVerification(
   orgId: string,
@@ -366,7 +438,7 @@ export async function settleVerification(
 ): Promise<void> {
   await query(
     `update verification
-        set status = $3,
+        set status = case when status = 'pending' then $3 else status end,
             -- coalesce y no una asignacion a secas, en las cinco.
             --
             -- El dia que se anuncio aqui ya llego: el evento trae los claims y
@@ -380,16 +452,23 @@ export async function settleVerification(
             -- de cuerpo y recorta estos campos antes que el sobre— o de una
             -- version del evento que todavia no los llevaba. Si esa reentrega
             -- se colase, un recibo completo pasaria a estar vacio sin que nada
-            -- lo dijera. El where de abajo ya protege el caso normal, porque
-            -- exige que la fila siga pendiente; esto protege el que no pasa
-            -- por ahi.
+            -- lo dijera.
+            --
+            -- Y ahora hace la otra mitad del trabajo, que es nueva: como el
+            -- where ya no exige el estado pendiente, es esto lo que deja que el
+            -- segundo evento rellene lo que el primero no traia sin pisar nada.
+            -- Ver la cabecera.
             disclosed_claims       = coalesce($4, disclosed_claims),
             holder_key_thumbprint  = coalesce($5, holder_key_thumbprint),
             holder_key_jwk         = coalesce($6, holder_key_jwk),
             holder_link_id         = coalesce($7, holder_link_id),
             proof                  = coalesce($8, proof),
-            settled_at = now()
-      where org_id = $1 and presentation_id = $2 and status = 'pending'`,
+            -- La hora de la PRIMERA vez que el banco lo supo. Un coalesce y no
+            -- un now() a secas: con dos eventos capaces de cerrar la fila, una
+            -- asignacion directa la reescribiria con la hora del segundo y la
+            -- pantalla contaria que el titular tardo mas de lo que tardo.
+            settled_at = coalesce(settled_at, now())
+      where org_id = $1 and presentation_id = $2`,
     [
       orgId,
       presentationId,
@@ -401,6 +480,82 @@ export async function settleVerification(
       toJsonParam(settlement.proof),
     ],
   );
+}
+
+/**
+ * **Cierra la fila con lo que contestó el titular a una petición del marco.**
+ * Devuelve si había alguna que cerrar.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL EMPAREJAMIENTO, QUE ES LO ÚNICO DIFÍCIL DE ESTA FUNCIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `settleVerification` empareja por `presentation_id` y le basta, porque
+ * `presentation.settled` habla de una sesión de verificador y siempre la nombra.
+ * `request.answered` habla de otra cosa —una petición del marco— y en la mayoría
+ * del catálogo **no hay sesión que nombrar**: una ceremonia que firma con la
+ * identidad de la cartera no abre ninguna, y su `presentationId` viene a `null`.
+ *
+ * Así que se empareja por tres, en orden de quién responde de cada uno:
+ *
+ *  · **`asker_reference`** primero. Es el expediente que **esta organización**
+ *    acuñó (`mintAskerReference`), mandó dentro de la petición y te-api devuelve
+ *    verbatim. Es el único de los tres que existe desde antes de que la llamada
+ *    salga y que no depende de que la respuesta de te-api llegara y se anotara,
+ *    y por eso es el preferido: un fallo de red después del `POST` deja la fila
+ *    sin `request_id` pero con expediente.
+ *  · **`request_id`** después. La columna la escribe `recordVerification` con lo
+ *    que devolvió `POST /v1/requests`, así que es el mismo identificador que el
+ *    evento nombra. Cubre las filas anteriores al expediente.
+ *  · **`presentation_id`** al final, para lo que ninguno de los dos alcanza: la
+ *    rama del timbre —donde la petición la compone te-api por dentro, así que
+ *    aquí no hay ni expediente ni identificador— y las filas anteriores a
+ *    `db/013_request_answered.sql`.
+ *
+ * Los tres van con un `or` y no con tres consultas encadenadas: nombran la misma
+ * fila, así que «preferir» aquí sólo significa que basta con que uno de los tres
+ * la encuentre. Cada rama se apaga sola cuando su valor viene a `null`.
+ *
+ * Un `false` **no es un fallo** y por eso se devuelve en vez de registrarse
+ * aquí: la mayoría de las ceremonias del compositor firman con identidad y esta
+ * consola no les abre fila ninguna, porque no hay nada que sondear. Esa
+ * respuesta se ve igual —está archivada en el diario de webhooks y la pantalla
+ * de la ceremonia la enseña—; lo que no hay es fila que cerrar.
+ *
+ * ## Qué NO escribe, y por qué no es un hueco
+ *
+ * Ni claims, ni llave, ni recibo firmado: `request.answered` no los lleva y no
+ * tiene por qué. Eso es de la presentación, y cuando la ceremonia lleva una,
+ * llega por `presentation.settled` — que ahora puede rellenarlos aunque este
+ * evento haya cerrado la fila antes. Ésa es exactamente la razón de que el
+ * `where` de `settleVerification` ya no exija `pending`.
+ */
+export async function settleAnsweredRequest(
+  orgId: string,
+  locator: {
+    /** El expediente de esta organización, si el evento lo devolvió. */
+    readonly reference: string | null;
+    readonly requestId: string;
+    readonly presentationId: string | null;
+  },
+  status: Exclude<VerificationStatus, 'pending'>,
+): Promise<boolean> {
+  const rows = await query<{ presentation_id: string }>(
+    `update verification
+        set status = $5,
+            settled_at = coalesce(settled_at, now())
+      where org_id = $1
+        and status = 'pending'
+        -- Los ::text no son adorno: sin ellos Postgres tiene que deducir el tipo
+        -- de $2 y $4, y una de las apariciones de cada uno es un "is not null" a
+        -- secas que no se lo dice. Escrito asi, no depende de ese orden.
+        and (($2::text is not null and asker_reference = $2::text)
+             or request_id = $3::text
+             or ($4::text is not null and presentation_id = $4::text))
+      returning presentation_id`,
+    [orgId, locator.reference, locator.requestId, locator.presentationId, status],
+  );
+  return rows.length > 0;
 }
 
 /**

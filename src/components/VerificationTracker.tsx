@@ -337,6 +337,10 @@ const POLL_GRACE_MS = 20_000;
 const OUTCOME_MILESTONE: Record<Exclude<VerificationStatus, 'pending'>, MessageKey> = {
   verified: 'tracker.outcomeVerified',
   rejected: 'tracker.outcomeRejected',
+  // El que entra con `request.answered`, y con sus propias palabras: «ha dicho
+  // que no» y «ha dicho que no ha sido él» son dos hitos distintos de una
+  // reclamación, y el segundo es el que hace cortar la llamada.
+  declined: 'tracker.outcomeDeclined',
   failed: 'tracker.outcomeFailed',
   expired: 'tracker.outcomeExpired',
 };

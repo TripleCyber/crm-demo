@@ -148,6 +148,62 @@ export const en = {
     failedDetail: 'This is not an "it is not me": the credential did not hold. It can be retried.',
     expiredLabel: 'No answer',
     expiredDetail: 'Nobody answered within the deadline.',
+    /**
+     * El sexto, que entró con `request.answered`. Las palabras están escritas
+     * para que **no se puedan confundir con `rejected`**: con aquél se corta la
+     * llamada y con éste se pregunta por qué. Ver `lib/verification-status.ts`.
+     */
+    declinedLabel: 'Declined by the holder',
+    declinedDetail:
+      'They read the request and said no. This is not a fraud warning: nothing went wrong, the operation simply did not go ahead.',
+  },
+
+  /**
+   * Los tres desenlaces de una petición del marco (`request.answered`).
+   *
+   * Van aparte de `verdict` porque contestan otra pregunta: aquél habla de una
+   * comprobación de credencial —«verificada»— y esto de una ceremonia que se
+   * aprueba o no. Compartir palabras entre los dos haría que una firma de
+   * documento se leyera como una verificación de identidad.
+   */
+  answered: {
+    approvedLabel: 'Approved',
+    approvedDetail: 'They read what was asked, on their own device, and approved it.',
+    declinedLabel: 'Declined',
+    declinedDetail:
+      'They read what was asked and said no. Nothing went wrong: this is the ceremony working.',
+    notMeLabel: 'Not them',
+    notMeDetail:
+      'They said from their wallet that they did not ask for this. Treat it as an impersonation attempt.',
+  },
+
+  /**
+   * Cómo se llama cada ceremonia del catálogo, en una celda.
+   *
+   * ⚠ **Estas catorce claves no son opcionales.** `CEREMONY_NAME`, en
+   *   `lib/request-answered.ts`, es un `Record<CeremonyTemplateId, MessageKey>`:
+   *   una plantilla nueva en `lib/ceremony-templates.ts` deja de compilar hasta
+   *   que tenga la suya aquí. Es a propósito — una ceremonia sin nombre se
+   *   estrena como una fila que nadie sabe leer.
+   *
+   * Se nombra **lo que hace**, no la plantilla: `doc.sign.v1` ya va al lado en
+   * monoespaciada para quien la busca en el registro de te-api.
+   */
+  ceremonyName: {
+    authSignin: 'Signing in',
+    bankCall: 'Confirming who is on the call',
+    exchangeTransfer: 'Authorising a transfer',
+    ageGate: 'Proving an age',
+    docSign: 'Signing a document',
+    accountChange: 'Approving an account change',
+    proSeal: 'Sealing a professional act',
+    custodyHandover: 'Confirming a handover',
+    dataConsent: 'Consenting to share data',
+    accessGrant: 'Granting access',
+    attrMinimalV2: 'Sharing one attribute in person',
+    claimAttest: 'Declaring under own responsibility',
+    agentIdentify: 'Confirming who is calling',
+    attrMinimalV1: 'Sharing one attribute',
   },
 
   /** Fechas y plazos escritos con palabras (`lib/format.ts`). */
@@ -553,7 +609,14 @@ export const en = {
     mayNot5: 'How long the window stays open. A caller who chose that would be choosing how much of a hurry the person deciding is in.',
 
     sentTitle: 'Sent',
-    sentRequestId: 'Request',
+    /*
+     * Los dos rótulos dicen de quién es cada identificador, que es la mitad de
+     * lo que esta pareja enseña. Ver el comentario del `<dl>` que los pinta.
+     */
+    sentRequestId: 'TripleEnable request id',
+    sentReference: 'This organisation’s reference',
+    sentReferenceNote:
+      'Minted by this console, sent inside the request, and echoed back verbatim in the answer. te-api never looks at it: it is how you tie the answer to your own case.',
     sentStatus: 'Status',
     sentTemplate: 'Template',
     sentExpires: 'Expires',
@@ -563,16 +626,20 @@ export const en = {
     sendAgain: 'Compose another',
     receivedTitle: 'Received',
     /**
-     * El hueco, dicho con todas las letras.
+     * Lo que se dice mientras no ha vuelto nada, en una ceremonia de identidad.
      *
-     * Comprobado en el código de te-api y no supuesto: los dos únicos eventos
-     * son `presentation.settled` y `webhook.test`, y tampoco hay ninguna ruta
-     * B2B que lea una petición del marco —ni `GET /v1/requests/:id` ni
-     * `/v1/b2b/requests`—. Disimularlo con un «esperando» sería exactamente la
-     * clase de honestidad inventada que esta casa no admite.
+     * Aquí vivía `receivedNoEvent`, que decía que te-api no publicaba **nada**
+     * sobre el desenlace de una petición del marco. Era verdad y está
+     * comprobado; ha dejado de serlo con `request.answered`, así que la frase se
+     * ha reescrito en vez de dejarla envejecer mintiendo.
+     *
+     * Lo que sigue faltando —y por eso hay frase— es la **fila**: una ceremonia
+     * de identidad no abre sesión de verificador, así que no hay nada que
+     * sondear en el diario de comprobaciones. La respuesta llega por el canal, y
+     * eso es lo que la frase dice.
      */
-    receivedNoEvent:
-      'This case signs with the wallet’s identity, and te-api publishes nothing back to the asker about a framework request: the only two events it sends are presentation.settled and webhook.test, and there is no B2B route to read a request either. The outcome lives in te-api and in the holder’s own receipt. A case that signs with a credential does come back here, because it carries a verifier session.',
+    receivedNoRow:
+      'This case signs with the wallet’s identity, so it carries no verifier session and there is no row here to poll. The holder’s answer arrives as a signed request.answered webhook and shows up below on its own, matched to this request. There is still no B2B route to read a framework request, and none is needed.',
 
     /* ── El desenlace, leído de la fila de esta ceremonia ─────────────────── */
 
@@ -587,12 +654,21 @@ export const en = {
     outcomeHolderKey: 'Holder key',
     outcomeClaimsTitle: 'What the holder disclosed',
     /**
-     * La letra pequeña que impide que el rótulo mienta: lo que se liquida es la
-     * sesión del verificador, no la petición del marco. Son dos cosas, y te-api
-     * sólo avisa de la primera.
+     * La letra pequeña que impide que el rótulo mienta. Aquí acababa diciendo
+     * que «la petición del marco no tiene evento propio», y eso ya es falso: lo
+     * tiene. Lo que sigue siendo verdad —y es lo que hay que decir— es que son
+     * **dos desenlaces distintos** con dos eventos distintos, y que el detalle
+     * del recibo sólo viaja en el de la presentación.
      */
     receivedCredentialNote:
-      'What settles here is the verifier session this request carried — that is the part te-api reports. The framework request itself has no event of its own.',
+      'Two things settle here, and te-api reports each in its own event: the framework request answers with approved, declined or not-me, and the verifier session it carried answers with the credential check. The disclosed attributes and the signed receipt only travel in the second.',
+
+    /* ── La respuesta a la petición, para las catorce plantillas ───────────── */
+
+    answerCeremony: 'Ceremony',
+    answerAnsweredAt: 'Answered by the holder',
+    answerRequestId: 'TripleEnable request id',
+    answerReference: 'This organisation’s reference',
 
     /* ── El canal: evidencia, no veredicto ────────────────────────────────── */
 
@@ -606,6 +682,12 @@ export const en = {
       'The signed webhook bodies this organisation received since the request went out, exactly as they arrived. This is the channel itself — evidence for whoever is integrating, not a verdict.',
     receivedEmpty: 'Nothing has come back since this was sent.',
     receivedMatch: 'This is the answer to the request above — same verifier session.',
+    /**
+     * La otra mitad de `receivedMatch`. Hacen falta las dos: «la misma sesión de
+     * verificador» sería falso en una ceremonia de identidad, que no tiene
+     * ninguna, y es justo la mitad del catálogo que antes no se podía emparejar.
+     */
+    receivedMatchRequest: 'This is the answer to the request above — same request id.',
     checkEvents: 'Check what has come back',
     checking: 'Checking…',
     eventsLink: 'Every event this organisation has received',
@@ -916,7 +998,18 @@ export const en = {
     columnSignature: 'Signature',
     columnPayload: 'Body',
     occurredAt: 'raised at {time}',
+    /** La tercera hora: cuándo contestó el titular. Ver `request.answered`. */
+    answeredAt: 'answered at {time}',
     outcome: 'outcome: {status}',
+    /*
+     * **Los dos identificadores, rotulados por su dueño.** Ése es todo el
+     * trabajo de este par de rótulos y por eso nombran a TripleEnable en uno y a
+     * la organización en el otro: quien integra tiene que ver de un vistazo cuál
+     * de los dos va a poder buscar en su propio sistema. Dos rótulos genéricos
+     * —«request» y «reference»— dejarían dos cadenas iguales sin dueño.
+     */
+    forRequest: 'TripleEnable request {id}',
+    askerReference: 'this organisation’s reference {reference}',
     signatureOk: 'Checked',
     signatureBad: 'Refused',
     eventId: 'Event id',
@@ -982,6 +1075,15 @@ export const en = {
     rejectedTitle: 'The holder says it was not them',
     rejectedBody:
       'They have <b>rejected the request from their wallet</b>. Do not continue with the transaction and file the fraud alert: if you are talking to somebody and the holder says no, there are two different people.',
+    /**
+     * ⚠ **`declined` no se puede acercar a `rejected` al traducir.** Con aquél
+     *   se corta la llamada y se cursa el aviso de fraude; con éste se le
+     *   pregunta a la persona por qué ha dicho que no. Es la misma regla que
+     *   separa `rejected` de `expired`, y por eso el cuerpo lo dice entero.
+     */
+    declinedTitle: 'The holder said no',
+    declinedBody:
+      'They read the request on their own device and declined it. This is not a fraud warning and nothing failed: the operation simply does not go ahead. Ask them why before trying again.',
     failedTitle: 'The credential did not hold',
     failedBody:
       'This is not an “it is not me”: it is the credential failing — expired, revoked or belonging to another holder. It can be tried again.',
@@ -1025,6 +1127,7 @@ export const en = {
     milestoneSettledHint: 'time at which this console knew',
     outcomeVerified: 'They confirmed from their wallet',
     outcomeRejected: 'They said it was not them',
+    outcomeDeclined: 'They read it and said no',
     outcomeFailed: 'The credential did not hold',
     outcomeExpired: 'Expired with no answer',
     architectureNote:

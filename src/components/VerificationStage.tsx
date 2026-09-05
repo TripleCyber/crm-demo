@@ -72,6 +72,14 @@ type MarkShape = 'check' | 'cross' | 'bang' | 'clock';
 const MARK: Record<Exclude<VerificationStatus, 'pending'>, MarkShape> = {
   verified: 'check',
   rejected: 'cross',
+  /*
+   * La misma aspa que `rejected`, y **el color las separa**: aquélla sale en
+   * rojo y ésta en ámbar, porque el tono lo pone `verificationTone` y allí el
+   * rojo es sólo del fraude. El aspa es correcta en las dos —las dos son un
+   * «no»— y darle a ésta un dibujo propio sugeriría que ha pasado algo raro,
+   * cuando lo que ha pasado es que la persona ha contestado.
+   */
+  declined: 'cross',
   failed: 'bang',
   expired: 'clock',
 };
@@ -125,6 +133,15 @@ function stageCopy(
 
   if (status === 'rejected') {
     return { title: t('stage.rejectedTitle'), body: t.rich('stage.rejectedBody') };
+  }
+
+  /*
+   * **Antes del `failed`, y con salida propia.** Sin esta rama, un `declined`
+   * caería hasta el `return` del final y esta pantalla contaría que la petición
+   * caducó sin respuesta — que es exactamente lo contrario de lo que pasó.
+   */
+  if (status === 'declined') {
+    return { title: t('stage.declinedTitle'), body: t('stage.declinedBody') };
   }
 
   if (status === 'failed') {

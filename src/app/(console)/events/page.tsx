@@ -1,8 +1,15 @@
 import Link from 'next/link';
 
 import { getTranslator } from '@/i18n/server';
+import type { Translator } from '@/i18n/translate';
 import { describeConsoleFailure } from '@/lib/console-failures';
 import { formatTimestamp } from '@/lib/format';
+import {
+  describeAnsweredCeremony,
+  describeRequestOutcome,
+  readAnsweredEvent,
+  type AnsweredRequest,
+} from '@/lib/request-answered';
 import { getEmployeeSession } from '@/lib/session';
 import { listWebhookEvents, type WebhookEventRecord } from '@/lib/webhook-events';
 
@@ -53,6 +60,32 @@ import { listWebhookEvents, type WebhookEventRecord } from '@/lib/webhook-events
  * identificador de la sesión a llevar el veredicto, el tipo de credencial y tres
  * marcas de tiempo. Un campo nuevo aparece aquí solo, sin tocar esta pantalla,
  * que es exactamente lo que se quiere de un detalle técnico.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ÉSTA ES LA PANTALLA EN LA QUE EL DUEÑO MIRÓ Y NO VIO NADA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * *«En eventos no se ve cuando el usuario responde.»* Y no se veía porque no
+ * llegaba nada: te-api no publicaba el desenlace de una petición del marco.
+ * Ahora publica `request.answered`, y una fila técnica no basta — un
+ * `request.answered` con un `outcome: approved` y cuatro identificadores no le
+ * dice a nadie qué acaba de pasar.
+ *
+ * Así que ese tipo se pinta con lo que hace falta para leerlo de un vistazo, en
+ * el mismo sitio y con la misma maqueta que los demás:
+ *
+ *  · **qué ceremonia** — «Signing a document», no `doc.sign.v1` a secas. El
+ *    nombre sale de `lib/request-answered.ts`, que obliga a que las catorce
+ *    plantillas tengan uno o no compila.
+ *  · **qué plantilla** — su nombre y su revisión, en monoespaciada, porque quien
+ *    integra compara esa cadena con la que mandó.
+ *  · **qué contestó** — las tres palabras, traducidas y con su color. Rojo sólo
+ *    `not_me`, igual que en el resto de la consola.
+ *  · **cuándo lo contestó el titular** — que no es cuándo llegó aquí.
+ *  · **a qué petición** — el `requestId`, **sin desplegar nada**. Es lo único
+ *    que ata esta respuesta a lo que se envió, y esconderlo detrás del detalle
+ *    técnico dejaría la correlación a un clic de distancia justo para la persona
+ *    que ha abierto esta pantalla para hacerla.
  */
 
 export const dynamic = 'force-dynamic';
@@ -153,7 +186,31 @@ export default async function EventsPage() {
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
+              {events.map((event) => {
+                /*
+                 * El cuerpo se lee **una vez por fila** y se reparte entre tres
+                 * celdas. `null` para todo lo que no sea un `request.answered`
+                 * legible, y entonces la fila se pinta como se pintaba: este
+                 * lector añade una lectura, no sustituye ninguna.
+                 */
+                const answered = readAnsweredEvent(event.payload);
+                /*
+                 * A quién afecta, con dos procedencias y no una.
+                 *
+                 * `externalId` lo resolvió la base cruzando con el diario de
+                 * comprobaciones, y es el bueno. Cuando no cruza —una ceremonia
+                 * que firma con la identidad de la cartera no abre fila— queda
+                 * la referencia que el propio evento devuelve, que es el
+                 * identificador que **esta consola** mandó al crear la petición.
+                 *
+                 * Y sólo si la firma cuadró. Sin esa condición, un `POST`
+                 * inventado pintaría la ficha de un cliente real al lado de un
+                 * evento que nadie mandó; con ella, lo que se enseña viene de un
+                 * cuerpo que sólo pudo escribir te-api.
+                 */
+                const customerId =
+                  event.externalId ?? (event.signatureOk ? answered?.subjectReference ?? null : null);
+                return (
                 <tr key={event.eventId}>
                   <td>
                     {formatTimestamp(event.receivedAt, t.locale)}
@@ -173,15 +230,34 @@ export default async function EventsPage() {
                         })}
                       </span>
                     )}
-                  </td>
-                  <td>
-                    <span className="mono">{event.type}</span>
-                    {event.status !== null && (
-                      <span className="sub">{t('events.outcome', { status: event.status })}</span>
+                    {/*
+                      La tercera hora, y sólo la trae este tipo: cuándo contestó
+                      **el titular**. Es la que un banco necesita para
+                      reconstruir una llamada, y la que demuestra que la
+                      respuesta vuelve sola. Con el mismo umbral de un minuto que
+                      la de te-api, para no pintar tres veces el mismo instante.
+                    */}
+                    {answered?.answeredAt != null
+                      && differByAMinute(answered.answeredAt, event.receivedAt) && (
+                      <span className="sub">
+                        {t('events.answeredAt', {
+                          time: formatTimestamp(answered.answeredAt, t.locale),
+                        })}
+                      </span>
                     )}
                   </td>
                   <td>
-                    {event.externalId === null ? (
+                    <span className="mono">{event.type}</span>
+                    {answered === null ? (
+                      event.status !== null && (
+                        <span className="sub">{t('events.outcome', { status: event.status })}</span>
+                      )
+                    ) : (
+                      <AnsweredSummary t={t} answer={answered} />
+                    )}
+                  </td>
+                  <td>
+                    {customerId === null ? (
                       // Un guion y no «desconocido»: `webhook.test` no afecta a
                       // ningún cliente y decir que no se sabe quién es sugiere un
                       // fallo donde no lo hay.
@@ -189,9 +265,9 @@ export default async function EventsPage() {
                     ) : (
                       <Link
                         className="row-link"
-                        href={`/customers/${encodeURIComponent(event.externalId)}`}
+                        href={`/customers/${encodeURIComponent(customerId)}`}
                       >
-                        {event.externalId}
+                        {customerId}
                       </Link>
                     )}
                     {event.presentationId !== null && (
@@ -246,10 +322,53 @@ export default async function EventsPage() {
                     </details>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * **Qué acaba de contestar el titular**, en la celda del tipo de evento.
+ *
+ * Cuatro líneas y ni una más, en el orden en que se pregunta: qué contestó, a
+ * qué ceremonia, con qué plantilla, y a qué petición. Las dos primeras están
+ * escritas para leerse; las dos últimas en monoespaciada porque son cadenas que
+ * alguien va a comparar carácter a carácter con su propio registro.
+ *
+ * El `requestId` va **aquí y no en el detalle plegado**, y es la única decisión
+ * de maqueta de este componente: es lo que ata la respuesta a lo que se envió, y
+ * quien abre esta pantalla para integrar lo abre justamente para eso. Detrás de
+ * un `<details>` la correlación existe pero no está.
+ *
+ * `reference` sólo se pinta si viene. Es la etiqueta que puso quien preguntó
+ * —el número de expediente del socio, no el identificador de te-api— y hoy
+ * puede no venir: te-api puede no publicarla todavía y un socio puede no
+ * mandarla. Que falte no es un hueco que haya que rellenar con un guion; con
+ * `requestId` la fila ya se puede atar.
+ */
+function AnsweredSummary({ t, answer }: { t: Translator; answer: AnsweredRequest }) {
+  const verdict = describeRequestOutcome(t, answer.outcome);
+
+  return (
+    <>
+      <span className={`pill ${verdict.tone}`}>
+        <span className="pill-mark" aria-hidden="true" />
+        {verdict.label}
+      </span>
+      <span className="sub">{describeAnsweredCeremony(t, answer)}</span>
+      <span className="mono sub">
+        {answer.template ?? t('common.dash')}
+        {answer.templateVersion !== null && ` · v${String(answer.templateVersion)}`}
+        {answer.kind !== null && ` · ${answer.kind}`}
+      </span>
+      <span className="mono sub">{t('events.forRequest', { id: answer.requestId })}</span>
+      {answer.reference !== null && (
+        <span className="mono sub">{t('events.askerReference', { reference: answer.reference })}</span>
       )}
     </>
   );

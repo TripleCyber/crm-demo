@@ -27,26 +27,21 @@ import type { SignatureFailure } from './webhook-signature';
  *       }
  *     }
  *
- * Y dos tipos, hoy: `presentation.settled` —que cubre **todos** los finales, con
- * el desenlace en `data.status`— y `webhook.test`, cuyo `data.presentationId` es
- * `null` siempre.
+ * Y **tres** tipos, hoy:
  *
- * ## Lo que el evento NO lleva, y por qué eso no es un hueco
- *
- * Ni los claims que enseñó el titular, ni el recibo firmado, ni su clave. Es
- * deliberado en te-api: minimizar el dato personal que sale por un canal
- * saliente. Existe `GET /v1/b2b/presentations/:id`, que sí los sirve, pero
- * **este CRM ya no la llama**: el sondeo se retiró entero y con él la única
- * llamada que este servidor hacía para preguntar si algo había terminado.
- *
- * Consecuencia, dicha sin adornos: **el recibo pinta el veredicto pero no los
- * atributos que enseñó el titular**, porque nadie se los cuenta. No se disimula
- * y no se suple preguntando — el sitio donde se arregla es el evento, en te-api.
- *
- * Lo que sí cambia, y es el punto entero de que esto exista: **con el veredicto
- * dentro, el receptor cierra el caso sin volver a llamar**. Un titular que
- * contesta media hora después, con el agente ya en otra llamada, deja huella en
- * el diario de este banco sin que nadie tenga la pestaña abierta.
+ *  · `presentation.settled` — cubre todos los finales de una sesión de
+ *    verificador, con el desenlace en `data.status`, y lleva además lo que trae
+ *    la confirmación del titular: `claims`, `holderKey`, `holderLinkId` y
+ *    `proof`. (Aquí decía que no los llevaba «para minimizar el dato personal
+ *    que sale por un canal saliente». Esa política está revocada y el argumento
+ *    de por qué, en la cabecera del receptor.)
+ *  · `request.answered` — el desenlace de **una petición del marco**, que es lo
+ *    que faltaba: `requestId`, `template`, `templateVersion`, `kind`, `outcome`
+ *    (`approved` · `declined` · `not_me`), `answeredAt`, `subjectReference` y
+ *    `presentationId`. Llega igual para las catorce plantillas del catálogo. Lo
+ *    que lleva y cómo se lee, en `lib/request-answered.ts`.
+ *  · `webhook.test` — la prueba del administrador. Su `data.presentationId` es
+ *    `null` siempre y a propósito.
  *
  * ## Cómo se despacha
  *
@@ -126,6 +121,23 @@ export interface StoreWebhookEventInput {
   readonly apiVersion: string | null;
   readonly occurredAt: string | null;
   readonly presentationId: string | null;
+  /**
+   * La petición del marco a la que se refiere el evento, si la nombra.
+   *
+   * **No se guarda en columna**: sólo sirve para resolver el cliente en el
+   * `insert`. La forma del cuerpo crece y desmontarla en columnas es justo lo
+   * que `db/007_webhook_event.sql` decidió no hacer; lo que se promociona es
+   * únicamente lo que esta base necesita para buscar, y por identificador de
+   * petición no busca nadie — la pantalla lo lee del `payload`, que está entero.
+   */
+  readonly requestId: string | null;
+  /**
+   * El expediente que acuñó esta organización, devuelto por te-api. Mismo uso y
+   * misma razón de no ser columna que `requestId`, y se mira antes que él por lo
+   * mismo que en `settleAnsweredRequest`: es el que no depende de que la
+   * respuesta de te-api llegara.
+   */
+  readonly askerReference: string | null;
   readonly status: string | null;
   readonly signatureOk: boolean;
   readonly signatureError: SignatureFailure | null;
@@ -145,6 +157,23 @@ export interface StoreWebhookEventInput {
  * `null` si no cruza, que es lo normal en `webhook.test` y en una presentación
  * que no abrió esta consola. No es un error: te-api no conoce el padrón de esta
  * empresa y no tiene por qué mandar el `external_id`.
+ *
+ * ## Y ahora se cruza por dos columnas, no por una
+ *
+ * Porque `request.answered` **no siempre puede nombrar una presentación**: la
+ * mayoría del catálogo firma con la identidad de la cartera y entonces no hay
+ * sesión de verificador que nombrar. Lo que sí trae siempre es el identificador
+ * de la petición, que esta consola anota al crearla desde
+ * `db/013_request_answered.sql`. Sin este segundo camino, la columna «A quién»
+ * de la pantalla de eventos saldría vacía justo en el tipo de evento que se
+ * añadió para que dejara de estar vacía.
+ *
+ * Sigue sin resolverse desde el cuerpo: el `subjectReference` que trae el evento
+ * es el `externalId` de esta empresa y sería tentador copiarlo aquí, pero esta
+ * fila se escribe **antes de saber si la firma cuadra** —a propósito, ver la
+ * cabecera del receptor—, y entonces un `POST` inventado colgaría eventos falsos
+ * de la ficha de un cliente real. La pantalla sí lo usa para pintar, y sólo
+ * cuando la firma cuadró; eso es otra cosa y está dicho allí.
  */
 export async function storeWebhookEvent(input: StoreWebhookEventInput): Promise<boolean> {
   const rows = await query<{ event_id: string }>(
@@ -153,8 +182,16 @@ export async function storeWebhookEvent(input: StoreWebhookEventInput): Promise<
         status, signature_ok, signature_error, delivery_id, payload)
      values ($1, $2, $3, $4, $5, $6,
              (select v.external_id from verification v
-               where v.org_id = $2 and v.presentation_id = $6),
-             $7, $8, $9, $10, $11::jsonb)
+               where v.org_id = $2
+                 and (($6::text is not null and v.presentation_id = $6::text)
+                      or ($7::text is not null and v.request_id = $7::text)
+                      or ($8::text is not null and v.asker_reference = $8::text))
+               -- Una subconsulta escalar revienta si devuelve dos filas, y aqui
+               -- eso seria un 500 en el receptor por un caso que no deberia
+               -- existir. Con el tope, lo peor que pasa es que el evento se
+               -- cuelgue de una de las dos, y las dos son de esa ceremonia.
+               limit 1),
+             $9, $10, $11, $12, $13::jsonb)
      on conflict (event_id) do nothing
      returning event_id`,
     [
@@ -164,6 +201,8 @@ export async function storeWebhookEvent(input: StoreWebhookEventInput): Promise<
       input.apiVersion,
       input.occurredAt,
       input.presentationId,
+      input.requestId,
+      input.askerReference,
       input.status,
       input.signatureOk,
       input.signatureError,
@@ -203,24 +242,23 @@ export async function listWebhookEvents(
  * de verificaciones: qué contestó te-api a la petición que se acaba de mandar.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  SE FILTRA POR HORA Y NO POR `request_id`, Y NO PORQUE SEA MÁS CÓMODO
+ *  SIGUE FILTRANDO POR HORA, Y AHORA ES UNA ELECCIÓN Y NO UNA LIMITACIÓN
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Porque **no hay `request_id` en ningún evento**. te-api manda hoy dos tipos y
- * ninguno habla de peticiones del marco: `presentation.settled`, que se
- * identifica por `presentationId`, y `webhook.test`. Una petición que firma con
- * la identidad de la cartera —la mayoría del catálogo— se aprueba, se rechaza o
- * caduca **sin que salga ningún webhook**, y eso es un hueco del contrato de
- * te-api, no de esta consulta.
+ * Aquí decía que se filtraba por hora porque **no había `requestId` en ningún
+ * evento**, y que eso era un hueco del contrato de te-api. Ya no lo es:
+ * `request.answered` lo lleva siempre y es su correlación principal. Se dijo que
+ * el día que llegara esta función no cambiaría, y no cambia — pero por otra
+ * razón que la de entonces, así que se escribe.
  *
- * Así que lo que esta función puede contestar con verdad es «qué ha llegado
- * desde que pulsaste», y la pantalla dice exactamente eso. Lo que sí se puede
- * emparejar de verdad es la mitad de credencial: allí hay `presentationId`, es
- * el mismo que devolvió `POST /v1/b2b/presentations` y el que esta consola anotó
- * en `verification` — y quien empareja es la pantalla, comparando esa columna.
+ * Lo que la pantalla de la ceremonia pide aquí es **el canal**: enséñame todo lo
+ * que ha entrado desde que pulsé, sea de esta petición o no, porque quien está
+ * integrando quiere ver el tráfico y no un resultado filtrado. Emparejar es cosa
+ * suya y ahora puede hacerlo de verdad: compara el `requestId` del `payload` con
+ * el que le devolvió el envío, y marca esa fila. Filtrar aquí le quitaría la
+ * mitad de lo que enseña.
  *
- * El día que te-api mande un evento de petición, esta función no cambia: la
- * pantalla deja de tener que disculparse.
+ * Y `presentation.settled` se empareja como siempre, por `presentationId`.
  *
  * `since` va como texto ISO y lo convierte Postgres, igual que `occurred_at` en
  * el `insert`. El tope está para que una pestaña abierta desde ayer no se traiga

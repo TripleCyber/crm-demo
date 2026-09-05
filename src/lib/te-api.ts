@@ -7,6 +7,7 @@ import { getB2bToken, invalidateB2bToken } from './b2b-token';
 import {
   buildCeremonyHttpRequest,
   CEREMONY_REQUEST_PATH,
+  mintAskerReference,
   type CeremonyHttpRequest,
   type CeremonyRequestInput,
 } from './ceremony-request';
@@ -604,6 +605,11 @@ export interface AgeCheckInput {
 
 export interface AgeCheckResult {
   readonly requestId: string;
+  /**
+   * El expediente que acuñó esta consola para esta puerta de edad. Vuelve
+   * verbatim en `request.answered`. Ver `mintAskerReference`.
+   */
+  readonly reference: string;
   readonly presentationId: string;
   readonly expiresAt: string;
   /** La sesión del verificador, para anotarla. Ver el `return`. */
@@ -629,6 +635,12 @@ export async function requestAgeCheck(
    * el cliente leyera `undefined` y afirmara «no se avisó a ningún teléfono»
    * siempre, entregara o no.
    */
+  // El expediente de esta consola, acuñado con el mismo formato que el de la
+  // ruta genérica. Esta función compone su cuerpo a mano —es un uso concreto de
+  // `/v1/requests`, no la ruta genérica— así que la referencia hay que ponerla
+  // aquí; el acuñador sí es el mismo, que es lo que importa.
+  const reference = mintAskerReference();
+
   const asked = await callB2b<{ requestId: string; expiresAt: string }>(
     organization,
     organization.verifierUrl,
@@ -638,6 +650,7 @@ export async function requestAgeCheck(
       body: {
         subjectReference: input.subjectReference,
         kind: 'present',
+        reference,
         // La credencial **es** la prueba: una firma de identidad diría quién
         // contesta y no cuántos años tiene. te-api no aprueba esta petición
         // hasta que su verificador confirma la presentación.
@@ -672,6 +685,7 @@ export async function requestAgeCheck(
 
   return {
     requestId: asked.requestId,
+    reference,
     presentationId: session.presentationId,
     // La sesión entera, para que quien llame pueda anotarla en el diario del
     // banco: sin fila local, el webhook `presentation.settled` no tiene qué
@@ -770,11 +784,34 @@ export interface CeremonyRequestExchange {
   readonly sent: CeremonyHttpRequest;
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA REFERENCIA SE ACUÑA AQUÍ, Y ÉSTE ES EL ÚNICO SITIO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `reference` es el número de expediente de quien pregunta: te-api no lo mira y
+ * lo devuelve verbatim en `request.answered`. Es lo que deja atar la respuesta a
+ * una fila del sistema del socio sin guardar una tabla de equivalencias.
+ *
+ * Se acuña en esta función y no en cada llamante por lo mismo que el cuerpo se
+ * compone en un solo módulo: tres sitios acuñando referencias son tres formatos
+ * distintos dentro de un mes. Y **una por envío**, no una por ficha: el
+ * compositor deja mandar la misma ceremonia otra vez, y dos peticiones con el
+ * mismo expediente no son un expediente.
+ *
+ * Un llamante puede traer la suya y entonces se respeta —la referencia es del
+ * socio y esta función no es quién para pisarla—; lo que no puede es salir sin
+ * ninguna, que es lo que enseñaría a un integrador justo lo contrario de lo que
+ * esta consola existe para enseñar.
+ */
 export async function requestCeremony(
   organization: OrganizationConfig,
   input: CeremonyRequestInput,
 ): Promise<CeremonyRequestExchange> {
-  const sent = buildCeremonyHttpRequest(organization.verifierUrl, input);
+  const sent = buildCeremonyHttpRequest(organization.verifierUrl, {
+    ...input,
+    reference: input.reference ?? mintAskerReference(),
+  });
 
   const result = await callB2b<CeremonyRequestResult>(
     organization,

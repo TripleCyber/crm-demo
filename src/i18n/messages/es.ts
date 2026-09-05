@@ -114,6 +114,37 @@ export const es: PartialMessages = {
     failedDetail: 'No es un «no soy yo»: la credencial no valió. Se puede reintentar.',
     expiredLabel: 'Sin respuesta',
     expiredDetail: 'Nadie contestó dentro del plazo.',
+    declinedLabel: 'Rechazada por el titular',
+    declinedDetail:
+      'Leyó la petición y dijo que no. No es un aviso de fraude: no ha fallado nada, simplemente la operación no sigue adelante.',
+  },
+
+  answered: {
+    approvedLabel: 'Aprobada',
+    approvedDetail: 'Leyó lo que se le pedía, en su propio aparato, y lo aprobó.',
+    declinedLabel: 'Rechazada',
+    declinedDetail:
+      'Leyó lo que se le pedía y dijo que no. No ha fallado nada: es la ceremonia funcionando.',
+    notMeLabel: 'No ha sido él',
+    notMeDetail:
+      'Dijo desde su cartera que él no ha pedido esto. Trátalo como un intento de suplantación.',
+  },
+
+  ceremonyName: {
+    authSignin: 'Iniciar sesión',
+    bankCall: 'Confirmar quién está al teléfono',
+    exchangeTransfer: 'Autorizar una transferencia',
+    ageGate: 'Demostrar una edad',
+    docSign: 'Firmar un documento',
+    accountChange: 'Aprobar un cambio en la cuenta',
+    proSeal: 'Sellar un acto profesional',
+    custodyHandover: 'Confirmar una entrega',
+    dataConsent: 'Consentir compartir datos',
+    accessGrant: 'Conceder un acceso',
+    attrMinimalV2: 'Compartir un atributo en persona',
+    claimAttest: 'Declarar bajo responsabilidad',
+    agentIdentify: 'Confirmar quién llama',
+    attrMinimalV1: 'Compartir un atributo',
   },
 
   time: {
@@ -479,7 +510,10 @@ export const es: PartialMessages = {
     mayNot5: 'Cuánto dura la ventana. Quien la eligiera estaría eligiendo cuánta prisa tiene la persona que decide.',
 
     sentTitle: 'Mandado',
-    sentRequestId: 'Petición',
+    sentRequestId: 'Id de petición de TripleEnable',
+    sentReference: 'Referencia de esta organización',
+    sentReferenceNote:
+      'La acuña esta consola, viaja dentro de la petición y vuelve verbatim en la respuesta. te-api no la mira nunca: es con lo que se ata la respuesta al expediente propio.',
     sentStatus: 'Estado',
     sentTemplate: 'Plantilla',
     sentExpires: 'Caduca',
@@ -488,8 +522,8 @@ export const es: PartialMessages = {
 
     sendAgain: 'Componer otra',
     receivedTitle: 'Recibido',
-    receivedNoEvent:
-      'Este caso firma con la identidad de la cartera, y te-api no le publica nada a quien pregunta sobre una petición del marco: los dos únicos eventos que manda son presentation.settled y webhook.test, y tampoco hay ninguna ruta B2B para leer una petición. El desenlace vive en te-api y en el recibo del titular. Un caso que firma con credencial sí vuelve aquí, porque lleva una sesión de verificador.',
+    receivedNoRow:
+      'Este caso firma con la identidad de la cartera, así que no lleva sesión de verificador y aquí no hay fila que sondear. La respuesta del titular llega como un webhook request.answered firmado y aparece sola aquí abajo, emparejada con esta petición. Sigue sin haber ruta B2B para leer una petición del marco, y no hace falta ninguna.',
 
     outcomeReading: 'Leyendo el desenlace…',
     outcomeNotYet: 'Todavía no hay respuesta anotada. Esto se refresca solo mientras dure el plazo.',
@@ -498,13 +532,19 @@ export const es: PartialMessages = {
     outcomeHolderKey: 'Llave del titular',
     outcomeClaimsTitle: 'Lo que enseñó el titular',
     receivedCredentialNote:
-      'Lo que se liquida aquí es la sesión de verificador que llevaba esta petición, que es de lo que avisa te-api. La petición del marco no tiene evento propio.',
+      'Aquí se cierran dos cosas, y te-api avisa de cada una con su propio evento: la petición del marco contesta aprobada, rechazada o no-he-sido-yo, y la sesión de verificador que llevaba contesta con la comprobación de la credencial. Los atributos que enseñó el titular y el recibo firmado sólo viajan en el segundo.',
+
+    answerCeremony: 'Ceremonia',
+    answerAnsweredAt: 'Contestado por el titular',
+    answerRequestId: 'Id de petición de TripleEnable',
+    answerReference: 'Referencia de esta organización',
 
     receivedWireTitle: 'Lo que entró por el cable',
     receivedWireNote:
       'Los cuerpos firmados que ha recibido esta organización desde que salió la petición, tal y como llegaron. Es el canal en sí: evidencia para quien integra, no un veredicto.',
     receivedEmpty: 'No ha llegado nada desde que se mandó.',
     receivedMatch: 'Ésta es la respuesta a la petición de al lado — la misma sesión de verificador.',
+    receivedMatchRequest: 'Ésta es la respuesta a la petición de al lado — el mismo id de petición.',
     checkEvents: 'Mirar qué ha vuelto',
     checking: 'Mirando…',
     eventsLink: 'Todos los eventos que ha recibido esta organización',
@@ -785,7 +825,10 @@ export const es: PartialMessages = {
     columnSignature: 'Firma',
     columnPayload: 'Cuerpo',
     occurredAt: 'ocurrió a las {time}',
+    answeredAt: 'contestado a las {time}',
     outcome: 'desenlace: {status}',
+    forRequest: 'petición {id} de TripleEnable',
+    askerReference: 'referencia {reference} de esta organización',
     signatureOk: 'Comprobada',
     signatureBad: 'Rechazada',
     eventId: 'Id del evento',
@@ -849,6 +892,9 @@ export const es: PartialMessages = {
     rejectedTitle: 'El titular dice que no ha sido él',
     rejectedBody:
       'Ha <b>rechazado la petición desde su cartera</b>. No continúe con la operación y curse el aviso de fraude: si usted está hablando con alguien y el titular dice que no, hay dos personas distintas.',
+    declinedTitle: 'El titular ha dicho que no',
+    declinedBody:
+      'Ha leído la petición en su propio aparato y la ha rechazado. No es un aviso de fraude y no ha fallado nada: la operación simplemente no sigue adelante. Pregúntele por qué antes de volver a intentarlo.',
     failedTitle: 'La credencial no ha valido',
     failedBody:
       'No es un «no soy yo»: es la credencial fallando —caducada, revocada o de otro titular—. Se puede volver a intentar.',
@@ -891,6 +937,7 @@ export const es: PartialMessages = {
     milestoneSettledHint: 'hora en la que esta consola lo supo',
     outcomeVerified: 'Ha confirmado desde su cartera',
     outcomeRejected: 'Ha dicho que no ha sido él',
+    outcomeDeclined: 'Lo ha leído y ha dicho que no',
     outcomeFailed: 'La credencial no ha valido',
     outcomeExpired: 'Caducó sin respuesta',
     architectureNote:

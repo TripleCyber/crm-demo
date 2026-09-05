@@ -20,9 +20,30 @@ import type { MessageKey, Translator } from '@/i18n/translate';
  */
 
 /** Los cinco valores de `GET /v1/b2b/presentations/:id`, y ninguno más. */
-export type VerificationStatus = 'pending' | 'verified' | 'rejected' | 'failed' | 'expired';
+export type PresentationStatus = 'pending' | 'verified' | 'rejected' | 'failed' | 'expired';
 
-/** Un desenlace: cualquiera de los cinco menos la espera. */
+/**
+ * Lo que puede decir la columna `status` de `verification`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL SEXTO ENTRA POR OTRA PUERTA, Y POR ESO NO ES UN VALOR DE PRESENTACIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `declined` no lo dice ninguna presentación: lo dice el evento
+ * `request.answered`, que es el desenlace de **una petición del marco** y tiene
+ * su propio vocabulario de tres (`approved`, `declined`, `not_me`).
+ *
+ * Y hacía falta un valor nuevo porque los cinco de arriba no saben decirlo. Un
+ * titular que lee la petición y contesta que no **no es** `rejected` —ése está
+ * escrito como aviso de fraude, «no he sido yo», y es el único rojo de la
+ * consola— ni es `failed`, que significa que algo se rompió y se reintenta.
+ * Colapsar `declined` en cualquiera de los dos haría que el agente contara una
+ * negativa legítima como una suplantación o como una avería. Extender el
+ * vocabulario es más barato que mentir en la celda.
+ */
+export type VerificationStatus = PresentationStatus | 'declined';
+
+/** Un desenlace: cualquiera de los seis menos la espera. */
 export type TerminalVerificationStatus = Exclude<VerificationStatus, 'pending'>;
 
 /**
@@ -39,8 +60,16 @@ export type TerminalVerificationStatus = Exclude<VerificationStatus, 'pending'>;
  * diario con él dejaría la comprobación marcada como terminada en «esperando».
  * Lo mismo vale para el `null` que te-api manda cuando no pudo determinarlo —eso
  * se archiva y no se aplica.
+ *
+ * ⚠ **`declined` tampoco entra por aquí, y es deliberado.** Esta puerta es la de
+ *   `presentation.settled`, cuyo vocabulario son los cinco de arriba; un evento
+ *   de liquidación que dijera `declined` estaría diciendo una palabra que su
+ *   emisor no usa, y aceptarla sería aceptar que el cuerpo elija estados fuera
+ *   de su contrato. El desenlace de una petición del marco entra por su propia
+ *   conversión, que es total por construcción: ver `statusOfOutcome` en
+ *   `lib/request-answered.ts`.
  */
-export function isTerminalStatus(value: string): value is TerminalVerificationStatus {
+export function isTerminalStatus(value: string): value is Exclude<PresentationStatus, 'pending'> {
   return value === 'verified' || value === 'rejected' || value === 'failed' || value === 'expired';
 }
 
@@ -154,6 +183,20 @@ const VERDICTS: Record<Exclude<VerificationStatus, 'pending'>, VerdictShape> = {
     tone: 'alarm',
     labelKey: 'verdict.rejectedLabel',
     detailKey: 'verdict.rejectedDetail',
+  },
+  /*
+   * **Ámbar, y no rojo.** Es la distinción que sostiene toda esta tabla: quien
+   * lee la petición y contesta que no está usando la ceremonia como se espera,
+   * no denunciando una suplantación. Pintarlo del color de `rejected` haría que
+   * el agente cortara la llamada por una negativa normal.
+   *
+   * Y ámbar y no verde porque **la operación no ocurrió**. `ok` es «se hizo lo
+   * que se pedía», y aquí no se hizo: el rótulo dice cuál de las dos cosas es.
+   */
+  declined: {
+    tone: 'caution',
+    labelKey: 'verdict.declinedLabel',
+    detailKey: 'verdict.declinedDetail',
   },
   failed: {
     tone: 'caution',

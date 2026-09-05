@@ -140,7 +140,7 @@ export interface CeremonyTemplate {
  * la que usa el caso de mañana, y una entrada ausente sale como «plantilla
  * desconocida» en una pantalla que existe para explicar el marco.
  */
-export const CEREMONY_TEMPLATES: readonly CeremonyTemplate[] = [
+export const CEREMONY_TEMPLATES = [
   {
     id: 'auth.signin.v1',
     kinds: ['authenticate'],
@@ -338,13 +338,56 @@ export const CEREMONY_TEMPLATES: readonly CeremonyTemplate[] = [
     version: 1,
     statement: 'You are sharing one attribute with {asker}: {field.attribute}.',
   },
-];
+  // `as const satisfies` y no una anotación de tipo, y no es un detalle de
+  // estilo: la anotación ensancha `id` a `string` y con eso se pierde el único
+  // sitio del que se pueden sacar **los catorce nombres como tipo**. El
+  // `satisfies` sigue comprobando la forma de cada entrada igual que antes —una
+  // clave mal escrita sigue sin compilar—, pero conserva los literales.
+  //
+  // De ahí sale `CeremonyTemplateId`, y de ahí que un evento de respuesta pueda
+  // estar tipado por plantilla en vez de caer en una fila genérica.
+] as const satisfies readonly CeremonyTemplate[];
 
-const BY_ID = new Map(CEREMONY_TEMPLATES.map((entry) => [entry.id, entry]));
+/**
+ * **Los nombres de las catorce, como tipo.**
+ *
+ * Se deriva de la tabla y no se escribe a mano, que es el punto entero: añadir
+ * una decimoquinta entrada arriba ensancha esta unión, y con ella dejan de
+ * compilar los `Record<CeremonyTemplateId, …>` que hay repartidos —hoy, el
+ * rótulo de cada ceremonia en `lib/request-answered.ts`—. Una plantilla nueva no
+ * puede entrar en silencio y aparecer en pantalla como una fila sin nombre.
+ *
+ * Es un tipo y no una lista en tiempo de ejecución: para lo segundo está
+ * `CEREMONY_TEMPLATES`, que es la misma tabla.
+ */
+export type CeremonyTemplateId = (typeof CEREMONY_TEMPLATES)[number]['id'];
+
+/**
+ * El mapa se declara con la clave ancha (`string`) a propósito: por él entran
+ * nombres que vienen de fuera —de un caso del catálogo, de un evento de te-api—
+ * y estrechar la clave a `CeremonyTemplateId` obligaría a comprobar antes de
+ * poder preguntar, que es justo al revés de para lo que sirve.
+ */
+const BY_ID: ReadonlyMap<string, CeremonyTemplate> = new Map(
+  CEREMONY_TEMPLATES.map((entry) => [entry.id, entry]),
+);
 
 /** Una plantilla por su nombre, o `undefined` si esta copia no la conoce. */
 export function findCeremonyTemplate(id: string): CeremonyTemplate | undefined {
   return BY_ID.get(id);
+}
+
+/**
+ * Si esa cadena es una de las catorce **que esta copia conoce**.
+ *
+ * Es la puerta por la que un `template` que llega en un evento firmado se
+ * convierte en `CeremonyTemplateId`. Contestar que no **no es un error**: el
+ * catálogo de verdad vive en te-api y puede tener una plantilla que este espejo
+ * todavía no lleve, y esa respuesta se guarda y se enseña igual (ver la cabecera
+ * de `lib/request-answered.ts`). Lo que no se hace es fingir que la conocemos.
+ */
+export function isCeremonyTemplateId(value: string): value is CeremonyTemplateId {
+  return BY_ID.has(value);
 }
 
 /**

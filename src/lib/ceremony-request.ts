@@ -64,6 +64,69 @@ export const PENDING_REQUEST_URI =
   '<verifier session — POST /v1/b2b/presentations returns it a moment before this call>';
 
 /**
+ * Lo que se pinta en el sitio de la referencia mientras no exista.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA REFERENCIA LA EMITE LA ORGANIZACIÓN, NO EL NAVEGADOR
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `reference` es **el número de expediente de quien pregunta**: te-api no lo
+ * mira, no lo valida contra nada y lo devuelve verbatim en `request.answered`.
+ * Su razón de ser es que el socio pueda atar la respuesta a una fila de *su*
+ * sistema sin guardar una tabla de equivalencias con los identificadores de
+ * te-api. Dos identificadores, dos dueños: el `requestId` nombra la ceremonia y
+ * es de te-api; la referencia nombra el caso y es de la organización.
+ *
+ * Y por eso se acuña **en el servidor**, en el mismo sitio que manda la
+ * petición, y no aquí ni en el navegador. Dos motivos y los dos se ven:
+ *
+ *  · La emite el sistema de la organización. Un número de expediente que elige
+ *    la pestaña del agente no es el número de expediente de nadie.
+ *  · Tiene que ser distinto en cada envío. El compositor deja mandar la misma
+ *    ceremonia otra vez sin desmontarse, así que un valor acuñado al abrir la
+ *    ficha volvería a salir en el segundo envío con el mismo número.
+ *
+ * Se escribe como frase y no como una referencia de mentira por lo mismo que el
+ * `requestUri`: un `CASE-…` inventado en el bloque invita a copiarlo, y te-api
+ * lo aceptaría tal cual — quedaría un expediente que no es de nadie atado a una
+ * firma de verdad. Después de mandar, el bloque enseña el que salió.
+ */
+export const PENDING_ASKER_REFERENCE =
+  '<your own case number — this console mints one per request; see mintAskerReference>';
+
+/**
+ * El alfabeto de la cola: **Crockford base32**, sin `I`, `L`, `O` ni `U`.
+ *
+ * Sin las cuatro porque esto se dicta por teléfono y se teclea en un buscador:
+ * el `1` y la `I` son el mismo garabato y el `0` y la `O` también. La `U` se
+ * cae en Crockford para no componer palabras que nadie quiere leer en un
+ * expediente.
+ */
+const REFERENCE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * **Acuña una referencia de expediente.** `CASE-20260905-7K3QF2`.
+ *
+ * Con la forma con la que numera una entidad y no con la de un identificador de
+ * máquina, que es el punto: quien mira esta demostración tiene que distinguir de
+ * un vistazo cuál de los dos identificadores es suyo y cuál es de TripleEnable.
+ * Otro UUID al lado del `requestId` no enseña nada — enseña dos cadenas iguales.
+ *
+ * La fecha delante porque así se ordena y se busca, y seis caracteres de azar
+ * detrás porque una entidad de verdad numeraría por contador y esta consola no
+ * tiene ninguno que compartan sus réplicas. Treinta y dos elevado a seis es
+ * suficiente para un día de peticiones de una demostración; no es una clave y no
+ * se usa para autorizar nada.
+ */
+export function mintAskerReference(now: Date = new Date()): string {
+  const day = now.toISOString().slice(0, 10).replace(/-/gu, '');
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  const tail = Array.from(bytes, (byte) => REFERENCE_ALPHABET[byte % 32] ?? '0').join('');
+  return `CASE-${day}-${tail}`;
+}
+
+/**
  * Lo que hace falta para componer una petición del marco.
  *
  * Vivía en `lib/te-api.ts` y se mudó aquí con el cuerpo: el tipo y el
@@ -76,6 +139,16 @@ export interface CeremonyRequestInput {
   readonly signWith: CeremonySignWith;
   /** Obligatorio con `signWith: 'credential'`, y prohibido con `identity`. */
   readonly credentialType?: string;
+  /**
+   * **El número de expediente de quien pregunta.** te-api no lo mira y lo
+   * devuelve verbatim en `request.answered`. Ver `PENDING_ASKER_REFERENCE`.
+   *
+   * Opcional en el tipo porque el compositor pinta la vista previa sin él —no
+   * existe todavía— y porque un socio puede legítimamente no mandar ninguno.
+   * En lo que sale de esta consola por el cable **siempre va uno**: lo acuña
+   * `requestCeremony` si el llamante no trae el suyo.
+   */
+  readonly reference?: string;
   /** El nombre con el que la plantilla viaja: `doc.sign.v1`. */
   readonly template: string;
   /** La sesión del verificador, cuando la ceremonia tiene una. */
@@ -92,6 +165,7 @@ export interface CeremonyRequestBody {
   readonly kind: CeremonyKind;
   readonly signWith: CeremonySignWith;
   readonly credentialType?: string;
+  readonly reference?: string;
   readonly requestUri?: string;
   readonly template: string;
   readonly fields: readonly {
@@ -124,6 +198,11 @@ export function buildCeremonyRequestBody(input: CeremonyRequestInput): CeremonyR
     kind: input.kind,
     signWith: input.signWith,
     ...(input.credentialType === undefined ? {} : { credentialType: input.credentialType }),
+    // Justo detrás de a quién se pregunta y de qué se ejecuta, que es donde se
+    // lee: las tres primeras claves dicen **de quién es esta petición** —el
+    // titular, la ceremonia, y ahora el expediente de quien la manda— antes de
+    // que empiecen los detalles del transporte.
+    ...(input.reference === undefined ? {} : { reference: input.reference }),
     ...(input.requestUri === undefined ? {} : { requestUri: input.requestUri }),
     template: input.template,
     fields: input.fields.map((field) => ({

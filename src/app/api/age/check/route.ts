@@ -116,6 +116,14 @@ export async function POST(request: Request): Promise<NextResponse> {
       orgId: session.organization.orgId,
       externalId: customer.externalId,
       presentationId: checked.presentationId,
+      // La petición del marco. La devuelve la misma llamada, y es lo que deja
+      // que `request.answered` encuentre esta fila aunque el evento no nombre
+      // ninguna presentación. Ver `db/013_request_answered.sql`.
+      requestId: checked.requestId,
+      // El expediente que acuñó esta consola para esta puerta de edad. Vuelve
+      // verbatim en `request.answered` y es el primer emparejamiento que mira el
+      // receptor. Ver `mintAskerReference`.
+      askerReference: checked.reference,
       typeKey: credentialType,
       // Uno, y es el argumento entero de esta pantalla.
       requestedClaims: ['age_over_18'],

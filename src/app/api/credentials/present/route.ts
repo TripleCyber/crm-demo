@@ -328,6 +328,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     // `TransferApprovalResult.link`.
     let counterLink: string | null = null;
 
+    // **La petición del marco, cuando la manda este servidor.**
+    //
+    // Sólo la rama del mostrador la tiene: en la del teléfono la compone te-api
+    // por dentro del timbre y su identificador no vuelve en la respuesta
+    // (`WakeupResult` son tres campos y ninguno es éste). Esa fila se sigue
+    // cerrando por `presentation_id`, que sí tiene, así que el hueco no le quita
+    // nada — pero el receptor lo empareja por los dos y aquí hay uno que dar.
+    // Ver `db/013_request_answered.sql`.
+    let frameworkRequestId: string | undefined;
+
+    // Y su expediente, el que acuñó `requestCeremony` al mandarla. Se lee de lo
+    // que salió y no se vuelve a acuñar: un segundo número no sería el que lleva
+    // la petición, y el evento no encontraría esta fila.
+    let askerReference: string | undefined;
+
     let wakeupId: string | undefined;
     if (channel === 'phone') {
       try {
@@ -477,6 +492,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         // y ya está.
         expiresAt = asked.result.expiresAt;
         counterLink = asked.result.link;
+        frameworkRequestId = asked.result.requestId;
+        askerReference = asked.sent.body.reference;
       } catch (error) {
         // Igual que en el timbre: la sesión de presentación ya está abierta y
         // **se deja caducar sola**. Sin petición no hay ceremonia, y anotarla
@@ -506,6 +523,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       orgId: session.organization.orgId,
       externalId: customer.externalId,
       presentationId: presentation.presentationId,
+      requestId: frameworkRequestId,
+      askerReference,
       typeKey: declared.type,
       requestedClaims: claims,
       channel,

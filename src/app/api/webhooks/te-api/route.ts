@@ -3,7 +3,14 @@ import { NextResponse } from 'next/server';
 import { logConsoleFailure } from '@/lib/console-failures';
 import { getOrganization } from '@/lib/organization';
 import {
+  readAnsweredRequest,
+  REQUEST_ANSWERED_EVENT,
+  statusOfOutcome,
+  type AnsweredRequest,
+} from '@/lib/request-answered';
+import {
   readPresentationProof,
+  settleAnsweredRequest,
   settleVerification,
   type VerificationSettlement,
 } from '@/lib/verifications';
@@ -124,6 +131,38 @@ import {
  * desenlace sea `verified` —te-api tiene un tope de tamaño de cuerpo y los
  * recorta antes que el sobre, y un evento de una versión anterior no los lleva—,
  * así que faltar es un caso normal y no un error que haya que registrar.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  Y AHORA HAY UN TERCER TIPO: LA RESPUESTA A UNA PETICIÓN DEL MARCO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `request.answered`. Cierra el hueco que el dueño encontró enseñando esto —«el
+ * CRM sigue sin reaccionar a las autorizaciones»—: hasta ahora una petición del
+ * marco firmada con la identidad de la cartera se aprobaba o se rechazaba sin
+ * producir **nada** que esta consola pudiera ver.
+ *
+ * Lo importante de cómo entra es que **no entra de ninguna manera especial**.
+ * Mismo sobre, misma firma, misma comprobación, misma tabla, misma clave de
+ * idempotencia. La comprobación de firma, la protección contra reproducción y la
+ * deduplicación por `event_id` le aplican por estar en este camino, no por una
+ * rama que las repita para él — que es como acaban divergiendo.
+ *
+ * Y **una sola rama para las catorce plantillas**. El cuerpo es el mismo para
+ * todas, así que un `if` por ceremonia aquí no compraría nada y sería el sitio
+ * donde la decimoquinta se cae en silencio. La diferencia entre plantillas es
+ * cómo se lee en pantalla, y ahí sí está tipada: `lib/request-answered.ts`
+ * obliga a nombrarlas todas o no compila.
+ *
+ * Lo que lleva dentro y qué se hace con ello, en ese mismo fichero y en la rama
+ * de abajo. Dos apuntes que sí son de aquí:
+ *
+ *  · **Un campo de `data` que este receptor no conozca no se pierde ni tumba
+ *    nada.** El sobre entero se archiva tal cual, así que aparece solo en el
+ *    detalle técnico de la pantalla. Un lector estricto ataría los dos
+ *    despliegues para siempre, y es justo lo que este proyecto no quiere.
+ *  · **El desenlace se guarda en la columna `status`** aunque el evento lo llame
+ *    `outcome`. Es la misma pregunta —cómo acabó— y la columna es genérica; ver
+ *    el comentario del `insert`.
  */
 
 export const runtime = 'nodejs';
@@ -177,6 +216,19 @@ export async function POST(request: Request): Promise<NextResponse> {
   const data = isRecord(envelope.data) ? envelope.data : {};
   const presentationId = asString(data['presentationId']) ?? null;
 
+  // La respuesta a una petición del marco se lee **antes de archivar**, y no por
+  // adelantar trabajo: de ella salen dos de las columnas que se promocionan (el
+  // desenlace y el cliente al que afecta), y esas se escriben en el mismo
+  // `insert`. Ver los dos comentarios de abajo.
+  //
+  // Se lee para **cualquier** plantilla: aquí no hay ni una rama por ceremonia y
+  // no puede haberla. El sobre y el `data` son los mismos para las catorce, así
+  // que un caso especial por plantilla sería exactamente el sitio donde la
+  // decimoquinta se cae sin que nadie lo note.
+  const answered = asString(envelope.type) === REQUEST_ANSWERED_EVENT
+    ? readAnsweredRequest(data)
+    : null;
+
   let stored: boolean;
   try {
     stored = await storeWebhookEvent({
@@ -191,7 +243,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       apiVersion: asString(envelope.apiVersion) ?? null,
       occurredAt: asString(envelope.createdAt) ?? null,
       presentationId,
-      status: asString(data['status']) ?? null,
+      // Los dos identificadores de la petición, para que la fila del evento se
+      // pueda cruzar con el diario de comprobaciones cuando no hay presentación
+      // que nombrar —que es la mayoría del catálogo—. No se guardan en columna:
+      // sólo resuelven el cliente en el `insert`. Ver `storeWebhookEvent`.
+      requestId: answered?.requestId ?? null,
+      askerReference: answered?.reference ?? null,
+      // **El desenlace, se llame como se llame en su tipo.** La columna es
+      // genérica a propósito («el veredicto, cuando el evento lo lleva») y en
+      // `presentation.settled` se llama `status`; en `request.answered` se llama
+      // `outcome` y es la misma cosa. Guardarlo aquí es lo que hace que la
+      // pantalla de eventos y el diario de la ceremonia lo pinten sin saber de
+      // qué tipo es la fila.
+      status: asString(data['status']) ?? answered?.outcome ?? null,
       signatureOk: check.ok,
       signatureError: check.ok ? null : check.reason,
       deliveryId: nonEmpty(request.headers.get(DELIVERY_ID_HEADER)) ?? null,
@@ -234,7 +298,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // ── Paso 4: actuar, despachando por tipo ────────────────────────────────
   try {
-    return await dispatch(organization.orgId, asString(envelope.type), presentationId, data);
+    return await dispatch(organization.orgId, asString(envelope.type), presentationId, data, answered);
   } catch (error) {
     // El evento YA está archivado, así que se ve en la pantalla de eventos y no
     // se pierde el rastro. Un 500 aquí haría que te-api reintentara ocho veces
@@ -255,15 +319,24 @@ export async function POST(request: Request): Promise<NextResponse> {
  *
  * Una rama por tipo conocido y **una salida para lo que no se conozca**, que
  * contesta 200: un tipo nuevo tiene que poder llegar, archivarse y verse en la
- * pantalla sin que este receptor lo trate como un fallo. La lista de hoy son dos
- * (`presentation.settled` y `webhook.test`), y te-api versiona el cuerpo
- * (`apiVersion`) justo porque cuenta con que crezca.
+ * pantalla sin que este receptor lo trate como un fallo. La lista de hoy son
+ * tres (`presentation.settled`, `request.answered` y `webhook.test`), y te-api
+ * versiona el cuerpo (`apiVersion`) justo porque cuenta con que siga creciendo.
+ *
+ * ⚠ **Una rama por TIPO, nunca por plantilla.** `request.answered` llega igual
+ *   para las catorce ceremonias del catálogo y se trata igual para las catorce:
+ *   el sobre es el mismo, la firma es la misma y `data` tiene la misma forma. Un
+ *   `if` por plantilla aquí sería el sitio exacto donde la decimoquinta se cae
+ *   sin síntoma. Lo que sí distingue una plantilla de otra es cómo se **lee** en
+ *   pantalla, y eso vive en `lib/request-answered.ts`, donde el compilador
+ *   obliga a nombrarlas todas.
  */
 async function dispatch(
   orgId: string,
   type: string | undefined,
   presentationId: string | null,
   data: Record<string, unknown>,
+  answered: AnsweredRequest | null,
 ): Promise<NextResponse> {
   switch (type) {
     case 'presentation.settled': {
@@ -303,6 +376,45 @@ async function dispatch(
         ...readSettlement(data),
       });
       return NextResponse.json({ status: 'applied' });
+    }
+
+    case REQUEST_ANSWERED_EVENT: {
+      // El cuerpo lo leyó el llamante —de ahí salieron dos columnas— así que
+      // aquí sólo se comprueba si era legible. `null` significa que faltaba el
+      // `requestId` o que el desenlace no era una de las tres palabras, y
+      // ninguna de las dos se puede suplir: sin identificador no hay petición a
+      // la que atar esto, y un desenlace inventado es lo único que este receptor
+      // no puede hacer nunca. Se registra y se deja archivado, que es lo que
+      // convierte un hueco del contrato en algo que se ve en la pantalla.
+      if (answered === null) {
+        console.error('[crm] request.answered ilegible', { data });
+        return NextResponse.json({ status: 'stored', applied: false });
+      }
+
+      // El diario se cierra con lo que trae el evento y sin volver a llamar,
+      // igual que arriba. Lo que este evento **no** trae —claims, llave, recibo
+      // firmado— no se va a buscar: si la ceremonia llevaba presentación, eso
+      // llega por `presentation.settled` y ahora puede rellenarlo aunque esta
+      // rama haya cerrado la fila antes. Ver `settleVerification`.
+      const closed = await settleAnsweredRequest(
+        orgId,
+        {
+          // El expediente primero: es el único de los tres que esta consola
+          // emitió ella misma. El porqué, en `settleAnsweredRequest`.
+          reference: answered.reference,
+          requestId: answered.requestId,
+          presentationId: answered.presentationId,
+        },
+        statusOfOutcome(answered.outcome),
+      );
+
+      // `false` **no es un fallo** y por eso no se registra como tal: una
+      // ceremonia que firma con la identidad de la cartera no abre sesión de
+      // verificador y esta consola no le anota fila ninguna, porque no habría
+      // nada que sondear en ella. La respuesta se ve igual —está archivada, y la
+      // pantalla de la ceremonia la empareja por `requestId`—; lo que no hay es
+      // fila que cerrar.
+      return NextResponse.json(closed ? { status: 'applied' } : { status: 'stored', applied: false });
     }
 
     case 'webhook.test':
