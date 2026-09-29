@@ -1,0 +1,307 @@
+import 'server-only';
+
+import { query } from './db';
+import type { SignatureFailure } from './webhook-signature';
+
+/**
+ * El diario de webhooks del CRM: lo que te-api ha mandado y qué se hizo con ello.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  EL CONTRATO DEL EVENTO ES DE te-api, Y ESTÁ ESCRITO ALLÍ
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * La forma la fija `tripleenable-api/src/b2b/webhook-events.ts`, que es el
+ * fichero que hay que abrir cuando algo no cuadre. Lo que llega hoy:
+ *
+ *     {
+ *       "id":             "<uuidv7>",              // = cabecera te-event-id
+ *       "type":           "presentation.settled",
+ *       "apiVersion":     "2026-08-31",
+ *       "createdAt":      "2026-08-31T10:15:30.000Z",
+ *       "organizationId": "ww51qgtvpc9h",
+ *       "data": {
+ *         "presentationId": "<uuidv7>",
+ *         "status":         "verified" | "rejected" | "failed" | "expired" | null,
+ *         "credentialType": "cliente",
+ *         "requestedAt":    "…", "expiresAt": "…", "settledAt": "…"
+ *       }
+ *     }
+ *
+ * Y **tres** tipos, hoy:
+ *
+ *  · `presentation.settled` — cubre todos los finales de una sesión de
+ *    verificador, con el desenlace en `data.status`, y lleva además lo que trae
+ *    la confirmación del titular: `claims`, `holderKey`, `holderLinkId` y
+ *    `proof`. (Aquí decía que no los llevaba «para minimizar el dato personal
+ *    que sale por un canal saliente». Esa política está revocada y el argumento
+ *    de por qué, en la cabecera del receptor.)
+ *  · `request.answered` — el desenlace de **una petición del marco**, que es lo
+ *    que faltaba: `requestId`, `template`, `templateVersion`, `kind`, `outcome`
+ *    (`approved` · `declined` · `not_me`), `answeredAt`, `subjectReference` y
+ *    `presentationId`. Llega igual para las catorce plantillas del catálogo. Lo
+ *    que lleva y cómo se lee, en `lib/request-answered.ts`.
+ *  · `webhook.test` — la prueba del administrador. Su `data.presentationId` es
+ *    `null` siempre y a propósito.
+ *
+ * ## Cómo se despacha
+ *
+ * Por `type`, con una rama por tipo conocido y **una salida para lo que no se
+ * conozca**: se guarda y no se actúa. Un tipo nuevo no puede ser un `500` en el
+ * receptor — te-api reintentaría ocho veces algo que nunca va a entrar, y el
+ * administrador vería su endpoint suspendido por no saber leer una palabra.
+ *
+ * ## Idempotencia
+ *
+ * La entrega es **al menos una vez**: un reintento llega con el mismo `id`. La
+ * clave primaria de la tabla es ese id y el `insert` lleva `on conflict do
+ * nothing`, así que la repetición no escribe dos filas ni vuelve a actuar. Se
+ * deduplica por `event_id` y **no** por `te-delivery-id`, que cambia en cada
+ * intento — deduplicar por él dejaría entrar el mismo evento ocho veces.
+ */
+
+/** Un evento tal y como se guarda y se enseña. */
+export interface WebhookEventRecord {
+  readonly eventId: string;
+  readonly orgId: string;
+  readonly type: string;
+  readonly apiVersion: string | null;
+  /** Cuándo lo registró te-api. `null` si el cuerpo no lo traía. */
+  readonly occurredAt: string | null;
+  /** Cuándo llegó a este servidor. Lo sella esta base. */
+  readonly receivedAt: string;
+  readonly presentationId: string | null;
+  /** El cliente al que afecta, cruzado aquí contra `verification`. */
+  readonly externalId: string | null;
+  readonly status: string | null;
+  readonly signatureOk: boolean;
+  readonly signatureError: string | null;
+  readonly deliveryId: string | null;
+  /** El cuerpo entero, tal y como llegó. */
+  readonly payload: unknown;
+}
+
+interface WebhookEventRow extends Record<string, unknown> {
+  event_id: string;
+  org_id: string;
+  type: string;
+  api_version: string | null;
+  occurred_at: Date | null;
+  received_at: Date;
+  presentation_id: string | null;
+  external_id: string | null;
+  status: string | null;
+  signature_ok: boolean;
+  signature_error: string | null;
+  delivery_id: string | null;
+  payload: unknown;
+}
+
+function toRecord(row: WebhookEventRow): WebhookEventRecord {
+  return {
+    eventId: row.event_id,
+    orgId: row.org_id,
+    type: row.type,
+    apiVersion: row.api_version,
+    occurredAt: row.occurred_at === null ? null : row.occurred_at.toISOString(),
+    receivedAt: row.received_at.toISOString(),
+    presentationId: row.presentation_id,
+    externalId: row.external_id,
+    status: row.status,
+    signatureOk: row.signature_ok,
+    signatureError: row.signature_error,
+    deliveryId: row.delivery_id,
+    payload: row.payload,
+  };
+}
+
+export interface StoreWebhookEventInput {
+  readonly eventId: string;
+  readonly orgId: string;
+  readonly type: string;
+  readonly apiVersion: string | null;
+  readonly occurredAt: string | null;
+  readonly presentationId: string | null;
+  /**
+   * La petición del marco a la que se refiere el evento, si la nombra.
+   *
+   * **No se guarda en columna**: sólo sirve para resolver el cliente en el
+   * `insert`. La forma del cuerpo crece y desmontarla en columnas es justo lo
+   * que `db/007_webhook_event.sql` decidió no hacer; lo que se promociona es
+   * únicamente lo que esta base necesita para buscar, y por identificador de
+   * petición no busca nadie — la pantalla lo lee del `payload`, que está entero.
+   */
+  readonly requestId: string | null;
+  /**
+   * El expediente que acuñó esta organización, devuelto por te-api. Mismo uso y
+   * misma razón de no ser columna que `requestId`, y se mira antes que él por lo
+   * mismo que en `settleAnsweredRequest`: es el que no depende de que la
+   * respuesta de te-api llegara.
+   */
+  readonly askerReference: string | null;
+  readonly status: string | null;
+  readonly signatureOk: boolean;
+  readonly signatureError: SignatureFailure | null;
+  readonly deliveryId: string | null;
+  readonly payload: unknown;
+}
+
+/**
+ * Guarda un evento. Devuelve `false` si ya estaba — o sea, si es un reintento.
+ *
+ * El `external_id` se resuelve **en el propio `insert`**, con una subconsulta
+ * contra `verification`. Se hace así y no en dos viajes porque las dos escrituras
+ * tienen que ver la misma base: entre un `select` y un `insert` separados cabe
+ * que la comprobación se cierre por el otro camino, y entonces la fila del
+ * evento se quedaría sin cliente por una carrera que nadie va a reproducir.
+ *
+ * `null` si no cruza, que es lo normal en `webhook.test` y en una presentación
+ * que no abrió esta consola. No es un error: te-api no conoce el padrón de esta
+ * empresa y no tiene por qué mandar el `external_id`.
+ *
+ * ## Y ahora se cruza por dos columnas, no por una
+ *
+ * Porque `request.answered` **no siempre puede nombrar una presentación**: la
+ * mayoría del catálogo firma con la identidad de la cartera y entonces no hay
+ * sesión de verificador que nombrar. Lo que sí trae siempre es el identificador
+ * de la petición, que esta consola anota al crearla desde
+ * `db/013_request_answered.sql`. Sin este segundo camino, la columna «A quién»
+ * de la pantalla de eventos saldría vacía justo en el tipo de evento que se
+ * añadió para que dejara de estar vacía.
+ *
+ * Sigue sin resolverse desde el cuerpo: el `subjectReference` que trae el evento
+ * es el `externalId` de esta empresa y sería tentador copiarlo aquí, pero esta
+ * fila se escribe **antes de saber si la firma cuadra** —a propósito, ver la
+ * cabecera del receptor—, y entonces un `POST` inventado colgaría eventos falsos
+ * de la ficha de un cliente real. La pantalla sí lo usa para pintar, y sólo
+ * cuando la firma cuadró; eso es otra cosa y está dicho allí.
+ */
+export async function storeWebhookEvent(input: StoreWebhookEventInput): Promise<boolean> {
+  const rows = await query<{ event_id: string }>(
+    `insert into webhook_event
+       (event_id, org_id, type, api_version, occurred_at, presentation_id, external_id,
+        status, signature_ok, signature_error, delivery_id, payload)
+     values ($1, $2, $3, $4, $5, $6,
+             (select v.external_id from verification v
+               where v.org_id = $2
+                 and (($6::text is not null and v.presentation_id = $6::text)
+                      or ($7::text is not null and v.request_id = $7::text)
+                      or ($8::text is not null and v.asker_reference = $8::text))
+               -- Una subconsulta escalar revienta si devuelve dos filas, y aqui
+               -- eso seria un 500 en el receptor por un caso que no deberia
+               -- existir. Con el tope, lo peor que pasa es que el evento se
+               -- cuelgue de una de las dos, y las dos son de esa ceremonia.
+               limit 1),
+             $9, $10, $11, $12, $13::jsonb)
+     on conflict (event_id) do nothing
+     returning event_id`,
+    [
+      input.eventId,
+      input.orgId,
+      input.type,
+      input.apiVersion,
+      input.occurredAt,
+      input.presentationId,
+      input.requestId,
+      input.askerReference,
+      input.status,
+      input.signatureOk,
+      input.signatureError,
+      input.deliveryId,
+      JSON.stringify(input.payload),
+    ],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Los últimos eventos de esta organización, lo más reciente primero.
+ *
+ * Con `org_id` en el `where` como todo lo demás de este proyecto: dos
+ * instalaciones pueden acabar apuntando a la misma base, y entonces esto es lo
+ * único que impide que la pantalla de una enseñe los eventos de la otra.
+ */
+export async function listWebhookEvents(
+  orgId: string,
+  limit = 100,
+): Promise<WebhookEventRecord[]> {
+  const rows = await query<WebhookEventRow>(
+    `select event_id, org_id, type, api_version, occurred_at, received_at,
+            presentation_id, external_id, status, signature_ok, signature_error,
+            delivery_id, payload
+       from webhook_event
+      where org_id = $1
+      order by received_at desc
+      limit $2`,
+    [orgId, limit],
+  );
+  return rows.map(toRecord);
+}
+
+/**
+ * **Lo que ha entrado desde un instante concreto.** La otra mitad del catálogo
+ * de verificaciones: qué contestó te-api a la petición que se acaba de mandar.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  SIGUE FILTRANDO POR HORA, Y AHORA ES UNA ELECCIÓN Y NO UNA LIMITACIÓN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Aquí decía que se filtraba por hora porque **no había `requestId` en ningún
+ * evento**, y que eso era un hueco del contrato de te-api. Ya no lo es:
+ * `request.answered` lo lleva siempre y es su correlación principal. Se dijo que
+ * el día que llegara esta función no cambiaría, y no cambia — pero por otra
+ * razón que la de entonces, así que se escribe.
+ *
+ * Lo que la pantalla de la ceremonia pide aquí es **el canal**: enséñame todo lo
+ * que ha entrado desde que pulsé, sea de esta petición o no, porque quien está
+ * integrando quiere ver el tráfico y no un resultado filtrado. Emparejar es cosa
+ * suya y ahora puede hacerlo de verdad: compara el `requestId` del `payload` con
+ * el que le devolvió el envío, y marca esa fila. Filtrar aquí le quitaría la
+ * mitad de lo que enseña.
+ *
+ * Y `presentation.settled` se empareja como siempre, por `presentationId`.
+ *
+ * `since` va como texto ISO y lo convierte Postgres, igual que `occurred_at` en
+ * el `insert`. El tope está para que una pestaña abierta desde ayer no se traiga
+ * el diario entero.
+ */
+export async function listWebhookEventsSince(
+  orgId: string,
+  since: string,
+  limit = 25,
+): Promise<WebhookEventRecord[]> {
+  const rows = await query<WebhookEventRow>(
+    `select event_id, org_id, type, api_version, occurred_at, received_at,
+            presentation_id, external_id, status, signature_ok, signature_error,
+            delivery_id, payload
+       from webhook_event
+      where org_id = $1 and received_at >= $2::timestamptz
+      order by received_at desc
+      limit $3`,
+    [orgId, since, limit],
+  );
+  return rows.map(toRecord);
+}
+
+/** Cuántos han llegado y cuántos venían mal firmados. Para Diagnóstico. */
+export interface WebhookEventTally {
+  readonly total: number;
+  readonly rejected: number;
+  readonly lastReceivedAt: string | null;
+}
+
+export async function countWebhookEvents(orgId: string): Promise<WebhookEventTally> {
+  const rows = await query<{ total: string; rejected: string; last_received_at: Date | null }>(
+    `select count(*)::text as total,
+            count(*) filter (where not signature_ok)::text as rejected,
+            max(received_at) as last_received_at
+       from webhook_event
+      where org_id = $1`,
+    [orgId],
+  );
+  const row = rows[0];
+  return {
+    total: Number(row?.total ?? '0'),
+    rejected: Number(row?.rejected ?? '0'),
+    lastReceivedAt: row?.last_received_at?.toISOString() ?? null,
+  };
+}

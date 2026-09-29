@@ -1,0 +1,69 @@
+-- 010_holder_proof · el recibo firmado entra en el diario.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+--  LO QUE `003` DIO POR IMPOSIBLE YA NO LO ES
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- `003_verification.sql` cerraba con una sección titulada «lo que sigue SIN
+-- estar aquí, y no por descuido»: la llave del titular, su vínculo y el recibo
+-- firmado no tenían columna porque te-api no los entregaba al partner, y una
+-- columna vacía para siempre es una promesa que el esquema no puede cumplir.
+--
+-- Esa premisa cayó. El evento `presentation.settled` pasa a llevar **todo lo
+-- que trae la confirmación del titular** —`claims`, `holderKey`, `holderLinkId`
+-- y `proof`—, así que la promesa sí se puede cumplir y estas cuatro columnas
+-- dejan de ser un hueco decorativo para ser el sitio donde vive la prueba.
+--
+-- El porqué de la decisión —por qué un canal saliente puede llevar dato
+-- personal en este caso concreto— está escrito entero en la cabecera de
+-- `src/app/api/webhooks/te-api/route.ts`, que es donde el dato entra. En una
+-- frase: el webhook es un destino que **la propia organización** dio de alta y
+-- verificó, el cuerpo va firmado, y esa organización ya tiene derecho a estos
+-- datos porque es quien pidió la verificación y el titular consintió
+-- enseñárselos. Lo que sigue prohibido es que el receptor vuelva a llamar a
+-- te-api para completar lo que le falte.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+--  POR QUÉ CUATRO COLUMNAS Y NO UN ÚNICO `jsonb`
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Porque no son la misma clase de dato y no se consultan igual:
+--
+--  · `holder_key_thumbprint` es **lo que un perito compara**. Es corto, estable
+--    y es lo que se cruza contra otro recibo para afirmar «firmó la misma
+--    llave». Como columna `text` se indexa y se lee en un `select` a mano; como
+--    campo dentro de un `jsonb` habría que escribir un `->>` cada vez.
+--  · `holder_key_jwk` es **la llave en sí**, el material con el que se vuelve a
+--    verificar la firma sin preguntarnos nada. Va en `jsonb` porque es un objeto
+--    ajeno: si mañana te-api emite con otra curva, esta columna ya lo aguanta.
+--  · `holder_link_id` es el vínculo de esa persona **con esta organización**, y
+--    no el identificador global del titular. La distinción importa: el global
+--    sería el mismo en todos los bancos, así que dos entidades que archivaran
+--    sus recibos podrían cruzarlos y averiguar que su cliente y el del otro son
+--    la misma persona. Éste no sirve para eso.
+--  · `proof` es **el recibo firmado entero** —la presentación, el KB-JWT, el
+--    `sd_hash`, el `aud`, el `nonce` y la hora que firmó el teléfono del
+--    titular—. Se guarda tal cual, en un solo `jsonb`, precisamente porque es
+--    una unidad: trocearlo en seis columnas invitaría a alguien a escribir una a
+--    mano y romper la propiedad que lo hace valioso, que es que es **lo que
+--    te-api mandó, sin tocar**.
+--
+-- Ninguna es `not null`, y no por prudencia: el evento las trae **sólo cuando
+-- el desenlace es `verified`**. Una comprobación rechazada, caducada o fallida
+-- no tiene recibo que guardar, y ponerle un valor por defecto sería inventarlo.
+-- Pueden faltar además cuando el cuerpo se degrada por tamaño o cuando llega de
+-- una versión anterior del evento, y las dos cosas se tratan igual: la fila se
+-- cierra con lo que haya y la pantalla no pinta lo que no tiene.
+--
+-- `add column if not exists` en las cuatro para que la migración se pueda
+-- aplicar sobre una base ya sembrada por una versión que las hubiera añadido a
+-- mano durante el desarrollo, sin que el migrador se quede a medias.
+--
+-- `disclosed_claims` **no se toca**: ya existe desde `003`, con la forma
+-- correcta y por la razón correcta. Lo único que cambia es que ahora se llena.
+
+alter table verification
+  add column if not exists holder_key_thumbprint text,
+  add column if not exists holder_key_jwk        jsonb,
+  add column if not exists holder_link_id        text,
+  add column if not exists proof                 jsonb;
