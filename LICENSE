@@ -1,0 +1,67 @@
+Proprietary License
+
+Copyright (c) 2026 TripleCyber and Helloii. All rights reserved.
+
+This repository and everything in it, including source code, compiled
+binaries, designs, graphics, documentation and any other material (the
+"Software"), is the confidential and proprietary property of TripleCyber and
+Helloii (together, the "Owners"). The Software is for the exclusive use of
+the Owners.
+
+1. No license granted
+
+   Nothing in this repository grants anyone any right or license to the
+   Software, whether by implication, estoppel or otherwise. Any right to use
+   the Software exists only under a separate written agreement signed by the
+   Owners.
+
+2. Prohibited acts
+
+   Without the Owners' prior written permission, no one may:
+
+   a. copy, reproduce or duplicate the Software, in whole or in part;
+   b. modify, adapt, translate or create derivative works of the Software;
+   c. distribute, publish, sublicense, sell, rent, lend, host or otherwise
+      make the Software available to any third party;
+   d. decompile, disassemble or reverse engineer the Software, except to the
+      extent applicable law expressly permits it despite this restriction;
+   e. use the Software, or any part of it, to build, train or improve any
+      other product, service or model.
+
+3. Personnel
+
+   Employees and contractors of the Owners may access and use the Software
+   only to perform work for the Owners, only while authorized, and subject to
+   their confidentiality obligations. That access ends when the engagement
+   ends, and all copies must then be returned or deleted.
+
+4. Confidentiality
+
+   The Software contains trade secrets of the Owners. Anyone who has access
+   to it must keep it confidential and must not disclose it to any third
+   party.
+
+5. Ownership
+
+   All right, title and interest in the Software, including all intellectual
+   property rights and any modifications or derivative works, remain with the
+   Owners.
+
+6. Third-party components
+
+   Libraries, tools and other third-party material this repository depends
+   on (for example through package manifests, lock files, container images or
+   build files) remain under their own licenses. This license covers only the
+   material owned by the Owners.
+
+7. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. IN NO EVENT SHALL THE OWNERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.
+
+8. Enforcement
+
+   Any use, copying or distribution of the Software not permitted by the
+   Owners infringes their rights and may result in civil and criminal
+   liability.
